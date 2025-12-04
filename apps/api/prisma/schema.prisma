@@ -1,0 +1,363 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ==================== Enums ====================
+
+enum OrganizationPlan {
+  free
+  pro
+  enterprise
+}
+
+enum UserStatus {
+  active
+  inactive
+  suspended
+}
+
+enum MemberRole {
+  owner
+  admin
+  member
+  viewer
+}
+
+enum ClusterEnvironment {
+  development
+  staging
+  production
+}
+
+enum ClusterStatus {
+  connected
+  disconnected
+  degraded
+}
+
+enum HealthStatus {
+  healthy
+  unhealthy
+  unknown
+}
+
+enum AlertSeverity {
+  info
+  warning
+  critical
+}
+
+// ==================== User & Organization ====================
+
+model User {
+  id            String    @id @default(uuid()) @db.Uuid
+  email         String    @unique @db.VarChar(255)
+  passwordHash  String    @map("password_hash") @db.VarChar(255)
+  firstName     String?   @map("first_name") @db.VarChar(100)
+  lastName      String?   @map("last_name") @db.VarChar(100)
+  avatarUrl     String?   @map("avatar_url") @db.VarChar(500)
+  status        UserStatus @default(active)
+  emailVerified Boolean   @default(false) @map("email_verified")
+  mfaEnabled    Boolean   @default(false) @map("mfa_enabled")
+  mfaSecret     String?   @map("mfa_secret") @db.VarChar(255)
+  lastLoginAt   DateTime? @map("last_login_at")
+  createdAt     DateTime  @default(now()) @map("created_at")
+  updatedAt     DateTime  @updatedAt @map("updated_at")
+
+  // Relations
+  organizationMemberships OrganizationMember[]
+  teamMemberships         TeamMember[]
+  sessions                Session[]
+  apiKeys                 ApiKey[]
+  streamConfigs           StreamConfig[]     @relation("CreatedBy")
+  consumerConfigs         ConsumerConfig[]   @relation("CreatedBy")
+  dashboards              Dashboard[]
+  savedQueries            SavedQuery[]
+  invitedMembers          OrganizationMember[] @relation("InvitedBy")
+
+  @@map("users")
+}
+
+model Organization {
+  id        String           @id @default(uuid()) @db.Uuid
+  name      String           @db.VarChar(100)
+  slug      String           @unique @db.VarChar(50)
+  plan      OrganizationPlan @default(free)
+  settings  Json             @default("{}")
+  createdAt DateTime         @default(now()) @map("created_at")
+  updatedAt DateTime         @updatedAt @map("updated_at")
+
+  // Relations
+  members      OrganizationMember[]
+  teams        Team[]
+  clusters     NatsCluster[]
+  roles        Role[]
+  apiKeys      ApiKey[]
+  dashboards   Dashboard[]
+  savedQueries SavedQuery[]
+  alertRules   AlertRule[]
+
+  @@map("organizations")
+}
+
+model OrganizationMember {
+  id        String     @id @default(uuid()) @db.Uuid
+  orgId     String     @map("org_id") @db.Uuid
+  userId    String     @map("user_id") @db.Uuid
+  role      MemberRole @default(member)
+  invitedBy String?    @map("invited_by") @db.Uuid
+  joinedAt  DateTime   @default(now()) @map("joined_at")
+
+  // Relations
+  organization Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  user         User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  inviter      User?        @relation("InvitedBy", fields: [invitedBy], references: [id])
+
+  @@unique([orgId, userId])
+  @@map("organization_members")
+}
+
+// ==================== Teams ====================
+
+model Team {
+  id          String   @id @default(uuid()) @db.Uuid
+  orgId       String   @map("org_id") @db.Uuid
+  name        String   @db.VarChar(100)
+  description String?  @db.Text
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  // Relations
+  organization Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  members      TeamMember[]
+
+  @@map("teams")
+}
+
+model TeamMember {
+  id      String     @id @default(uuid()) @db.Uuid
+  teamId  String     @map("team_id") @db.Uuid
+  userId  String     @map("user_id") @db.Uuid
+  role    MemberRole @default(member)
+  addedAt DateTime   @default(now()) @map("added_at")
+
+  // Relations
+  team Team @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([teamId, userId])
+  @@map("team_members")
+}
+
+// ==================== NATS Clusters ====================
+
+model NatsCluster {
+  id          String             @id @default(uuid()) @db.Uuid
+  orgId       String             @map("org_id") @db.Uuid
+  name        String             @db.VarChar(100)
+  description String?            @db.Text
+  environment ClusterEnvironment @default(development)
+  status      ClusterStatus      @default(disconnected)
+  version     String?            @db.VarChar(50)
+  createdAt   DateTime           @default(now()) @map("created_at")
+  updatedAt   DateTime           @updatedAt @map("updated_at")
+
+  // Relations
+  organization Organization        @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  connections  ClusterConnection[]
+  streams      StreamConfig[]
+  alertRules   AlertRule[]
+
+  @@map("nats_clusters")
+}
+
+model ClusterConnection {
+  id              String       @id @default(uuid()) @db.Uuid
+  clusterId       String       @map("cluster_id") @db.Uuid
+  serverUrl       String       @map("server_url") @db.VarChar(500)
+  credentials     Json?        @db.JsonB // Encrypted
+  tlsConfig       Json?        @map("tls_config") @db.JsonB
+  isPrimary       Boolean      @default(false) @map("is_primary")
+  healthStatus    HealthStatus @default(unknown) @map("health_status")
+  lastHealthCheck DateTime?    @map("last_health_check")
+
+  // Relations
+  cluster NatsCluster @relation(fields: [clusterId], references: [id], onDelete: Cascade)
+
+  @@map("cluster_connections")
+}
+
+// ==================== Streams & Consumers ====================
+
+model StreamConfig {
+  id             String   @id @default(uuid()) @db.Uuid
+  clusterId      String   @map("cluster_id") @db.Uuid
+  streamName     String   @map("stream_name") @db.VarChar(256)
+  configSnapshot Json     @map("config_snapshot") @db.JsonB
+  createdBy      String   @map("created_by") @db.Uuid
+  isManaged      Boolean  @default(true) @map("is_managed")
+  tags           Json     @default("[]") @db.JsonB
+  createdAt      DateTime @default(now()) @map("created_at")
+  updatedAt      DateTime @updatedAt @map("updated_at")
+
+  // Relations
+  cluster   NatsCluster      @relation(fields: [clusterId], references: [id], onDelete: Cascade)
+  creator   User             @relation("CreatedBy", fields: [createdBy], references: [id])
+  consumers ConsumerConfig[]
+
+  @@unique([clusterId, streamName])
+  @@map("stream_configs")
+}
+
+model ConsumerConfig {
+  id             String   @id @default(uuid()) @db.Uuid
+  streamConfigId String   @map("stream_config_id") @db.Uuid
+  consumerName   String   @map("consumer_name") @db.VarChar(256)
+  configSnapshot Json     @map("config_snapshot") @db.JsonB
+  createdBy      String   @map("created_by") @db.Uuid
+  isManaged      Boolean  @default(true) @map("is_managed")
+  tags           Json     @default("[]") @db.JsonB
+  createdAt      DateTime @default(now()) @map("created_at")
+  updatedAt      DateTime @updatedAt @map("updated_at")
+
+  // Relations
+  streamConfig StreamConfig @relation(fields: [streamConfigId], references: [id], onDelete: Cascade)
+  creator      User         @relation("CreatedBy", fields: [createdBy], references: [id])
+
+  @@unique([streamConfigId, consumerName])
+  @@map("consumer_configs")
+}
+
+// ==================== Roles & Permissions ====================
+
+model Role {
+  id          String   @id @default(uuid()) @db.Uuid
+  orgId       String   @map("org_id") @db.Uuid
+  name        String   @db.VarChar(100)
+  description String?  @db.Text
+  isSystem    Boolean  @default(false) @map("is_system")
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  // Relations
+  organization Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  permissions  Permission[]
+
+  @@unique([orgId, name])
+  @@map("roles")
+}
+
+model Permission {
+  id         String @id @default(uuid()) @db.Uuid
+  roleId     String @map("role_id") @db.Uuid
+  resource   String @db.VarChar(100)
+  action     String @db.VarChar(100)
+  conditions Json?  @db.JsonB
+
+  // Relations
+  role Role @relation(fields: [roleId], references: [id], onDelete: Cascade)
+
+  @@map("permissions")
+}
+
+// ==================== Sessions & API Keys ====================
+
+model Session {
+  id        String   @id @default(uuid()) @db.Uuid
+  userId    String   @map("user_id") @db.Uuid
+  tokenHash String   @map("token_hash") @db.VarChar(255)
+  ipAddress String?  @map("ip_address") @db.Inet
+  userAgent String?  @map("user_agent") @db.Text
+  expiresAt DateTime @map("expires_at")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  // Relations
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("sessions")
+}
+
+model ApiKey {
+  id          String    @id @default(uuid()) @db.Uuid
+  orgId       String    @map("org_id") @db.Uuid
+  userId      String    @map("user_id") @db.Uuid
+  name        String    @db.VarChar(100)
+  keyHash     String    @map("key_hash") @db.VarChar(255)
+  prefix      String    @db.VarChar(10)
+  permissions Json      @default("[]") @db.JsonB
+  lastUsedAt  DateTime? @map("last_used_at")
+  expiresAt   DateTime? @map("expires_at")
+  createdAt   DateTime  @default(now()) @map("created_at")
+
+  // Relations
+  organization Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  user         User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("api_keys")
+}
+
+// ==================== Dashboards & Saved Queries ====================
+
+model Dashboard {
+  id        String   @id @default(uuid()) @db.Uuid
+  orgId     String   @map("org_id") @db.Uuid
+  userId    String   @map("user_id") @db.Uuid
+  name      String   @db.VarChar(100)
+  layout    Json     @default("{\"columns\": 12, \"rowHeight\": 80}") @db.JsonB
+  widgets   Json     @default("[]") @db.JsonB
+  isShared  Boolean  @default(false) @map("is_shared")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  // Relations
+  organization Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  user         User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("dashboards")
+}
+
+model SavedQuery {
+  id          String   @id @default(uuid()) @db.Uuid
+  orgId       String   @map("org_id") @db.Uuid
+  userId      String   @map("user_id") @db.Uuid
+  name        String   @db.VarChar(100)
+  query       String   @db.Text
+  description String?  @db.Text
+  isShared    Boolean  @default(false) @map("is_shared")
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  // Relations
+  organization Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  user         User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("saved_queries")
+}
+
+// ==================== Alerts ====================
+
+model AlertRule {
+  id           String        @id @default(uuid()) @db.Uuid
+  orgId        String        @map("org_id") @db.Uuid
+  clusterId    String?       @map("cluster_id") @db.Uuid
+  name         String        @db.VarChar(100)
+  condition    Json          @db.JsonB
+  threshold    Json          @db.JsonB
+  severity     AlertSeverity @default(warning)
+  channels     Json          @default("[]") @db.JsonB
+  isEnabled    Boolean       @default(true) @map("is_enabled")
+  cooldownMins Int           @default(5) @map("cooldown_mins")
+  createdAt    DateTime      @default(now()) @map("created_at")
+  updatedAt    DateTime      @updatedAt @map("updated_at")
+
+  // Relations
+  organization Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  cluster      NatsCluster? @relation(fields: [clusterId], references: [id], onDelete: SetNull)
+
+  @@map("alert_rules")
+}
