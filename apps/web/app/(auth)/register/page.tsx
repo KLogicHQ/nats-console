@@ -36,7 +36,7 @@ export default function RegisterPage() {
         firstName: formData.firstName,
         lastName: formData.lastName,
       });
-      router.push('/clusters');
+      router.push('/');
     } catch (err: any) {
       setError(err.message || 'Registration failed');
     }

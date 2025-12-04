@@ -21,7 +21,7 @@ export default function LoginPage() {
 
     try {
       await login(email, password);
-      router.push('/clusters');
+      router.push('/');
     } catch (err: any) {
       setError(err.message || 'Login failed');
     }

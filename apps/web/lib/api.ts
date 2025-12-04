@@ -170,6 +170,18 @@ export const analytics = {
     return request<{ metrics: any[]; type: string }>(`/analytics${query}`);
   },
 
+  overview: (clusterId: string, timeRange: string) =>
+    request<{
+      totalMessages: number;
+      totalBytes: number;
+      avgThroughput: number;
+      avgLatency: number;
+      messagesTrend: number;
+      bytesTrend: number;
+      throughputTrend: number;
+      latencyTrend: number;
+    }>(`/analytics/overview?clusterId=${clusterId}&timeRange=${timeRange}`),
+
   streamThroughput: (name: string, params: Record<string, string>) => {
     const query = `?${new URLSearchParams(params)}`;
     return request<any>(`/analytics/streams/${name}/throughput${query}`);
@@ -188,6 +200,9 @@ export const analytics = {
 
 // Alerts API
 export const alerts = {
+  list: (clusterId: string) =>
+    request<{ alerts: any[] }>(`/clusters/${clusterId}/alerts`),
+
   listRules: () => request<{ rules: any[] }>('/alerts/rules'),
 
   createRule: (data: any) =>

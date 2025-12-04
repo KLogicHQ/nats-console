@@ -17,7 +17,7 @@ import { useAuthStore } from '@/stores/auth';
 import { Button } from '@/components/ui/button';
 
 const navigation = [
-  { name: 'Overview', href: '/clusters', icon: LayoutDashboard },
+  { name: 'Overview', href: '/', icon: LayoutDashboard },
   { name: 'Clusters', href: '/clusters', icon: Server },
   { name: 'Streams', href: '/streams', icon: Database },
   { name: 'Consumers', href: '/consumers', icon: Users },
@@ -34,7 +34,7 @@ export function Sidebar() {
     <div className="flex h-full w-64 flex-col border-r bg-sidebar">
       {/* Logo */}
       <div className="flex h-16 items-center border-b px-6">
-        <Link href="/clusters" className="flex items-center gap-2">
+        <Link href="/" className="flex items-center gap-2">
           <div className="h-8 w-8 rounded-lg bg-primary flex items-center justify-center">
             <span className="text-primary-foreground font-bold text-sm">NC</span>
           </div>
@@ -45,7 +45,7 @@ export function Sidebar() {
       {/* Navigation */}
       <nav className="flex-1 space-y-1 p-4">
         {navigation.map((item) => {
-          const isActive = pathname.startsWith(item.href);
+          const isActive = item.href === '/' ? pathname === '/' : pathname.startsWith(item.href);
           return (
             <Link
               key={item.name}
