@@ -87,7 +87,7 @@ A modern, enterprise-grade web console for managing NATS JetStream clusters, ins
 │                         ▼                               ▼       │
 │                  ┌──────────────┐              ┌──────────────┐ │
 │                  │   Workers    │              │    NATS      │ │
-│                  │  (Bull MQ)   │              │  JetStream   │ │
+│                  │ (JetStream)  │              │  JetStream   │ │
 │                  └──────────────┘              └──────────────┘ │
 │                                                                  │
 └─────────────────────────────────────────────────────────────────┘
@@ -1322,7 +1322,7 @@ argon2               Password hashing
 
 BACKGROUND JOBS
 ───────────────
-BullMQ               Job queues (Redis-backed)
+NATS JetStream       Job queues (internal streams)
 node-cron            Scheduled tasks
 
 OBSERVABILITY
@@ -1461,7 +1461,7 @@ COMPLIANCE READY
           ▼                            ▼                            ▼
 ┌─────────────────┐         ┌─────────────────┐         ┌─────────────────┐
 │   Frontend      │         │   API Service   │         │   Workers       │
-│   (Next.js)     │         │   (Fastify)     │         │   (BullMQ)      │
+│   (Next.js)     │         │   (Fastify)     │         │  (JetStream)    │
 │   ────────────  │         │   ────────────  │         │   ────────────  │
 │   Replicas: 3   │         │   Replicas: 5   │         │   Replicas: 3   │
 │   CPU: 500m     │         │   CPU: 1000m    │         │   CPU: 500m     │
