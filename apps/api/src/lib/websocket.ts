@@ -1,7 +1,7 @@
 import { FastifyInstance } from 'fastify';
 import { WebSocket, WebSocketServer } from 'ws';
-import { verifyToken } from '../common/middleware/auth.js';
-import { logger } from './logger.js';
+import { verifyToken } from '../common/middleware/auth';
+import { logger } from './logger';
 
 interface Client {
   ws: WebSocket;

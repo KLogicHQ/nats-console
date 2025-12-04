@@ -1,15 +1,15 @@
 import * as argon2 from 'argon2';
 import { SignJWT, jwtVerify } from 'jose';
-import { prisma } from '../../lib/prisma.js';
-import { redis, setSession, getSession, deleteSession } from '../../lib/redis.js';
-import { config } from '../../config/index.js';
+import { prisma } from '../../lib/prisma';
+import { redis, setSession, getSession, deleteSession } from '../../lib/redis';
+import { config } from '../../config/index';
 import {
   UnauthorizedError,
   NotFoundError,
   ConflictError,
   ValidationError,
-} from '@nats-console/shared';
-import type { User, AuthTokens, JwtPayload } from '@nats-console/shared';
+} from '../../../../shared/src/index';
+import type { User, AuthTokens, JwtPayload } from '../../../../shared/src/index';
 
 const JWT_SECRET = new TextEncoder().encode(config.JWT_SECRET);
 

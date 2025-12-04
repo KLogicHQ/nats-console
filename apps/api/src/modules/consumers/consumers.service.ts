@@ -1,13 +1,13 @@
-import { prisma } from '../../lib/prisma.js';
+import { prisma } from '../../lib/prisma';
 import {
   listConsumers as natsListConsumers,
   getConsumerInfo as natsGetConsumerInfo,
   createConsumer as natsCreateConsumer,
   updateConsumer as natsUpdateConsumer,
   deleteConsumer as natsDeleteConsumer,
-} from '../../lib/nats.js';
-import { NotFoundError } from '@nats-console/shared';
-import type { ConsumerInfo, CreateConsumerInput, UpdateConsumerInput } from '@nats-console/shared';
+} from '../../lib/nats';
+import { NotFoundError } from '../../../../shared/src/index';
+import type { ConsumerInfo, CreateConsumerInput, UpdateConsumerInput } from '../../../../shared/src/index';
 
 // ==================== Consumer Operations ====================
 

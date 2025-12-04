@@ -1,8 +1,8 @@
 import type { FastifyPluginAsync } from 'fastify';
-import { UpdateUserSchema, InviteUserSchema } from '@nats-console/shared';
-import { prisma } from '../../lib/prisma.js';
-import { authenticate } from '../../common/middleware/auth.js';
-import { NotFoundError } from '@nats-console/shared';
+import { UpdateUserSchema, InviteUserSchema } from '../../../../shared/src/index';
+import { prisma } from '../../lib/prisma';
+import { authenticate } from '../../common/middleware/auth';
+import { NotFoundError } from '../../../../shared/src/index';
 
 export const userRoutes: FastifyPluginAsync = async (fastify) => {
   fastify.addHook('preHandler', authenticate);

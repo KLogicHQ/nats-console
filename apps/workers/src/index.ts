@@ -1,8 +1,8 @@
 import pino from 'pino';
 import cron from 'node-cron';
-import { MetricsCollector } from './collectors/metrics.js';
-import { AlertProcessor } from './processors/alerts.js';
-import { config } from './config.js';
+import { MetricsCollector } from './collectors/metrics';
+import { AlertProcessor } from './processors/alerts';
+import { config } from './config';
 
 const logger = pino({
   name: 'nats-console-workers',

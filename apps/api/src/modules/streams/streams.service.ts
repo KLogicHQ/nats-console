@@ -1,4 +1,4 @@
-import { prisma } from '../../lib/prisma.js';
+import { prisma } from '../../lib/prisma';
 import {
   listStreams as natsListStreams,
   getStreamInfo as natsGetStreamInfo,
@@ -10,8 +10,8 @@ import {
   getMessage as natsGetMessage,
   publishMessage as natsPublishMessage,
   deleteMessage as natsDeleteMessage,
-} from '../../lib/nats.js';
-import { NotFoundError } from '@nats-console/shared';
+} from '../../lib/nats';
+import { NotFoundError } from '../../../../shared/src/index';
 import type {
   StreamInfo,
   StreamConfig,
@@ -20,7 +20,7 @@ import type {
   UpdateStreamInput,
   PurgeStreamInput,
   GetMessagesInput,
-} from '@nats-console/shared';
+} from '../../../../shared/src/index';
 
 // ==================== Stream Operations ====================
 

@@ -1,7 +1,7 @@
 import type { FastifyRequest, FastifyReply } from 'fastify';
-import { verifyToken } from '../../modules/auth/auth.service.js';
-import { getSession, updateSessionActivity } from '../../lib/redis.js';
-import type { JwtPayload } from '@nats-console/shared';
+import { verifyToken } from '../../modules/auth/auth.service';
+import { getSession, updateSessionActivity } from '../../lib/redis';
+import type { JwtPayload } from '../../../../shared/src/index';
 
 // Extend FastifyRequest to include user
 declare module 'fastify' {

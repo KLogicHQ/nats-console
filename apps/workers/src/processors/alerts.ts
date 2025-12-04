@@ -1,8 +1,8 @@
 import { PrismaClient } from '@prisma/client';
 import { createClient, ClickHouseClient } from '@clickhouse/client';
 import pino from 'pino';
-import { config } from '../config.js';
-import type { AlertSeverity } from '@nats-console/shared';
+import { config } from '../config';
+import type { AlertSeverity } from '../../../shared/src/index';
 
 const logger = pino({ name: 'alert-processor' });
 

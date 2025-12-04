@@ -4,23 +4,23 @@ import helmet from '@fastify/helmet';
 import rateLimit from '@fastify/rate-limit';
 import sensible from '@fastify/sensible';
 import websocket from '@fastify/websocket';
-import { config } from './config/index.js';
-import { connectDatabase, disconnectDatabase } from './lib/prisma.js';
-import { redis } from './lib/redis.js';
-import { connectInternalNats, disconnectInternalNats, disconnectAllClusters } from './lib/nats.js';
-import { closeClickHouseClient } from './lib/clickhouse.js';
+import { config } from './config/index';
+import { connectDatabase, disconnectDatabase } from './lib/prisma';
+import { redis } from './lib/redis';
+import { connectInternalNats, disconnectInternalNats, disconnectAllClusters } from './lib/nats';
+import { closeClickHouseClient } from './lib/clickhouse';
 
 // Import routes
-import { authRoutes } from './modules/auth/auth.routes.js';
-import { clusterRoutes } from './modules/clusters/clusters.routes.js';
-import { streamRoutes } from './modules/streams/streams.routes.js';
-import { consumerRoutes } from './modules/consumers/consumers.routes.js';
-import { organizationRoutes } from './modules/organizations/organizations.routes.js';
-import { userRoutes } from './modules/users/users.routes.js';
-import { teamRoutes } from './modules/teams/teams.routes.js';
-import { analyticsRoutes } from './modules/analytics/analytics.routes.js';
-import { alertRoutes } from './modules/alerts/alerts.routes.js';
-import { dashboardRoutes } from './modules/dashboards/dashboards.routes.js';
+import { authRoutes } from './modules/auth/auth.routes';
+import { clusterRoutes } from './modules/clusters/clusters.routes';
+import { streamRoutes } from './modules/streams/streams.routes';
+import { consumerRoutes } from './modules/consumers/consumers.routes';
+import { organizationRoutes } from './modules/organizations/organizations.routes';
+import { userRoutes } from './modules/users/users.routes';
+import { teamRoutes } from './modules/teams/teams.routes';
+import { analyticsRoutes } from './modules/analytics/analytics.routes';
+import { alertRoutes } from './modules/alerts/alerts.routes';
+import { dashboardRoutes } from './modules/dashboards/dashboards.routes';
 
 const app = Fastify({
   logger: {

@@ -11,8 +11,8 @@ import {
   JsMsg,
   StoredMsg,
 } from 'nats';
-import { config } from '../config/index.js';
-import type { EncryptedCredentials, TlsConfig } from '@nats-console/shared';
+import { config } from '../config/index';
+import type { EncryptedCredentials, TlsConfig } from '../../../shared/src/index';
 
 // Connection pool for managed clusters
 const connectionPool = new Map<string, NatsConnection>();

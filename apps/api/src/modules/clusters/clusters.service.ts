@@ -1,15 +1,15 @@
-import { prisma } from '../../lib/prisma.js';
+import { prisma } from '../../lib/prisma';
 import {
   connectCluster,
   disconnectCluster,
   checkClusterHealth,
   isClusterConnected,
   listStreams,
-} from '../../lib/nats.js';
-import { setClusterStatus, getClusterStatus } from '../../lib/redis.js';
-import { NotFoundError, ConflictError } from '@nats-console/shared';
-import type { NatsCluster, ClusterConnection, ClusterStatus } from '@nats-console/shared';
-import type { CreateClusterInput, UpdateClusterInput } from '@nats-console/shared';
+} from '../../lib/nats';
+import { setClusterStatus, getClusterStatus } from '../../lib/redis';
+import { NotFoundError, ConflictError } from '../../../../shared/src/index';
+import type { NatsCluster, ClusterConnection, ClusterStatus } from '../../../../shared/src/index';
+import type { CreateClusterInput, UpdateClusterInput } from '../../../../shared/src/index';
 
 // ==================== Cluster CRUD ====================
 

@@ -5,9 +5,9 @@ import {
   PurgeStreamSchema,
   GetMessagesSchema,
   PublishMessageSchema,
-} from '@nats-console/shared';
-import * as streamService from './streams.service.js';
-import { authenticate } from '../../common/middleware/auth.js';
+} from '../../../../shared/src/index';
+import * as streamService from './streams.service';
+import { authenticate } from '../../common/middleware/auth';
 
 export const streamRoutes: FastifyPluginAsync = async (fastify) => {
   // All routes require authentication

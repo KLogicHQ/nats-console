@@ -2,8 +2,8 @@ import { connect, NatsConnection, JetStreamManager } from 'nats';
 import { createClient, ClickHouseClient } from '@clickhouse/client';
 import { PrismaClient } from '@prisma/client';
 import pino from 'pino';
-import { config } from '../config.js';
-import type { StreamMetrics, ConsumerMetrics, ClusterMetrics } from '@nats-console/shared';
+import { config } from '../config';
+import type { StreamMetrics, ConsumerMetrics, ClusterMetrics } from '../../../shared/src/index';
 
 const logger = pino({ name: 'metrics-collector' });
 

@@ -1,6 +1,6 @@
 import { createClient, ClickHouseClient } from '@clickhouse/client';
-import { config } from '../config/index.js';
-import type { StreamMetrics, ConsumerMetrics, ClusterMetrics, AuditLog } from '@nats-console/shared';
+import { config } from '../config/index';
+import type { StreamMetrics, ConsumerMetrics, ClusterMetrics, AuditLog } from '../../../shared/src/index';
 
 let client: ClickHouseClient | null = null;
 

@@ -1,11 +1,11 @@
 import type { FastifyPluginAsync } from 'fastify';
-import { MetricsQuerySchema, AuditLogQuerySchema } from '@nats-console/shared';
+import { MetricsQuerySchema, AuditLogQuerySchema } from '../../../../shared/src/index';
 import {
   queryStreamMetrics,
   queryConsumerMetrics,
   queryAuditLogs,
-} from '../../lib/clickhouse.js';
-import { authenticate } from '../../common/middleware/auth.js';
+} from '../../lib/clickhouse';
+import { authenticate } from '../../common/middleware/auth';
 
 export const analyticsRoutes: FastifyPluginAsync = async (fastify) => {
   fastify.addHook('preHandler', authenticate);

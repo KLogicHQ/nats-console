@@ -6,9 +6,9 @@ import {
   ForgotPasswordSchema,
   ResetPasswordSchema,
   MfaVerifySchema,
-} from '@nats-console/shared';
-import * as authService from './auth.service.js';
-import { authenticate } from '../../common/middleware/auth.js';
+} from '../../../../shared/src/index';
+import * as authService from './auth.service';
+import { authenticate } from '../../common/middleware/auth';
 
 export const authRoutes: FastifyPluginAsync = async (fastify) => {
   // POST /auth/register - User registration

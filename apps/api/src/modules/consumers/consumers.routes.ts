@@ -1,7 +1,7 @@
 import type { FastifyPluginAsync } from 'fastify';
-import { CreateConsumerSchema, UpdateConsumerSchema } from '@nats-console/shared';
-import * as consumerService from './consumers.service.js';
-import { authenticate } from '../../common/middleware/auth.js';
+import { CreateConsumerSchema, UpdateConsumerSchema } from '../../../../shared/src/index';
+import * as consumerService from './consumers.service';
+import { authenticate } from '../../common/middleware/auth';
 
 export const consumerRoutes: FastifyPluginAsync = async (fastify) => {
   // All routes require authentication
