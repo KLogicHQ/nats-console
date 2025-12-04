@@ -2,16 +2,19 @@
 
 import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { Plus, Database, Search } from 'lucide-react';
+import { Plus, Database, Search, ChevronRight } from 'lucide-react';
+import Link from 'next/link';
 import { api } from '@/lib/api';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { formatBytes, formatNumber } from '@nats-console/shared';
+import { CreateStreamDialog } from '@/components/forms/create-stream-dialog';
 
 export default function StreamsPage() {
   const [selectedCluster, setSelectedCluster] = useState<string | null>(null);
   const [search, setSearch] = useState('');
+  const [showCreateDialog, setShowCreateDialog] = useState(false);
 
   const { data: clustersData } = useQuery({
     queryKey: ['clusters'],
@@ -40,10 +43,17 @@ export default function StreamsPage() {
           <h1 className="text-3xl font-bold">Streams</h1>
           <p className="text-muted-foreground">Manage JetStream streams</p>
         </div>
-        <Button disabled={!selectedCluster}>
+        <Button disabled={!selectedCluster} onClick={() => setShowCreateDialog(true)}>
           <Plus className="h-4 w-4 mr-2" />
           Create Stream
         </Button>
+        {selectedCluster && (
+          <CreateStreamDialog
+            open={showCreateDialog}
+            onOpenChange={setShowCreateDialog}
+            clusterId={selectedCluster}
+          />
+        )}
       </div>
 
       <div className="flex gap-4">
@@ -119,8 +129,16 @@ export default function StreamsPage() {
             </thead>
             <tbody>
               {filteredStreams.map((stream: any) => (
-                <tr key={stream.config.name} className="border-t hover:bg-muted/30 cursor-pointer">
-                  <td className="p-4 font-medium">{stream.config.name}</td>
+                <tr key={stream.config.name} className="border-t hover:bg-muted/30">
+                  <td className="p-4">
+                    <Link
+                      href={`/streams/${selectedCluster}/${stream.config.name}`}
+                      className="font-medium text-primary hover:underline flex items-center gap-1"
+                    >
+                      {stream.config.name}
+                      <ChevronRight className="h-4 w-4" />
+                    </Link>
+                  </td>
                   <td className="p-4 text-muted-foreground">
                     {stream.config.subjects?.join(', ') || '-'}
                   </td>

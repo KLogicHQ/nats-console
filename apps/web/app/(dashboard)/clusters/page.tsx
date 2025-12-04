@@ -3,11 +3,15 @@
 import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { Plus, Server, MoreVertical, CheckCircle, XCircle, AlertCircle } from 'lucide-react';
+import Link from 'next/link';
 import { api } from '@/lib/api';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { CreateClusterDialog } from '@/components/forms/create-cluster-dialog';
 
 export default function ClustersPage() {
+  const [showCreateDialog, setShowCreateDialog] = useState(false);
+
   const { data, isLoading, error } = useQuery({
     queryKey: ['clusters'],
     queryFn: () => api.clusters.list(),
@@ -46,10 +50,11 @@ export default function ClustersPage() {
           <h1 className="text-3xl font-bold">Clusters</h1>
           <p className="text-muted-foreground">Manage your NATS JetStream clusters</p>
         </div>
-        <Button>
+        <Button onClick={() => setShowCreateDialog(true)}>
           <Plus className="h-4 w-4 mr-2" />
           Add Cluster
         </Button>
+        <CreateClusterDialog open={showCreateDialog} onOpenChange={setShowCreateDialog} />
       </div>
 
       {isLoading && (
@@ -85,28 +90,30 @@ export default function ClustersPage() {
       {data?.clusters && data.clusters.length > 0 && (
         <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
           {data.clusters.map((cluster: any) => (
-            <Card key={cluster.id} className="hover:shadow-md transition-shadow cursor-pointer">
-              <CardHeader className="flex flex-row items-start justify-between space-y-0 pb-2">
-                <div className="flex items-center gap-3">
-                  {getStatusIcon(cluster.status)}
-                  <div>
-                    <CardTitle className="text-lg">{cluster.name}</CardTitle>
-                    <CardDescription>{cluster.description || 'No description'}</CardDescription>
+            <Link key={cluster.id} href={`/clusters/${cluster.id}`}>
+              <Card className="hover:shadow-md transition-shadow cursor-pointer h-full">
+                <CardHeader className="flex flex-row items-start justify-between space-y-0 pb-2">
+                  <div className="flex items-center gap-3">
+                    {getStatusIcon(cluster.status)}
+                    <div>
+                      <CardTitle className="text-lg">{cluster.name}</CardTitle>
+                      <CardDescription>{cluster.description || 'No description'}</CardDescription>
+                    </div>
                   </div>
-                </div>
-                <Button variant="ghost" size="icon">
-                  <MoreVertical className="h-4 w-4" />
-                </Button>
-              </CardHeader>
-              <CardContent>
-                <div className="flex items-center justify-between text-sm">
-                  {getEnvironmentBadge(cluster.environment)}
-                  <span className="text-muted-foreground">
-                    {cluster.version || 'Unknown version'}
-                  </span>
-                </div>
-              </CardContent>
-            </Card>
+                  <Button variant="ghost" size="icon" onClick={(e) => e.preventDefault()}>
+                    <MoreVertical className="h-4 w-4" />
+                  </Button>
+                </CardHeader>
+                <CardContent>
+                  <div className="flex items-center justify-between text-sm">
+                    {getEnvironmentBadge(cluster.environment)}
+                    <span className="text-muted-foreground">
+                      {cluster.version || 'Unknown version'}
+                    </span>
+                  </div>
+                </CardContent>
+              </Card>
+            </Link>
           ))}
         </div>
       )}

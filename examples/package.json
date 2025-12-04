@@ -1,0 +1,21 @@
+{
+  "name": "@nats-console/examples",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "producer": "tsx src/producer.ts",
+    "consumer": "tsx src/consumer.ts",
+    "load-test": "tsx src/load-test.ts",
+    "setup-streams": "tsx src/setup-streams.ts",
+    "all-scenarios": "tsx src/all-scenarios.ts"
+  },
+  "dependencies": {
+    "nats": "^2.28.0"
+  },
+  "devDependencies": {
+    "tsx": "^4.7.0",
+    "typescript": "^5.3.3",
+    "@types/node": "^20.10.0"
+  }
+}

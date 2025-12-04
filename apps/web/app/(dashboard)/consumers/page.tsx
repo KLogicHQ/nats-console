@@ -2,17 +2,20 @@
 
 import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { Plus, Users, Search, AlertTriangle, CheckCircle } from 'lucide-react';
+import { Plus, Users, Search, AlertTriangle, CheckCircle, ChevronRight } from 'lucide-react';
+import Link from 'next/link';
 import { api } from '@/lib/api';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent } from '@/components/ui/card';
 import { formatNumber, formatDuration } from '@nats-console/shared';
+import { CreateConsumerDialog } from '@/components/forms/create-consumer-dialog';
 
 export default function ConsumersPage() {
   const [selectedCluster, setSelectedCluster] = useState<string | null>(null);
   const [selectedStream, setSelectedStream] = useState<string | null>(null);
   const [search, setSearch] = useState('');
+  const [showCreateDialog, setShowCreateDialog] = useState(false);
 
   const { data: clustersData } = useQuery({
     queryKey: ['clusters'],
@@ -62,10 +65,18 @@ export default function ConsumersPage() {
           <h1 className="text-3xl font-bold">Consumers</h1>
           <p className="text-muted-foreground">Manage JetStream consumers</p>
         </div>
-        <Button disabled={!selectedStream}>
+        <Button disabled={!selectedStream} onClick={() => setShowCreateDialog(true)}>
           <Plus className="h-4 w-4 mr-2" />
           Create Consumer
         </Button>
+        {selectedCluster && selectedStream && (
+          <CreateConsumerDialog
+            open={showCreateDialog}
+            onOpenChange={setShowCreateDialog}
+            clusterId={selectedCluster}
+            streamName={selectedStream}
+          />
+        )}
       </div>
 
       <div className="flex gap-4">
@@ -161,8 +172,16 @@ export default function ConsumersPage() {
                 const health = getHealthStatus(consumer);
                 const HealthIcon = health.icon;
                 return (
-                  <tr key={consumer.name} className="border-t hover:bg-muted/30 cursor-pointer">
-                    <td className="p-4 font-medium">{consumer.name}</td>
+                  <tr key={consumer.name} className="border-t hover:bg-muted/30">
+                    <td className="p-4">
+                      <Link
+                        href={`/consumers/${selectedCluster}/${selectedStream}/${consumer.name}`}
+                        className="font-medium text-primary hover:underline flex items-center gap-1"
+                      >
+                        {consumer.name}
+                        <ChevronRight className="h-4 w-4" />
+                      </Link>
+                    </td>
                     <td className="p-4">
                       <span
                         className={`px-2 py-1 text-xs rounded-full ${
