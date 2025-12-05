@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { api } from '@/lib/api';
 import { Button } from '@/components/ui/button';
@@ -14,11 +14,29 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog';
 
+interface Consumer {
+  name: string;
+  config?: {
+    durable_name?: string;
+    filter_subject?: string;
+    deliver_policy?: string;
+    ack_policy?: string;
+    replay_policy?: string;
+    ack_wait?: number;
+    max_deliver?: number;
+    max_ack_pending?: number;
+    max_waiting?: number;
+    description?: string;
+  };
+}
+
 interface CreateConsumerDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   clusterId: string;
   streamName: string;
+  consumer?: Consumer;
+  mode?: 'create' | 'edit';
 }
 
 export function CreateConsumerDialog({
@@ -26,21 +44,36 @@ export function CreateConsumerDialog({
   onOpenChange,
   clusterId,
   streamName,
+  consumer,
+  mode = 'create',
 }: CreateConsumerDialogProps) {
   const queryClient = useQueryClient();
-  const [formData, setFormData] = useState({
-    name: '',
-    durableName: '',
-    filterSubject: '',
-    deliverPolicy: 'all',
-    ackPolicy: 'explicit',
-    replayPolicy: 'instant',
-    ackWait: '30000000000', // 30 seconds in nanoseconds
-    maxDeliver: '-1',
-    maxAckPending: '1000',
-    maxWaiting: '512',
+  const isEditMode = mode === 'edit' && consumer;
+
+  const getInitialFormData = () => ({
+    name: consumer?.name || '',
+    durableName: consumer?.config?.durable_name || '',
+    filterSubject: consumer?.config?.filter_subject || '',
+    deliverPolicy: consumer?.config?.deliver_policy || 'all',
+    ackPolicy: consumer?.config?.ack_policy || 'explicit',
+    replayPolicy: consumer?.config?.replay_policy || 'instant',
+    ackWait: String(consumer?.config?.ack_wait || '30000000000'),
+    maxDeliver: String(consumer?.config?.max_deliver ?? '-1'),
+    maxAckPending: String(consumer?.config?.max_ack_pending || '1000'),
+    maxWaiting: String(consumer?.config?.max_waiting || '512'),
+    description: consumer?.config?.description || '',
   });
+
+  const [formData, setFormData] = useState(getInitialFormData);
   const [error, setError] = useState('');
+
+  // Reset form when consumer changes or dialog opens
+  useEffect(() => {
+    if (open) {
+      setFormData(getInitialFormData());
+      setError('');
+    }
+  }, [open, consumer?.name]);
 
   const createMutation = useMutation({
     mutationFn: (data: any) => api.consumers.create(clusterId, streamName, data),
@@ -51,6 +84,18 @@ export function CreateConsumerDialog({
     },
     onError: (err: any) => {
       setError(err.message || 'Failed to create consumer');
+    },
+  });
+
+  const updateMutation = useMutation({
+    mutationFn: (data: any) => api.consumers.update(clusterId, streamName, consumer!.name, data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['consumers', clusterId, streamName] });
+      queryClient.invalidateQueries({ queryKey: ['consumer', clusterId, streamName, consumer!.name] });
+      onOpenChange(false);
+    },
+    onError: (err: any) => {
+      setError(err.message || 'Failed to update consumer');
     },
   });
 
@@ -66,6 +111,7 @@ export function CreateConsumerDialog({
       maxDeliver: '-1',
       maxAckPending: '1000',
       maxWaiting: '512',
+      description: '',
     });
     setError('');
   };
@@ -79,7 +125,7 @@ export function CreateConsumerDialog({
       return;
     }
 
-    createMutation.mutate({
+    const payload = {
       name: formData.name,
       durableName: formData.durableName || undefined,
       filterSubject: formData.filterSubject || undefined,
@@ -90,16 +136,34 @@ export function CreateConsumerDialog({
       maxDeliver: parseInt(formData.maxDeliver),
       maxAckPending: parseInt(formData.maxAckPending),
       maxWaiting: parseInt(formData.maxWaiting),
-    });
+      description: formData.description || undefined,
+    };
+
+    if (isEditMode) {
+      // Only update editable fields for existing consumers
+      updateMutation.mutate({
+        description: formData.description || undefined,
+        ackWait: parseInt(formData.ackWait),
+        maxDeliver: parseInt(formData.maxDeliver),
+        maxAckPending: parseInt(formData.maxAckPending),
+        maxWaiting: parseInt(formData.maxWaiting),
+      });
+    } else {
+      createMutation.mutate(payload);
+    }
   };
+
+  const isPending = createMutation.isPending || updateMutation.isPending;
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-2xl">
         <DialogHeader>
-          <DialogTitle>Create Consumer</DialogTitle>
+          <DialogTitle>{isEditMode ? 'Edit Consumer' : 'Create Consumer'}</DialogTitle>
           <DialogDescription>
-            Create a new consumer for stream: {streamName}
+            {isEditMode
+              ? `Update settings for consumer: ${consumer?.name}`
+              : `Create a new consumer for stream: ${streamName}`}
           </DialogDescription>
         </DialogHeader>
 
@@ -118,7 +182,11 @@ export function CreateConsumerDialog({
                   placeholder="my-consumer"
                   value={formData.name}
                   onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                  disabled={isEditMode}
                 />
+                {isEditMode && (
+                  <p className="text-xs text-muted-foreground">Consumer name cannot be changed</p>
+                )}
               </div>
               <div className="space-y-2">
                 <label className="text-sm font-medium">Durable Name</label>
@@ -236,8 +304,10 @@ export function CreateConsumerDialog({
             >
               Cancel
             </Button>
-            <Button type="submit" disabled={createMutation.isPending}>
-              {createMutation.isPending ? 'Creating...' : 'Create Consumer'}
+            <Button type="submit" disabled={isPending}>
+              {isPending
+                ? (isEditMode ? 'Saving...' : 'Creating...')
+                : (isEditMode ? 'Save Changes' : 'Create Consumer')}
             </Button>
           </DialogFooter>
         </form>

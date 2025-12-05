@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { api } from '@/lib/api';
 import { Button } from '@/components/ui/button';
@@ -14,28 +14,53 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog';
 
+interface Cluster {
+  id: string;
+  name: string;
+  description?: string;
+  url: string;
+  environment: string;
+  authType?: string;
+}
+
 interface CreateClusterDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  cluster?: Cluster;
+  mode?: 'create' | 'edit';
 }
 
 export function CreateClusterDialog({
   open,
   onOpenChange,
+  cluster,
+  mode = 'create',
 }: CreateClusterDialogProps) {
   const queryClient = useQueryClient();
-  const [formData, setFormData] = useState({
-    name: '',
-    description: '',
-    url: 'nats://localhost:4222',
-    environment: 'development',
-    authType: 'none',
+  const isEditMode = mode === 'edit' && cluster;
+
+  const getInitialFormData = () => ({
+    name: cluster?.name || '',
+    description: cluster?.description || '',
+    url: cluster?.url || 'nats://localhost:4222',
+    environment: cluster?.environment || 'development',
+    authType: cluster?.authType || 'none',
     username: '',
     password: '',
     token: '',
     credsFile: '',
   });
+
+  const [formData, setFormData] = useState(getInitialFormData);
   const [error, setError] = useState('');
+
+  // Reset form when cluster changes or dialog opens
+  useEffect(() => {
+    if (open) {
+      setFormData(getInitialFormData());
+      setError('');
+    }
+  }, [open, cluster?.id]);
 
   const createMutation = useMutation({
     mutationFn: (data: any) => api.clusters.create(data),
@@ -46,6 +71,18 @@ export function CreateClusterDialog({
     },
     onError: (err: any) => {
       setError(err.message || 'Failed to create cluster');
+    },
+  });
+
+  const updateMutation = useMutation({
+    mutationFn: (data: any) => api.clusters.update(cluster!.id, data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['clusters'] });
+      queryClient.invalidateQueries({ queryKey: ['cluster', cluster!.id] });
+      onOpenChange(false);
+    },
+    onError: (err: any) => {
+      setError(err.message || 'Failed to update cluster');
     },
   });
 
@@ -91,22 +128,30 @@ export function CreateClusterDialog({
       credentials = { credsFile: formData.credsFile };
     }
 
-    createMutation.mutate({
+    const payload = {
       name: formData.name,
       description: formData.description || undefined,
       serverUrl: formData.url,
       environment: formData.environment,
       credentials,
-    });
+    };
+
+    if (isEditMode) {
+      updateMutation.mutate(payload);
+    } else {
+      createMutation.mutate(payload);
+    }
   };
+
+  const isPending = createMutation.isPending || updateMutation.isPending;
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-lg">
         <DialogHeader>
-          <DialogTitle>Add Cluster</DialogTitle>
+          <DialogTitle>{isEditMode ? 'Edit Cluster' : 'Add Cluster'}</DialogTitle>
           <DialogDescription>
-            Connect to a NATS JetStream cluster
+            {isEditMode ? 'Update cluster connection settings' : 'Connect to a NATS JetStream cluster'}
           </DialogDescription>
         </DialogHeader>
 
@@ -233,8 +278,10 @@ export function CreateClusterDialog({
             >
               Cancel
             </Button>
-            <Button type="submit" disabled={createMutation.isPending}>
-              {createMutation.isPending ? 'Connecting...' : 'Add Cluster'}
+            <Button type="submit" disabled={isPending}>
+              {isPending
+                ? (isEditMode ? 'Saving...' : 'Connecting...')
+                : (isEditMode ? 'Save Changes' : 'Add Cluster')}
             </Button>
           </DialogFooter>
         </form>

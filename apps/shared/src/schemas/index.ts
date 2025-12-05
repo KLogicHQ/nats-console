@@ -290,10 +290,18 @@ export const AlertThresholdSchema = z.object({
   type: z.enum(['absolute', 'percentage']),
 });
 
-export const AlertChannelSchema = z.object({
-  type: z.enum(['email', 'slack', 'pagerduty', 'webhook']),
+export const NotificationChannelTypeSchema = z.enum(['slack', 'email', 'teams', 'pagerduty', 'google_chat', 'webhook']);
+
+export const IncidentStatusSchema = z.enum(['open', 'acknowledged', 'resolved', 'closed']);
+
+export const CreateNotificationChannelSchema = z.object({
+  name: z.string().min(1, 'Name is required').max(100),
+  type: NotificationChannelTypeSchema,
   config: z.record(z.unknown()),
+  isEnabled: z.boolean().default(true),
 });
+
+export const UpdateNotificationChannelSchema = CreateNotificationChannelSchema.partial();
 
 export const CreateAlertRuleSchema = z.object({
   name: z.string().min(1, 'Name is required').max(100),
@@ -301,7 +309,7 @@ export const CreateAlertRuleSchema = z.object({
   condition: AlertConditionSchema,
   threshold: AlertThresholdSchema,
   severity: AlertSeveritySchema.default('warning'),
-  channels: z.array(AlertChannelSchema).min(1, 'At least one notification channel is required'),
+  channelIds: z.array(z.string().uuid()).optional(),
   isEnabled: z.boolean().default(true),
   cooldownMins: z.number().int().min(1).max(1440).default(5),
 });
@@ -378,8 +386,12 @@ export type CreateConsumerInput = z.infer<typeof CreateConsumerSchema>;
 export type UpdateConsumerInput = z.infer<typeof UpdateConsumerSchema>;
 export type CreateDashboardInput = z.infer<typeof CreateDashboardSchema>;
 export type UpdateDashboardInput = z.infer<typeof UpdateDashboardSchema>;
+export type CreateNotificationChannelInput = z.infer<typeof CreateNotificationChannelSchema>;
+export type UpdateNotificationChannelInput = z.infer<typeof UpdateNotificationChannelSchema>;
 export type CreateAlertRuleInput = z.infer<typeof CreateAlertRuleSchema>;
 export type UpdateAlertRuleInput = z.infer<typeof UpdateAlertRuleSchema>;
+export type NotificationChannelType = z.infer<typeof NotificationChannelTypeSchema>;
+export type IncidentStatus = z.infer<typeof IncidentStatusSchema>;
 export type CreateApiKeyInput = z.infer<typeof CreateApiKeySchema>;
 export type PaginationInput = z.infer<typeof PaginationSchema>;
 export type MetricsQueryInput = z.infer<typeof MetricsQuerySchema>;

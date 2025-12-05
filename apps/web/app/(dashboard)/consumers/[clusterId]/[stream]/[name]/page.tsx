@@ -33,6 +33,7 @@ import {
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
 import { formatNumber, formatDuration } from '@nats-console/shared';
+import { CreateConsumerDialog } from '@/components/forms/create-consumer-dialog';
 
 const tabs: Tab[] = [
   { id: 'overview', label: 'Overview', icon: Users },
@@ -48,6 +49,7 @@ function ConsumerDetailContent() {
   const streamName = params.stream as string;
   const consumerName = params.name as string;
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
+  const [showEditDialog, setShowEditDialog] = useState(false);
 
   const { activeTab, setActiveTab } = useTabs(tabs, 'overview');
 
@@ -125,7 +127,7 @@ function ConsumerDetailContent() {
           >
             <RefreshCw className="h-4 w-4" />
           </Button>
-          <Button variant="outline" size="sm">
+          <Button variant="outline" size="sm" onClick={() => setShowEditDialog(true)}>
             <Edit className="h-4 w-4" />
             Edit
           </Button>
@@ -161,6 +163,16 @@ function ConsumerDetailContent() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      {/* Edit Consumer Dialog */}
+      <CreateConsumerDialog
+        open={showEditDialog}
+        onOpenChange={setShowEditDialog}
+        clusterId={clusterId}
+        streamName={streamName}
+        consumer={consumer}
+        mode="edit"
+      />
 
       {/* Tabs */}
       <TabsList tabs={tabs} activeTab={activeTab} onTabChange={setActiveTab} />

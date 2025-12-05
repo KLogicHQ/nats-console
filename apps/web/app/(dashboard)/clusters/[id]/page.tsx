@@ -35,6 +35,7 @@ import {
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
 import { formatBytes, formatNumber } from '@nats-console/shared';
+import { CreateClusterDialog } from '@/components/forms/create-cluster-dialog';
 
 const tabs: Tab[] = [
   { id: 'overview', label: 'Overview', icon: Server },
@@ -49,6 +50,7 @@ function ClusterDetailContent() {
   const queryClient = useQueryClient();
   const clusterId = params.id as string;
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
+  const [showEditDialog, setShowEditDialog] = useState(false);
 
   const { activeTab, setActiveTab } = useTabs(tabs, 'overview');
 
@@ -155,7 +157,7 @@ function ClusterDetailContent() {
             <RefreshCw className="h-4 w-4" />
             Test Connection
           </Button>
-          <Button variant="outline" size="sm">
+          <Button variant="outline" size="sm" onClick={() => setShowEditDialog(true)}>
             <Edit className="h-4 w-4" />
             Edit
           </Button>
@@ -191,6 +193,14 @@ function ClusterDetailContent() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      {/* Edit Cluster Dialog */}
+      <CreateClusterDialog
+        open={showEditDialog}
+        onOpenChange={setShowEditDialog}
+        cluster={cluster}
+        mode="edit"
+      />
 
       {/* Tabs */}
       <TabsList tabs={tabs} activeTab={activeTab} onTabChange={setActiveTab} />

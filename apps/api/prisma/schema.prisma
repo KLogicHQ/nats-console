@@ -94,15 +94,16 @@ model Organization {
   updatedAt DateTime         @updatedAt @map("updated_at")
 
   // Relations
-  members      OrganizationMember[]
-  teams        Team[]
-  clusters     NatsCluster[]
-  roles        Role[]
-  apiKeys      ApiKey[]
-  dashboards   Dashboard[]
-  savedQueries SavedQuery[]
-  alertRules   AlertRule[]
-  invites      Invite[]
+  members              OrganizationMember[]
+  teams                Team[]
+  clusters             NatsCluster[]
+  roles                Role[]
+  apiKeys              ApiKey[]
+  dashboards           Dashboard[]
+  savedQueries         SavedQuery[]
+  alertRules           AlertRule[]
+  invites              Invite[]
+  notificationChannels NotificationChannel[]
 
   @@map("organizations")
 }
@@ -343,6 +344,39 @@ model SavedQuery {
 
 // ==================== Alerts ====================
 
+enum NotificationChannelType {
+  slack
+  email
+  teams
+  pagerduty
+  google_chat
+  webhook
+}
+
+enum IncidentStatus {
+  open
+  acknowledged
+  resolved
+  closed
+}
+
+model NotificationChannel {
+  id        String                  @id @default(uuid()) @db.Uuid
+  orgId     String                  @map("org_id") @db.Uuid
+  name      String                  @db.VarChar(100)
+  type      NotificationChannelType
+  config    Json                    @db.JsonB // webhookUrl, apiKey, email, etc.
+  isEnabled Boolean                 @default(true) @map("is_enabled")
+  createdAt DateTime                @default(now()) @map("created_at")
+  updatedAt DateTime                @updatedAt @map("updated_at")
+
+  // Relations
+  organization Organization                @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  alertRules   AlertRuleNotificationChannel[]
+
+  @@map("notification_channels")
+}
+
 model AlertRule {
   id           String        @id @default(uuid()) @db.Uuid
   orgId        String        @map("org_id") @db.Uuid
@@ -351,17 +385,49 @@ model AlertRule {
   condition    Json          @db.JsonB
   threshold    Json          @db.JsonB
   severity     AlertSeverity @default(warning)
-  channels     Json          @default("[]") @db.JsonB
   isEnabled    Boolean       @default(true) @map("is_enabled")
   cooldownMins Int           @default(5) @map("cooldown_mins")
   createdAt    DateTime      @default(now()) @map("created_at")
   updatedAt    DateTime      @updatedAt @map("updated_at")
 
   // Relations
-  organization Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
-  cluster      NatsCluster? @relation(fields: [clusterId], references: [id], onDelete: SetNull)
+  organization         Organization                   @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  cluster              NatsCluster?                   @relation(fields: [clusterId], references: [id], onDelete: SetNull)
+  notificationChannels AlertRuleNotificationChannel[]
+  incidents            AlertIncident[]
 
   @@map("alert_rules")
+}
+
+model AlertRuleNotificationChannel {
+  id        String @id @default(uuid()) @db.Uuid
+  ruleId    String @map("rule_id") @db.Uuid
+  channelId String @map("channel_id") @db.Uuid
+
+  // Relations
+  rule    AlertRule           @relation(fields: [ruleId], references: [id], onDelete: Cascade)
+  channel NotificationChannel @relation(fields: [channelId], references: [id], onDelete: Cascade)
+
+  @@unique([ruleId, channelId])
+  @@map("alert_rule_notification_channels")
+}
+
+model AlertIncident {
+  id          String         @id @default(uuid()) @db.Uuid
+  ruleId      String         @map("rule_id") @db.Uuid
+  status      IncidentStatus @default(open)
+  triggeredAt DateTime       @default(now()) @map("triggered_at")
+  acknowledgedAt DateTime?   @map("acknowledged_at")
+  resolvedAt  DateTime?      @map("resolved_at")
+  closedAt    DateTime?      @map("closed_at")
+  metadata    Json           @default("{}") @db.JsonB // stores trigger values, context
+  notifiedAt  DateTime?      @map("notified_at")
+
+  // Relations
+  rule AlertRule @relation(fields: [ruleId], references: [id], onDelete: Cascade)
+
+  @@index([ruleId, status])
+  @@map("alert_incidents")
 }
 
 // ==================== Invites ====================

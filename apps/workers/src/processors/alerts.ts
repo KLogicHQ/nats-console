@@ -1,4 +1,4 @@
-import { PrismaClient } from '@prisma/client';
+import { PrismaClient, IncidentStatus, NotificationChannelType } from '@prisma/client';
 import { createClient, ClickHouseClient } from '@clickhouse/client';
 import pino from 'pino';
 import { config } from '../config';
@@ -22,9 +22,17 @@ interface AlertRule {
     type: 'absolute' | 'percentage';
   };
   severity: AlertSeverity;
-  channels: Array<{ type: string; config: Record<string, unknown> }>;
   isEnabled: boolean;
   cooldownMins: number;
+  notificationChannels: Array<{
+    channel: {
+      id: string;
+      name: string;
+      type: NotificationChannelType;
+      config: Record<string, unknown>;
+      isEnabled: boolean;
+    };
+  }>;
 }
 
 interface AlertState {
@@ -80,9 +88,16 @@ export class AlertProcessor {
 
   private async processAlerts(): Promise<void> {
     try {
-      // Get all enabled alert rules
+      // Get all enabled alert rules with their notification channels
       const rules = await this.prisma.alertRule.findMany({
         where: { isEnabled: true },
+        include: {
+          notificationChannels: {
+            include: {
+              channel: true,
+            },
+          },
+        },
       });
 
       for (const rule of rules) {
@@ -105,15 +120,22 @@ export class AlertProcessor {
       // Check if threshold is exceeded
       const isExceeded = this.checkThreshold(metricValue, rule.condition.operator, rule.threshold.value);
 
-      // Get current alert state
-      let state = this.alertStates.get(rule.id);
-      if (!state) {
-        state = { ruleId: rule.id, lastFired: null, isFiring: false };
-        this.alertStates.set(rule.id, state);
-      }
+      // Check for open incident
+      const openIncident = await this.prisma.alertIncident.findFirst({
+        where: {
+          ruleId: rule.id,
+          status: { in: [IncidentStatus.open, IncidentStatus.acknowledged] },
+        },
+      });
 
-      if (isExceeded && !state.isFiring) {
-        // Check cooldown
+      if (isExceeded && !openIncident) {
+        // Check cooldown using in-memory state
+        let state = this.alertStates.get(rule.id);
+        if (!state) {
+          state = { ruleId: rule.id, lastFired: null, isFiring: false };
+          this.alertStates.set(rule.id, state);
+        }
+
         if (state.lastFired) {
           const cooldownMs = rule.cooldownMins * 60 * 1000;
           if (Date.now() - state.lastFired < cooldownMs) {
@@ -121,14 +143,17 @@ export class AlertProcessor {
           }
         }
 
-        // Fire alert
+        // Fire alert - create new incident
         await this.fireAlert(rule, metricValue);
         state.isFiring = true;
         state.lastFired = Date.now();
-      } else if (!isExceeded && state.isFiring) {
-        // Resolve alert
-        await this.resolveAlert(rule);
-        state.isFiring = false;
+      } else if (!isExceeded && openIncident) {
+        // Resolve the incident
+        await this.resolveAlert(rule, openIncident.id);
+        const state = this.alertStates.get(rule.id);
+        if (state) {
+          state.isFiring = false;
+        }
       }
     } catch (err) {
       logger.error({ ruleId: rule.id, err }, 'Error evaluating alert rule');
@@ -232,6 +257,20 @@ export class AlertProcessor {
       'Alert fired'
     );
 
+    // Create incident in Postgres
+    const incident = await this.prisma.alertIncident.create({
+      data: {
+        ruleId: rule.id,
+        status: IncidentStatus.open,
+        metadata: {
+          metricValue,
+          threshold: rule.threshold.value,
+          operator: rule.condition.operator,
+          metric: rule.condition.metric,
+        },
+      },
+    });
+
     // Insert alert event into ClickHouse
     await this.clickhouse.insert({
       table: 'alert_events',
@@ -254,16 +293,35 @@ export class AlertProcessor {
       format: 'JSONEachRow',
     });
 
-    // Send notifications
-    for (const channel of rule.channels) {
-      await this.sendNotification(channel, rule, metricValue, 'firing');
+    // Send notifications through configured channels
+    const enabledChannels = rule.notificationChannels
+      .filter(nc => nc.channel.isEnabled)
+      .map(nc => nc.channel);
+
+    for (const channel of enabledChannels) {
+      await this.sendNotification(channel, rule, metricValue, 'firing', incident.id);
     }
+
+    // Update incident with notification timestamp
+    await this.prisma.alertIncident.update({
+      where: { id: incident.id },
+      data: { notifiedAt: new Date() },
+    });
   }
 
-  private async resolveAlert(rule: AlertRule): Promise<void> {
-    logger.info({ ruleId: rule.id, ruleName: rule.name }, 'Alert resolved');
+  private async resolveAlert(rule: AlertRule, incidentId: string): Promise<void> {
+    logger.info({ ruleId: rule.id, ruleName: rule.name, incidentId }, 'Alert resolved');
 
-    // Insert resolved event
+    // Update incident status in Postgres
+    await this.prisma.alertIncident.update({
+      where: { id: incidentId },
+      data: {
+        status: IncidentStatus.resolved,
+        resolvedAt: new Date(),
+      },
+    });
+
+    // Insert resolved event into ClickHouse
     await this.clickhouse.insert({
       table: 'alert_events',
       values: [
@@ -286,68 +344,348 @@ export class AlertProcessor {
     });
 
     // Send resolved notifications
-    for (const channel of rule.channels) {
-      await this.sendNotification(channel, rule, 0, 'resolved');
+    const enabledChannels = rule.notificationChannels
+      .filter(nc => nc.channel.isEnabled)
+      .map(nc => nc.channel);
+
+    for (const channel of enabledChannels) {
+      await this.sendNotification(channel, rule, 0, 'resolved', incidentId);
     }
   }
 
   private async sendNotification(
-    channel: { type: string; config: Record<string, unknown> },
+    channel: { id: string; name: string; type: NotificationChannelType; config: Record<string, unknown> },
     rule: AlertRule,
     metricValue: number,
-    status: 'firing' | 'resolved'
+    status: 'firing' | 'resolved',
+    incidentId: string
   ): Promise<void> {
     const message =
       status === 'firing'
         ? `🚨 Alert "${rule.name}" fired: value ${metricValue} exceeded threshold ${rule.threshold.value}`
         : `✅ Alert "${rule.name}" resolved`;
 
-    switch (channel.type) {
-      case 'webhook':
-        await this.sendWebhook(channel.config.url as string, {
-          rule: rule.name,
-          severity: rule.severity,
-          status,
-          metricValue,
-          threshold: rule.threshold.value,
-          message,
-          timestamp: new Date().toISOString(),
-        });
-        break;
+    try {
+      switch (channel.type) {
+        case 'webhook':
+          await this.sendWebhook(channel.config.url as string, {
+            rule: rule.name,
+            severity: rule.severity,
+            status,
+            metricValue,
+            threshold: rule.threshold.value,
+            message,
+            incidentId,
+            timestamp: new Date().toISOString(),
+          });
+          break;
 
-      case 'slack':
-        // TODO: Implement Slack notification
-        logger.info({ channel: 'slack', message }, 'Would send Slack notification');
-        break;
+        case 'slack':
+          await this.sendSlackNotification(channel.config, rule, metricValue, status, incidentId);
+          break;
 
-      case 'email':
-        // TODO: Implement email notification
-        logger.info({ channel: 'email', message }, 'Would send email notification');
-        break;
+        case 'email':
+          await this.sendEmailNotification(channel.config, rule, metricValue, status, incidentId);
+          break;
 
-      case 'pagerduty':
-        // TODO: Implement PagerDuty notification
-        logger.info({ channel: 'pagerduty', message }, 'Would send PagerDuty notification');
-        break;
+        case 'teams':
+          await this.sendTeamsNotification(channel.config, rule, metricValue, status, incidentId);
+          break;
 
-      default:
-        logger.warn({ channelType: channel.type }, 'Unknown notification channel');
+        case 'pagerduty':
+          await this.sendPagerDutyNotification(channel.config, rule, metricValue, status, incidentId);
+          break;
+
+        case 'google_chat':
+          await this.sendGoogleChatNotification(channel.config, rule, metricValue, status, incidentId);
+          break;
+
+        default:
+          logger.warn({ channelType: channel.type }, 'Unknown notification channel');
+      }
+
+      logger.info({ channelId: channel.id, channelType: channel.type, status }, 'Notification sent');
+    } catch (err) {
+      logger.error({ channelId: channel.id, channelType: channel.type, err }, 'Failed to send notification');
     }
   }
 
   private async sendWebhook(url: string, payload: Record<string, unknown>): Promise<void> {
-    try {
-      const response = await fetch(url, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload),
-      });
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
 
-      if (!response.ok) {
-        logger.error({ url, status: response.status }, 'Webhook request failed');
-      }
-    } catch (err) {
-      logger.error({ url, err }, 'Error sending webhook');
+    if (!response.ok) {
+      throw new Error(`Webhook request failed with status ${response.status}`);
+    }
+  }
+
+  private async sendSlackNotification(
+    config: Record<string, unknown>,
+    rule: AlertRule,
+    metricValue: number,
+    status: 'firing' | 'resolved',
+    incidentId: string
+  ): Promise<void> {
+    const webhookUrl = config.webhookUrl as string;
+    if (!webhookUrl) {
+      throw new Error('Slack webhook URL not configured');
+    }
+
+    const color = status === 'firing'
+      ? (rule.severity === 'critical' ? '#dc2626' : rule.severity === 'warning' ? '#f59e0b' : '#3b82f6')
+      : '#22c55e';
+
+    const payload = {
+      attachments: [
+        {
+          color,
+          blocks: [
+            {
+              type: 'header',
+              text: {
+                type: 'plain_text',
+                text: status === 'firing' ? `🚨 Alert: ${rule.name}` : `✅ Resolved: ${rule.name}`,
+                emoji: true,
+              },
+            },
+            {
+              type: 'section',
+              fields: [
+                { type: 'mrkdwn', text: `*Severity:*\n${rule.severity}` },
+                { type: 'mrkdwn', text: `*Status:*\n${status}` },
+                { type: 'mrkdwn', text: `*Metric Value:*\n${metricValue}` },
+                { type: 'mrkdwn', text: `*Threshold:*\n${rule.threshold.value}` },
+              ],
+            },
+            {
+              type: 'context',
+              elements: [
+                { type: 'mrkdwn', text: `Incident ID: ${incidentId}` },
+              ],
+            },
+          ],
+        },
+      ],
+    };
+
+    const response = await fetch(webhookUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+
+    if (!response.ok) {
+      throw new Error(`Slack notification failed with status ${response.status}`);
+    }
+  }
+
+  private async sendEmailNotification(
+    config: Record<string, unknown>,
+    rule: AlertRule,
+    metricValue: number,
+    status: 'firing' | 'resolved',
+    incidentId: string
+  ): Promise<void> {
+    const apiKey = config.apiKey as string || process.env.RESEND_API_KEY;
+    const recipients = config.recipients as string[];
+    const fromEmail = config.fromEmail as string || 'alerts@nats-console.local';
+
+    if (!apiKey) {
+      logger.warn('Resend API key not configured, skipping email notification');
+      return;
+    }
+
+    if (!recipients?.length) {
+      logger.warn('No email recipients configured');
+      return;
+    }
+
+    const subject = status === 'firing'
+      ? `🚨 Alert: ${rule.name} - ${rule.severity.toUpperCase()}`
+      : `✅ Resolved: ${rule.name}`;
+
+    const html = `
+      <h2>${status === 'firing' ? '🚨 Alert Fired' : '✅ Alert Resolved'}</h2>
+      <p><strong>Alert:</strong> ${rule.name}</p>
+      <p><strong>Severity:</strong> ${rule.severity}</p>
+      <p><strong>Status:</strong> ${status}</p>
+      <p><strong>Metric Value:</strong> ${metricValue}</p>
+      <p><strong>Threshold:</strong> ${rule.threshold.value}</p>
+      <p><strong>Incident ID:</strong> ${incidentId}</p>
+      <p><strong>Time:</strong> ${new Date().toISOString()}</p>
+    `;
+
+    const response = await fetch('https://api.resend.com/emails', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${apiKey}`,
+      },
+      body: JSON.stringify({
+        from: fromEmail,
+        to: recipients,
+        subject,
+        html,
+      }),
+    });
+
+    if (!response.ok) {
+      const error = await response.text();
+      throw new Error(`Email notification failed: ${error}`);
+    }
+  }
+
+  private async sendTeamsNotification(
+    config: Record<string, unknown>,
+    rule: AlertRule,
+    metricValue: number,
+    status: 'firing' | 'resolved',
+    incidentId: string
+  ): Promise<void> {
+    const webhookUrl = config.webhookUrl as string;
+    if (!webhookUrl) {
+      throw new Error('Teams webhook URL not configured');
+    }
+
+    const themeColor = status === 'firing'
+      ? (rule.severity === 'critical' ? 'dc2626' : rule.severity === 'warning' ? 'f59e0b' : '3b82f6')
+      : '22c55e';
+
+    const payload = {
+      '@type': 'MessageCard',
+      '@context': 'http://schema.org/extensions',
+      themeColor,
+      summary: status === 'firing' ? `Alert: ${rule.name}` : `Resolved: ${rule.name}`,
+      sections: [
+        {
+          activityTitle: status === 'firing' ? `🚨 Alert: ${rule.name}` : `✅ Resolved: ${rule.name}`,
+          facts: [
+            { name: 'Severity', value: rule.severity },
+            { name: 'Status', value: status },
+            { name: 'Metric Value', value: String(metricValue) },
+            { name: 'Threshold', value: String(rule.threshold.value) },
+            { name: 'Incident ID', value: incidentId },
+          ],
+          markdown: true,
+        },
+      ],
+    };
+
+    const response = await fetch(webhookUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+
+    if (!response.ok) {
+      throw new Error(`Teams notification failed with status ${response.status}`);
+    }
+  }
+
+  private async sendPagerDutyNotification(
+    config: Record<string, unknown>,
+    rule: AlertRule,
+    metricValue: number,
+    status: 'firing' | 'resolved',
+    incidentId: string
+  ): Promise<void> {
+    const routingKey = config.routingKey as string;
+    if (!routingKey) {
+      throw new Error('PagerDuty routing key not configured');
+    }
+
+    const severity = rule.severity === 'critical' ? 'critical' : rule.severity === 'warning' ? 'warning' : 'info';
+
+    const payload = {
+      routing_key: routingKey,
+      event_action: status === 'firing' ? 'trigger' : 'resolve',
+      dedup_key: `nats-console-${rule.id}`,
+      payload: {
+        summary: `${rule.name}: value ${metricValue} ${status === 'firing' ? 'exceeded' : 'back below'} threshold ${rule.threshold.value}`,
+        severity,
+        source: 'NATS Console',
+        custom_details: {
+          rule_name: rule.name,
+          metric_value: metricValue,
+          threshold: rule.threshold.value,
+          incident_id: incidentId,
+        },
+      },
+    };
+
+    const response = await fetch('https://events.pagerduty.com/v2/enqueue', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+
+    if (!response.ok) {
+      const error = await response.text();
+      throw new Error(`PagerDuty notification failed: ${error}`);
+    }
+  }
+
+  private async sendGoogleChatNotification(
+    config: Record<string, unknown>,
+    rule: AlertRule,
+    metricValue: number,
+    status: 'firing' | 'resolved',
+    incidentId: string
+  ): Promise<void> {
+    const webhookUrl = config.webhookUrl as string;
+    if (!webhookUrl) {
+      throw new Error('Google Chat webhook URL not configured');
+    }
+
+    const emoji = status === 'firing' ? '🚨' : '✅';
+    const title = status === 'firing' ? `Alert: ${rule.name}` : `Resolved: ${rule.name}`;
+
+    const payload = {
+      cards: [
+        {
+          header: {
+            title: `${emoji} ${title}`,
+            subtitle: `Severity: ${rule.severity}`,
+          },
+          sections: [
+            {
+              widgets: [
+                {
+                  keyValue: {
+                    topLabel: 'Metric Value',
+                    content: String(metricValue),
+                  },
+                },
+                {
+                  keyValue: {
+                    topLabel: 'Threshold',
+                    content: String(rule.threshold.value),
+                  },
+                },
+                {
+                  keyValue: {
+                    topLabel: 'Incident ID',
+                    content: incidentId,
+                  },
+                },
+              ],
+            },
+          ],
+        },
+      ],
+    };
+
+    const response = await fetch(webhookUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+
+    if (!response.ok) {
+      throw new Error(`Google Chat notification failed with status ${response.status}`);
     }
   }
 }
