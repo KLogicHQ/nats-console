@@ -2,7 +2,8 @@
         db-up db-down db-shell-postgres db-shell-redis db-shell-clickhouse db-shell-nats \
         prisma-generate prisma-migrate prisma-studio \
         api-dev web-dev workers-dev \
-        lint format test
+        lint format test \
+        examples-setup examples-producer examples-consumer examples-all
 
 # Colors
 CYAN := \033[36m
@@ -207,3 +208,18 @@ setup: install db-up prisma-generate prisma-migrate ## Complete project setup
 
 reset: db-clean install db-up prisma-generate prisma-migrate ## Reset everything and start fresh
 	@echo "$(GREEN)Reset complete!$(RESET)"
+
+# ==================== Examples ====================
+
+examples-setup: ## Setup example NATS streams and consumers
+	cd examples && pnpm run setup-streams
+
+examples-producer: ## Run example message producer
+	cd examples && pnpm run producer
+
+examples-consumer: ## Run example message consumer
+	cd examples && pnpm run consumer
+
+examples-all: examples-setup ## Setup streams and run producer
+	@echo "$(GREEN)Streams created. Starting producer...$(RESET)"
+	cd examples && pnpm run producer

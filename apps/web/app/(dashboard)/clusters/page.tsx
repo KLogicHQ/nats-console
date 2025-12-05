@@ -55,7 +55,7 @@ export default function ClustersPage() {
             <RefreshCw className="h-4 w-4" />
           </Button>
           <Button onClick={() => setShowCreateDialog(true)}>
-            <Plus className="h-4 w-4 mr-2" />
+            <Plus className="h-4 w-4" />
             Add Cluster
           </Button>
         </div>
@@ -84,7 +84,7 @@ export default function ClustersPage() {
             <p className="text-muted-foreground mb-4">
               Add your first NATS cluster to get started
             </p>
-            <Button>
+            <Button onClick={() => setShowCreateDialog(true)}>
               <Plus className="h-4 w-4" />
               Add Cluster
             </Button>

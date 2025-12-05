@@ -71,32 +71,37 @@ export async function createConsumer(
     where: { clusterId, streamName },
   });
 
-  // Create consumer in NATS
-  const consumerInfo = await natsCreateConsumer(clusterId, streamName, {
+  // Build consumer config, filtering out undefined values
+  const consumerConfig: Record<string, unknown> = {
     name: input.name,
     durable_name: input.durableName || input.name,
-    description: input.description,
-    deliver_policy: mapDeliverPolicy(input.deliverPolicy),
-    opt_start_seq: input.optStartSeq,
-    opt_start_time: input.optStartTime,
-    ack_policy: mapAckPolicy(input.ackPolicy),
-    ack_wait: input.ackWait,
-    max_deliver: input.maxDeliver,
-    backoff: input.backoff,
-    filter_subject: input.filterSubject,
-    filter_subjects: input.filterSubjects,
-    replay_policy: mapReplayPolicy(input.replayPolicy),
-    rate_limit_bps: input.rateLimit,
-    sample_freq: input.sampleFreq,
-    max_waiting: input.maxWaiting,
-    max_ack_pending: input.maxAckPending,
-    headers_only: input.headersOnly,
-    max_batch: input.maxBatch,
-    max_expires: input.maxExpires,
-    inactive_threshold: input.inactiveThreshold,
-    num_replicas: input.numReplicas,
-    mem_storage: input.memStorage,
-  });
+  };
+
+  // Add optional fields only if defined
+  if (input.description) consumerConfig.description = input.description;
+  if (input.deliverPolicy) consumerConfig.deliver_policy = mapDeliverPolicy(input.deliverPolicy);
+  if (input.optStartSeq !== undefined) consumerConfig.opt_start_seq = input.optStartSeq;
+  if (input.optStartTime) consumerConfig.opt_start_time = input.optStartTime;
+  if (input.ackPolicy) consumerConfig.ack_policy = mapAckPolicy(input.ackPolicy);
+  if (input.ackWait !== undefined) consumerConfig.ack_wait = input.ackWait;
+  if (input.maxDeliver !== undefined) consumerConfig.max_deliver = input.maxDeliver;
+  if (input.backoff) consumerConfig.backoff = input.backoff;
+  if (input.filterSubject) consumerConfig.filter_subject = input.filterSubject;
+  if (input.filterSubjects) consumerConfig.filter_subjects = input.filterSubjects;
+  if (input.replayPolicy) consumerConfig.replay_policy = mapReplayPolicy(input.replayPolicy);
+  if (input.rateLimit !== undefined) consumerConfig.rate_limit_bps = input.rateLimit;
+  if (input.sampleFreq) consumerConfig.sample_freq = input.sampleFreq;
+  if (input.maxWaiting !== undefined) consumerConfig.max_waiting = input.maxWaiting;
+  if (input.maxAckPending !== undefined) consumerConfig.max_ack_pending = input.maxAckPending;
+  if (input.headersOnly !== undefined) consumerConfig.headers_only = input.headersOnly;
+  if (input.maxBatch !== undefined) consumerConfig.max_batch = input.maxBatch;
+  if (input.maxExpires !== undefined) consumerConfig.max_expires = input.maxExpires;
+  if (input.inactiveThreshold !== undefined) consumerConfig.inactive_threshold = input.inactiveThreshold;
+  if (input.numReplicas !== undefined) consumerConfig.num_replicas = input.numReplicas;
+  if (input.memStorage !== undefined) consumerConfig.mem_storage = input.memStorage;
+
+  // Create consumer in NATS
+  const consumerInfo = await natsCreateConsumer(clusterId, streamName, consumerConfig as any);
 
   // Store config in database for tracking
   if (streamConfig) {

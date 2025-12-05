@@ -48,7 +48,7 @@ export default function StreamsPage() {
             <RefreshCw className="h-4 w-4" />
           </Button>
           <Button disabled={!selectedCluster} onClick={() => setShowCreateDialog(true)}>
-            <Plus className="h-4 w-4 mr-2" />
+            <Plus className="h-4 w-4" />
             Create Stream
           </Button>
         </div>
@@ -110,7 +110,7 @@ export default function StreamsPage() {
               {search ? 'No streams match your search' : 'Create your first stream to get started'}
             </p>
             {!search && (
-              <Button>
+              <Button onClick={() => setShowCreateDialog(true)}>
                 <Plus className="h-4 w-4" />
                 Create Stream
               </Button>

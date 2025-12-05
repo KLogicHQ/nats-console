@@ -126,7 +126,7 @@ function ConsumerDetailContent() {
             <RefreshCw className="h-4 w-4" />
           </Button>
           <Button variant="outline" size="sm">
-            <Edit className="h-4 w-4 mr-2" />
+            <Edit className="h-4 w-4" />
             Edit
           </Button>
           <Button
@@ -135,7 +135,7 @@ function ConsumerDetailContent() {
             onClick={() => setShowDeleteDialog(true)}
             disabled={deleteMutation.isPending}
           >
-            <Trash2 className="h-4 w-4 mr-2" />
+            <Trash2 className="h-4 w-4" />
             Delete
           </Button>
         </div>

@@ -226,7 +226,7 @@ export default function AlertsPage() {
             setFormData(defaultRule);
             setIsCreateOpen(true);
           }}>
-            <Plus className="h-4 w-4 mr-2" />
+            <Plus className="h-4 w-4" />
             Create Rule
           </Button>
         </div>
@@ -266,7 +266,7 @@ export default function AlertsPage() {
             </p>
             {filter === 'all' && (
               <Button onClick={() => setIsCreateOpen(true)}>
-                <Plus className="h-4 w-4 mr-2" />
+                <Plus className="h-4 w-4" />
                 Create Alert Rule
               </Button>
             )}

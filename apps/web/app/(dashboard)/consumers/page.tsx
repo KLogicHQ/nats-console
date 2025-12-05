@@ -91,7 +91,7 @@ export default function ConsumersPage() {
             <RefreshCw className="h-4 w-4" />
           </Button>
           <Button disabled={!selectedStream} onClick={() => setShowCreateDialog(true)}>
-            <Plus className="h-4 w-4 mr-2" />
+            <Plus className="h-4 w-4" />
             Create Consumer
           </Button>
         </div>
@@ -170,7 +170,7 @@ export default function ConsumersPage() {
               {search ? 'No consumers match your search' : 'Create your first consumer to get started'}
             </p>
             {!search && (
-              <Button>
+              <Button onClick={() => setShowCreateDialog(true)}>
                 <Plus className="h-4 w-4" />
                 Create Consumer
               </Button>
@@ -206,7 +206,6 @@ export default function ConsumersPage() {
                         className="font-medium text-primary hover:underline flex items-center gap-1"
                       >
                         {consumer.name}
-                        <ChevronRight className="h-4 w-4" />
                       </Link>
                     </td>
                     <td className="p-4">
