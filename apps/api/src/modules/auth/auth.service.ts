@@ -352,6 +352,62 @@ export async function disableMfa(userId: string): Promise<void> {
   });
 }
 
+// ==================== Profile Updates ====================
+
+export async function updateProfile(
+  userId: string,
+  data: { firstName?: string; lastName?: string; email?: string }
+): Promise<User> {
+  // If email is being changed, check for conflicts
+  if (data.email) {
+    const existingUser = await prisma.user.findFirst({
+      where: {
+        email: data.email.toLowerCase(),
+        id: { not: userId },
+      },
+    });
+    if (existingUser) {
+      throw new ConflictError('Email is already in use');
+    }
+  }
+
+  const user = await prisma.user.update({
+    where: { id: userId },
+    data: {
+      ...(data.firstName && { firstName: data.firstName }),
+      ...(data.lastName && { lastName: data.lastName }),
+      ...(data.email && { email: data.email.toLowerCase() }),
+    },
+  });
+
+  return mapUser(user);
+}
+
+export async function changePassword(
+  userId: string,
+  currentPassword: string,
+  newPassword: string
+): Promise<void> {
+  const user = await prisma.user.findUnique({
+    where: { id: userId },
+  });
+
+  if (!user) {
+    throw new NotFoundError('User');
+  }
+
+  const isValidPassword = await verifyPassword(user.passwordHash, currentPassword);
+  if (!isValidPassword) {
+    throw new ValidationError('Current password is incorrect');
+  }
+
+  const passwordHash = await hashPassword(newPassword);
+  await prisma.user.update({
+    where: { id: userId },
+    data: { passwordHash },
+  });
+}
+
 // ==================== Helpers ====================
 
 async function generateTokens(

@@ -6,6 +6,8 @@ import {
   ForgotPasswordSchema,
   ResetPasswordSchema,
   MfaVerifySchema,
+  UpdateProfileSchema,
+  ChangePasswordSchema,
 } from '../../../../shared/src/index';
 import * as authService from './auth.service';
 import { authenticate } from '../../common/middleware/auth';
@@ -104,5 +106,19 @@ export const authRoutes: FastifyPluginAsync = async (fastify) => {
   fastify.delete('/mfa/disable', { preHandler: authenticate }, async (request) => {
     await authService.disableMfa(request.user!.sub);
     return { success: true };
+  });
+
+  // PATCH /auth/profile - Update profile
+  fastify.patch('/profile', { preHandler: authenticate }, async (request) => {
+    const body = UpdateProfileSchema.parse(request.body);
+    const user = await authService.updateProfile(request.user!.sub, body);
+    return { user };
+  });
+
+  // POST /auth/change-password - Change password
+  fastify.post('/change-password', { preHandler: authenticate }, async (request) => {
+    const body = ChangePasswordSchema.parse(request.body);
+    await authService.changePassword(request.user!.sub, body.currentPassword, body.newPassword);
+    return { message: 'Password changed successfully' };
   });
 };

@@ -3,7 +3,7 @@ import { z } from 'zod';
 import { randomBytes } from 'crypto';
 import { prisma } from '../../lib/prisma';
 import { authenticate, optionalAuthenticate } from '../../common/middleware/auth';
-import { NotFoundError, ConflictError, ForbiddenError } from '@nats-console/shared';
+import { NotFoundError, ConflictError, ForbiddenError } from '../../../../shared/src/index';
 
 const CreateInviteSchema = z.object({
   email: z.string().email(),

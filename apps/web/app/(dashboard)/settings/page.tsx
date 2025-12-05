@@ -1,8 +1,8 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { Save, User, Bell, Shield, Key, Palette, Users, UserPlus, Trash2, Mail } from 'lucide-react';
+import { Save, User, Bell, Shield, Key, Palette, Users, UserPlus, Trash2, Mail, Loader2, CheckCircle2 } from 'lucide-react';
 import { useAuthStore } from '@/stores/auth';
 import { api } from '@/lib/api';
 import { Button } from '@/components/ui/button';
@@ -11,15 +11,24 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { InviteUserDialog } from '@/components/forms/invite-user-dialog';
 
 export default function SettingsPage() {
-  const { user } = useAuthStore();
+  const { user, setUser } = useAuthStore();
   const [activeTab, setActiveTab] = useState('profile');
   const queryClient = useQueryClient();
 
   const [profileForm, setProfileForm] = useState({
-    firstName: user?.firstName || '',
-    lastName: user?.lastName || '',
-    email: user?.email || '',
+    firstName: '',
+    lastName: '',
+    email: '',
   });
+
+  const [passwordForm, setPasswordForm] = useState({
+    currentPassword: '',
+    newPassword: '',
+    confirmPassword: '',
+  });
+
+  const [passwordError, setPasswordError] = useState('');
+  const [passwordSuccess, setPasswordSuccess] = useState(false);
 
   const [notificationSettings, setNotificationSettings] = useState({
     emailAlerts: true,
@@ -30,16 +39,47 @@ export default function SettingsPage() {
 
   const [showInviteDialog, setShowInviteDialog] = useState(false);
 
-  // Fetch team members
-  const { data: membersData } = useQuery({
-    queryKey: ['organization-members'],
-    queryFn: () => api.auth.me().then(() => []), // TODO: Add members endpoint
-  });
+  // Initialize form with user data
+  useEffect(() => {
+    if (user) {
+      setProfileForm({
+        firstName: user.firstName || '',
+        lastName: user.lastName || '',
+        email: user.email || '',
+      });
+    }
+  }, [user]);
 
   // Fetch pending invites
-  const { data: invitesData, refetch: refetchInvites } = useQuery({
+  const { data: invitesData } = useQuery({
     queryKey: ['invites'],
     queryFn: () => api.invites.list(),
+  });
+
+  // Profile update mutation
+  const profileMutation = useMutation({
+    mutationFn: (data: { firstName?: string; lastName?: string; email?: string }) =>
+      api.auth.updateProfile(data),
+    onSuccess: (data) => {
+      setUser(data.user);
+      queryClient.invalidateQueries({ queryKey: ['user'] });
+    },
+  });
+
+  // Change password mutation
+  const changePasswordMutation = useMutation({
+    mutationFn: (data: { currentPassword: string; newPassword: string }) =>
+      api.auth.changePassword(data),
+    onSuccess: () => {
+      setPasswordForm({ currentPassword: '', newPassword: '', confirmPassword: '' });
+      setPasswordError('');
+      setPasswordSuccess(true);
+      setTimeout(() => setPasswordSuccess(false), 3000);
+    },
+    onError: (err: any) => {
+      setPasswordError(err.message || 'Failed to change password');
+      setPasswordSuccess(false);
+    },
   });
 
   const revokeMutation = useMutation({
@@ -48,6 +88,31 @@ export default function SettingsPage() {
       queryClient.invalidateQueries({ queryKey: ['invites'] });
     },
   });
+
+  const handleProfileSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    profileMutation.mutate(profileForm);
+  };
+
+  const handlePasswordSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    setPasswordError('');
+
+    if (passwordForm.newPassword !== passwordForm.confirmPassword) {
+      setPasswordError('Passwords do not match');
+      return;
+    }
+
+    if (passwordForm.newPassword.length < 8) {
+      setPasswordError('Password must be at least 8 characters');
+      return;
+    }
+
+    changePasswordMutation.mutate({
+      currentPassword: passwordForm.currentPassword,
+      newPassword: passwordForm.newPassword,
+    });
+  };
 
   const tabs = [
     { id: 'profile', label: 'Profile', icon: User },
@@ -95,42 +160,59 @@ export default function SettingsPage() {
                 <CardTitle>Profile Settings</CardTitle>
                 <CardDescription>Update your personal information</CardDescription>
               </CardHeader>
-              <CardContent className="space-y-4">
-                <div className="grid grid-cols-2 gap-4">
+              <form onSubmit={handleProfileSubmit}>
+                <CardContent className="space-y-4">
+                  {profileMutation.isSuccess && (
+                    <div className="p-3 text-sm text-green-600 bg-green-50 rounded-md flex items-center gap-2">
+                      <CheckCircle2 className="h-4 w-4" />
+                      Profile updated successfully
+                    </div>
+                  )}
+                  {profileMutation.error && (
+                    <div className="p-3 text-sm text-destructive bg-destructive/10 rounded-md">
+                      {(profileMutation.error as any).message || 'Failed to update profile'}
+                    </div>
+                  )}
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                      <label className="text-sm font-medium">First Name</label>
+                      <Input
+                        value={profileForm.firstName}
+                        onChange={(e) =>
+                          setProfileForm({ ...profileForm, firstName: e.target.value })
+                        }
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <label className="text-sm font-medium">Last Name</label>
+                      <Input
+                        value={profileForm.lastName}
+                        onChange={(e) =>
+                          setProfileForm({ ...profileForm, lastName: e.target.value })
+                        }
+                      />
+                    </div>
+                  </div>
                   <div className="space-y-2">
-                    <label className="text-sm font-medium">First Name</label>
+                    <label className="text-sm font-medium">Email</label>
                     <Input
-                      value={profileForm.firstName}
+                      type="email"
+                      value={profileForm.email}
                       onChange={(e) =>
-                        setProfileForm({ ...profileForm, firstName: e.target.value })
+                        setProfileForm({ ...profileForm, email: e.target.value })
                       }
                     />
                   </div>
-                  <div className="space-y-2">
-                    <label className="text-sm font-medium">Last Name</label>
-                    <Input
-                      value={profileForm.lastName}
-                      onChange={(e) =>
-                        setProfileForm({ ...profileForm, lastName: e.target.value })
-                      }
-                    />
-                  </div>
-                </div>
-                <div className="space-y-2">
-                  <label className="text-sm font-medium">Email</label>
-                  <Input
-                    type="email"
-                    value={profileForm.email}
-                    onChange={(e) =>
-                      setProfileForm({ ...profileForm, email: e.target.value })
-                    }
-                  />
-                </div>
-                <Button>
-                  <Save className="h-4 w-4" />
-                  Save Changes
-                </Button>
-              </CardContent>
+                  <Button type="submit" disabled={profileMutation.isPending}>
+                    {profileMutation.isPending ? (
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                    ) : (
+                      <Save className="h-4 w-4" />
+                    )}
+                    Save Changes
+                  </Button>
+                </CardContent>
+              </form>
             </Card>
           )}
 
@@ -328,21 +410,63 @@ export default function SettingsPage() {
                   <CardTitle>Change Password</CardTitle>
                   <CardDescription>Update your password regularly for security</CardDescription>
                 </CardHeader>
-                <CardContent className="space-y-4">
-                  <div className="space-y-2">
-                    <label className="text-sm font-medium">Current Password</label>
-                    <Input type="password" placeholder="Enter current password" />
-                  </div>
-                  <div className="space-y-2">
-                    <label className="text-sm font-medium">New Password</label>
-                    <Input type="password" placeholder="Enter new password" />
-                  </div>
-                  <div className="space-y-2">
-                    <label className="text-sm font-medium">Confirm New Password</label>
-                    <Input type="password" placeholder="Confirm new password" />
-                  </div>
-                  <Button>Update Password</Button>
-                </CardContent>
+                <form onSubmit={handlePasswordSubmit}>
+                  <CardContent className="space-y-4">
+                    {passwordSuccess && (
+                      <div className="p-3 text-sm text-green-600 bg-green-50 rounded-md flex items-center gap-2">
+                        <CheckCircle2 className="h-4 w-4" />
+                        Password changed successfully
+                      </div>
+                    )}
+                    {passwordError && (
+                      <div className="p-3 text-sm text-destructive bg-destructive/10 rounded-md">
+                        {passwordError}
+                      </div>
+                    )}
+                    <div className="space-y-2">
+                      <label className="text-sm font-medium">Current Password</label>
+                      <Input
+                        type="password"
+                        placeholder="Enter current password"
+                        value={passwordForm.currentPassword}
+                        onChange={(e) =>
+                          setPasswordForm({ ...passwordForm, currentPassword: e.target.value })
+                        }
+                        required
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <label className="text-sm font-medium">New Password</label>
+                      <Input
+                        type="password"
+                        placeholder="Enter new password"
+                        value={passwordForm.newPassword}
+                        onChange={(e) =>
+                          setPasswordForm({ ...passwordForm, newPassword: e.target.value })
+                        }
+                        required
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <label className="text-sm font-medium">Confirm New Password</label>
+                      <Input
+                        type="password"
+                        placeholder="Confirm new password"
+                        value={passwordForm.confirmPassword}
+                        onChange={(e) =>
+                          setPasswordForm({ ...passwordForm, confirmPassword: e.target.value })
+                        }
+                        required
+                      />
+                    </div>
+                    <Button type="submit" disabled={changePasswordMutation.isPending}>
+                      {changePasswordMutation.isPending ? (
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                      ) : null}
+                      Update Password
+                    </Button>
+                  </CardContent>
+                </form>
               </Card>
 
               <Card>

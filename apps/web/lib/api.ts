@@ -113,6 +113,18 @@ export const auth = {
     }),
 
   me: () => request<{ user: any }>('/auth/me'),
+
+  updateProfile: (data: { firstName?: string; lastName?: string; email?: string }) =>
+    request<{ user: any }>('/auth/profile', {
+      method: 'PATCH',
+      body: data,
+    }),
+
+  changePassword: (data: { currentPassword: string; newPassword: string }) =>
+    request<{ message: string }>('/auth/change-password', {
+      method: 'POST',
+      body: data,
+    }),
 };
 
 // Clusters API
