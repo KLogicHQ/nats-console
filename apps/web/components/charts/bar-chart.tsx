@@ -27,8 +27,9 @@ export function BarChart({
       axisPointer: { type: 'shadow' },
     },
     grid: {
-      left: '3%',
-      right: '4%',
+      left: '0%',
+      right: '2%',
+      top: '3%',
       bottom: '3%',
       containLabel: true,
     },

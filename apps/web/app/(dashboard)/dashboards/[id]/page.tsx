@@ -87,6 +87,8 @@ export default function DashboardBuilderPage() {
   const [newWidgetMetric, setNewWidgetMetric] = useState('');
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
   const [isEditingLayout, setIsEditingLayout] = useState(false);
+  const [draggedWidget, setDraggedWidget] = useState<string | null>(null);
+  const [dragOverWidget, setDragOverWidget] = useState<string | null>(null);
 
   const { data: dashboardData, isLoading } = useQuery({
     queryKey: ['dashboard', dashboardId],
@@ -181,6 +183,56 @@ export default function DashboardBuilderPage() {
       widgets.map((w) => (w.id === widgetId ? { ...w, config: { ...w.config, ...config } } : w))
     );
     setHasUnsavedChanges(true);
+  };
+
+  // Drag and drop handlers
+  const handleDragStart = (e: React.DragEvent, widgetId: string) => {
+    if (!isEditingLayout) return;
+    setDraggedWidget(widgetId);
+    e.dataTransfer.effectAllowed = 'move';
+    e.dataTransfer.setData('text/plain', widgetId);
+  };
+
+  const handleDragOver = (e: React.DragEvent, widgetId: string) => {
+    if (!isEditingLayout || !draggedWidget) return;
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+    if (widgetId !== draggedWidget) {
+      setDragOverWidget(widgetId);
+    }
+  };
+
+  const handleDragLeave = () => {
+    setDragOverWidget(null);
+  };
+
+  const handleDrop = (e: React.DragEvent, targetWidgetId: string) => {
+    e.preventDefault();
+    if (!draggedWidget || draggedWidget === targetWidgetId) {
+      setDraggedWidget(null);
+      setDragOverWidget(null);
+      return;
+    }
+
+    // Reorder widgets by swapping positions
+    const draggedIndex = widgets.findIndex((w) => w.id === draggedWidget);
+    const targetIndex = widgets.findIndex((w) => w.id === targetWidgetId);
+
+    if (draggedIndex === -1 || targetIndex === -1) return;
+
+    const newWidgets = [...widgets];
+    const [removed] = newWidgets.splice(draggedIndex, 1);
+    newWidgets.splice(targetIndex, 0, removed);
+
+    setWidgets(newWidgets);
+    setHasUnsavedChanges(true);
+    setDraggedWidget(null);
+    setDragOverWidget(null);
+  };
+
+  const handleDragEnd = () => {
+    setDraggedWidget(null);
+    setDragOverWidget(null);
   };
 
   if (isLoading) {
@@ -299,16 +351,28 @@ export default function DashboardBuilderPage() {
           {widgets.map((widget) => (
             <div
               key={widget.id}
-              className="col-span-6"
+              className={`col-span-6 transition-all duration-200 ${
+                draggedWidget === widget.id ? 'opacity-50 scale-95' : ''
+              } ${
+                dragOverWidget === widget.id ? 'ring-2 ring-primary ring-offset-2' : ''
+              }`}
               style={{
                 gridColumn: `span ${widget.position.w}`,
               }}
+              draggable={isEditingLayout}
+              onDragStart={(e) => handleDragStart(e, widget.id)}
+              onDragOver={(e) => handleDragOver(e, widget.id)}
+              onDragLeave={handleDragLeave}
+              onDrop={(e) => handleDrop(e, widget.id)}
+              onDragEnd={handleDragEnd}
             >
-              <Card className={`relative h-full ${isEditingLayout ? 'group ring-2 ring-dashed ring-primary/30' : ''}`}>
+              <Card className={`relative h-full ${isEditingLayout ? 'group ring-2 ring-dashed ring-primary/30 cursor-move' : ''}`}>
                 {/* Widget controls - always visible, disabled during edit layout */}
                 <div className="absolute top-2 right-2 flex gap-1 z-10">
                   {isEditingLayout && (
-                    <GripVertical className="h-4 w-4 text-muted-foreground cursor-move opacity-0 group-hover:opacity-100 mt-2 mr-1" />
+                    <div className="flex items-center justify-center h-8 w-8 text-muted-foreground">
+                      <GripVertical className="h-5 w-5" />
+                    </div>
                   )}
                   <Button
                     variant="ghost"
@@ -522,7 +586,23 @@ export default function DashboardBuilderPage() {
             </div>
           )}
           <DialogFooter>
-            <Button onClick={() => setShowWidgetConfig(null)}>Done</Button>
+            <Button variant="outline" onClick={() => setShowWidgetConfig(null)}>
+              Cancel
+            </Button>
+            <Button
+              onClick={() => {
+                saveMutation.mutate();
+                setShowWidgetConfig(null);
+              }}
+              disabled={saveMutation.isPending}
+            >
+              {saveMutation.isPending ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <Save className="h-4 w-4" />
+              )}
+              {saveMutation.isPending ? 'Saving...' : 'Save'}
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

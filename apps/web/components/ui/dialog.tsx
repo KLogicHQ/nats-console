@@ -5,6 +5,9 @@ import { X } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Button } from './button';
 
+// Context to pass onOpenChange to DialogContent
+const DialogContext = React.createContext<{ onOpenChange: (open: boolean) => void } | null>(null);
+
 interface DialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -29,31 +32,33 @@ export function Dialog({ open, onOpenChange, children }: DialogProps) {
   if (!open) return null;
 
   return (
-    <div className="fixed inset-0 z-50">
-      <div
-        className="fixed inset-0 bg-black/50 animate-in fade-in-0"
-        onClick={() => onOpenChange(false)}
-      />
-      <div className="fixed inset-0 flex items-center justify-center p-4">
+    <DialogContext.Provider value={{ onOpenChange }}>
+      <div className="fixed inset-0 z-50">
         <div
-          className="relative bg-background rounded-lg shadow-lg max-h-[90vh] overflow-auto animate-in fade-in-0 zoom-in-95"
-          onClick={(e) => e.stopPropagation()}
-        >
-          {children}
+          className="fixed inset-0 bg-black/50 animate-in fade-in-0"
+          onClick={() => onOpenChange(false)}
+        />
+        <div className="fixed inset-0 flex items-center justify-center p-4">
+          <div
+            className="relative bg-background rounded-lg shadow-lg max-h-[90vh] overflow-auto animate-in fade-in-0 zoom-in-95"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {children}
+          </div>
         </div>
       </div>
-    </div>
+    </DialogContext.Provider>
   );
 }
 
 type DialogSize = 'sm' | 'md' | 'lg' | 'xl' | 'full';
 
 const sizeClasses: Record<DialogSize, string> = {
-  sm: 'max-w-sm',
-  md: 'max-w-md',
-  lg: 'max-w-lg',
-  xl: 'max-w-2xl',
-  full: 'max-w-4xl',
+  sm: 'max-w-md',
+  md: 'max-w-lg',
+  lg: 'max-w-xl',
+  xl: 'max-w-3xl',
+  full: 'max-w-5xl',
 };
 
 interface DialogContentProps extends React.HTMLAttributes<HTMLDivElement> {
@@ -68,17 +73,20 @@ export function DialogContent({
   onClose,
   ...props
 }: DialogContentProps) {
+  const context = React.useContext(DialogContext);
+  const handleClose = onClose || (context ? () => context.onOpenChange(false) : undefined);
+
   return (
     <div
       className={cn('w-full p-6 relative', sizeClasses[size], className)}
       {...props}
     >
-      {onClose && (
+      {handleClose && (
         <Button
           variant="outline"
           size="icon"
           className="absolute right-4 top-4 h-8 w-8"
-          onClick={onClose}
+          onClick={handleClose}
         >
           <X className="h-4 w-4" />
           <span className="sr-only">Close</span>

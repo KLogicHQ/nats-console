@@ -76,8 +76,9 @@ export function MultiLineChart({
       type: 'scroll',
     },
     grid: {
-      left: '3%',
-      right: '4%',
+      left: '0%',
+      right: '2%',
+      top: '3%',
       bottom: seriesNames.length > 0 ? '15%' : '3%',
       containLabel: true,
     },
