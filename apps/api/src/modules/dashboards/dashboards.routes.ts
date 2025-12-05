@@ -32,6 +32,7 @@ export const dashboardRoutes: FastifyPluginAsync = async (fastify) => {
         orgId: request.user!.orgId,
         userId: request.user!.sub,
         name: body.name,
+        description: body.description,
         layout: body.layout as any,
         widgets: body.widgets as any,
         isShared: body.isShared,
@@ -81,6 +82,7 @@ export const dashboardRoutes: FastifyPluginAsync = async (fastify) => {
       where: { id: request.params.id },
       data: {
         name: body.name,
+        description: body.description,
         layout: body.layout as any,
         widgets: body.widgets as any,
         isShared: body.isShared,

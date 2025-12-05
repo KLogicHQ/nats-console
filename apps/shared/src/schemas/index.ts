@@ -254,18 +254,21 @@ export const UpdateConsumerSchema = CreateConsumerSchema.partial().omit({ name: 
 // ==================== Dashboard Schemas ====================
 
 export const DashboardWidgetSchema = z.object({
-  id: z.string().uuid(),
-  type: z.enum(['chart', 'stat', 'table', 'text']),
+  id: z.string(),
+  type: z.enum(['line-chart', 'bar-chart', 'gauge', 'stat', 'table', 'pie-chart']),
   title: z.string().min(1).max(100),
-  x: z.number().int().min(0),
-  y: z.number().int().min(0),
-  w: z.number().int().min(1),
-  h: z.number().int().min(1),
+  position: z.object({
+    x: z.number().int().min(0),
+    y: z.number().int().min(0),
+    w: z.number().int().min(1),
+    h: z.number().int().min(1),
+  }),
   config: z.record(z.unknown()),
 });
 
 export const CreateDashboardSchema = z.object({
   name: z.string().min(1, 'Name is required').max(100),
+  description: z.string().max(500).optional(),
   layout: z.object({
     columns: z.number().int().min(1).max(24).default(12),
     rowHeight: z.number().int().min(20).max(200).default(80),

@@ -152,12 +152,10 @@ function getAuditInfo(url: string, body?: unknown): AuditInfo | null {
 
 export async function auditLogger(
   request: FastifyRequest,
-  reply: FastifyReply,
-  done: () => void
+  reply: FastifyReply
 ): Promise<void> {
   // Skip if no user (unauthenticated request)
   if (!request.user) {
-    done();
     return;
   }
 
@@ -166,19 +164,14 @@ export async function auditLogger(
 
   // Skip read operations if configured
   if (SKIP_READ_AUDIT && action === 'read') {
-    done();
     return;
   }
 
   // Get audit info for this route
   const auditInfo = getAuditInfo(request.url, request.body);
   if (!auditInfo) {
-    done();
     return;
   }
-
-  // Store start time for latency calculation
-  const startTime = Date.now();
 
   // Add hook to log after response
   reply.addHook('onSend', async (_request, _reply, payload) => {
@@ -211,8 +204,6 @@ export async function auditLogger(
 
     return payload;
   });
-
-  done();
 }
 
 // Fastify plugin for audit logging

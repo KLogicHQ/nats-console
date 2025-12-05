@@ -35,10 +35,12 @@
     "pino": "^9.5.0",
     "qrcode": "^1.5.4",
     "pino-pretty": "^13.0.0",
+    "ws": "^8.18.0",
     "zod": "^3.23.8"
   },
   "devDependencies": {
     "@types/node": "^22.10.1",
+    "@types/ws": "^8.5.13",
     "prisma": "^6.0.1",
     "tsx": "^4.19.2",
     "typescript": "^5.7.2",

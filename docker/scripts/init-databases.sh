@@ -113,9 +113,9 @@ init_clickhouse() {
     clickhouse-client --query "CREATE DATABASE IF NOT EXISTS nats_console"
 
     # Run schema initialization
-    if [ -f /docker-entrypoint-initdb.d/clickhouse-init.sql ]; then
+    if [ -f /app/infrastructure/clickhouse/init/init.sql ]; then
         echo "[ClickHouse] Running schema initialization..."
-        clickhouse-client --database nats_console --multiquery < /docker-entrypoint-initdb.d/clickhouse-init.sql
+        clickhouse-client --database nats_console --multiquery < /app/infrastructure/clickhouse/init/init.sql
     fi
 
     # Stop ClickHouse (will be started by supervisord)

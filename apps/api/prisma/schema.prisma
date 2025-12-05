@@ -307,15 +307,16 @@ model ApiKey {
 // ==================== Dashboards & Saved Queries ====================
 
 model Dashboard {
-  id        String   @id @default(uuid()) @db.Uuid
-  orgId     String   @map("org_id") @db.Uuid
-  userId    String   @map("user_id") @db.Uuid
-  name      String   @db.VarChar(100)
-  layout    Json     @default("{\"columns\": 12, \"rowHeight\": 80}") @db.JsonB
-  widgets   Json     @default("[]") @db.JsonB
-  isShared  Boolean  @default(false) @map("is_shared")
-  createdAt DateTime @default(now()) @map("created_at")
-  updatedAt DateTime @updatedAt @map("updated_at")
+  id          String   @id @default(uuid()) @db.Uuid
+  orgId       String   @map("org_id") @db.Uuid
+  userId      String   @map("user_id") @db.Uuid
+  name        String   @db.VarChar(100)
+  description String?  @db.Text
+  layout      Json     @default("{\"columns\": 12, \"rowHeight\": 80}") @db.JsonB
+  widgets     Json     @default("[]") @db.JsonB
+  isShared    Boolean  @default(false) @map("is_shared")
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
 
   // Relations
   organization Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)

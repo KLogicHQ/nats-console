@@ -1,0 +1,438 @@
+'use client';
+
+import { useState, useEffect } from 'react';
+import { useParams, useRouter } from 'next/navigation';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import {
+  ArrowLeft,
+  Plus,
+  Save,
+  Settings,
+  Trash2,
+  LayoutDashboard,
+  Loader2,
+  GripVertical,
+  BarChart3,
+  LineChart,
+  Activity,
+  Gauge,
+  List,
+  PieChart,
+  X,
+} from 'lucide-react';
+import Link from 'next/link';
+import { api } from '@/lib/api';
+import { Button } from '@/components/ui/button';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Input } from '@/components/ui/input';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
+import { DashboardWidget } from '@/components/dashboard/dashboard-widget';
+
+// Widget types
+const WIDGET_TYPES = [
+  { id: 'line-chart', name: 'Line Chart', icon: LineChart, description: 'Time series data' },
+  { id: 'bar-chart', name: 'Bar Chart', icon: BarChart3, description: 'Comparison data' },
+  { id: 'gauge', name: 'Gauge', icon: Gauge, description: 'Single metric value' },
+  { id: 'stat', name: 'Stat Card', icon: Activity, description: 'Key statistics' },
+  { id: 'table', name: 'Table', icon: List, description: 'Tabular data' },
+  { id: 'pie-chart', name: 'Pie Chart', icon: PieChart, description: 'Proportional data' },
+];
+
+interface Widget {
+  id: string;
+  type: string;
+  title: string;
+  config: Record<string, unknown>;
+  position: { x: number; y: number; w: number; h: number };
+}
+
+export default function DashboardBuilderPage() {
+  const params = useParams();
+  const router = useRouter();
+  const queryClient = useQueryClient();
+  const dashboardId = params.id as string;
+
+  const [widgets, setWidgets] = useState<Widget[]>([]);
+  const [dashboardName, setDashboardName] = useState('');
+  const [dashboardDescription, setDashboardDescription] = useState('');
+  const [showAddWidget, setShowAddWidget] = useState(false);
+  const [showWidgetConfig, setShowWidgetConfig] = useState<Widget | null>(null);
+  const [selectedWidgetType, setSelectedWidgetType] = useState('');
+  const [newWidgetTitle, setNewWidgetTitle] = useState('');
+  const [newWidgetCluster, setNewWidgetCluster] = useState('');
+  const [newWidgetMetric, setNewWidgetMetric] = useState('');
+  const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
+
+  const { data: dashboardData, isLoading } = useQuery({
+    queryKey: ['dashboard', dashboardId],
+    queryFn: () => api.dashboards.get(dashboardId),
+    enabled: dashboardId !== 'new',
+  });
+
+  const { data: clustersData } = useQuery({
+    queryKey: ['clusters'],
+    queryFn: () => api.clusters.list(),
+  });
+
+  // Initialize dashboard data
+  useEffect(() => {
+    if (dashboardData?.dashboard) {
+      setDashboardName(dashboardData.dashboard.name);
+      setDashboardDescription(dashboardData.dashboard.description || '');
+      setWidgets(dashboardData.dashboard.widgets || []);
+    }
+  }, [dashboardData]);
+
+  const saveMutation = useMutation({
+    mutationFn: () =>
+      api.dashboards.update(dashboardId, {
+        name: dashboardName,
+        description: dashboardDescription,
+        widgets,
+      }),
+    onSuccess: () => {
+      setHasUnsavedChanges(false);
+      queryClient.invalidateQueries({ queryKey: ['dashboard', dashboardId] });
+      queryClient.invalidateQueries({ queryKey: ['dashboards'] });
+    },
+  });
+
+  const addWidget = () => {
+    if (!selectedWidgetType || !newWidgetTitle) return;
+
+    const newWidget: Widget = {
+      id: `widget-${Date.now()}`,
+      type: selectedWidgetType,
+      title: newWidgetTitle,
+      config: {
+        clusterId: newWidgetCluster,
+        metric: newWidgetMetric,
+      },
+      position: {
+        x: (widgets.length % 2) * 6,
+        y: Math.floor(widgets.length / 2) * 4,
+        w: 6,
+        h: 4,
+      },
+    };
+
+    setWidgets([...widgets, newWidget]);
+    setHasUnsavedChanges(true);
+    setShowAddWidget(false);
+    setSelectedWidgetType('');
+    setNewWidgetTitle('');
+    setNewWidgetCluster('');
+    setNewWidgetMetric('');
+  };
+
+  const removeWidget = (widgetId: string) => {
+    setWidgets(widgets.filter((w) => w.id !== widgetId));
+    setHasUnsavedChanges(true);
+  };
+
+  const updateWidgetConfig = (widgetId: string, config: Record<string, unknown>) => {
+    setWidgets(
+      widgets.map((w) => (w.id === widgetId ? { ...w, config: { ...w.config, ...config } } : w))
+    );
+    setHasUnsavedChanges(true);
+  };
+
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-6">
+      {/* Header */}
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-4">
+          <Link href="/dashboards">
+            <Button variant="ghost" size="icon">
+              <ArrowLeft className="h-4 w-4" />
+            </Button>
+          </Link>
+          <div className="flex-1">
+            <Input
+              value={dashboardName}
+              onChange={(e) => {
+                setDashboardName(e.target.value);
+                setHasUnsavedChanges(true);
+              }}
+              className="text-2xl font-bold border-none shadow-none px-0 h-auto focus-visible:ring-0"
+              placeholder="Dashboard Name"
+            />
+            <Input
+              value={dashboardDescription}
+              onChange={(e) => {
+                setDashboardDescription(e.target.value);
+                setHasUnsavedChanges(true);
+              }}
+              className="text-sm text-muted-foreground border-none shadow-none px-0 h-auto focus-visible:ring-0"
+              placeholder="Add a description..."
+            />
+          </div>
+        </div>
+        <div className="flex gap-2">
+          <Button variant="outline" onClick={() => setShowAddWidget(true)}>
+            <Plus className="h-4 w-4" />
+            Add Widget
+          </Button>
+          <Button
+            onClick={() => saveMutation.mutate()}
+            disabled={!hasUnsavedChanges || saveMutation.isPending}
+          >
+            {saveMutation.isPending ? (
+              <Loader2 className="h-4 w-4 animate-spin" />
+            ) : (
+              <Save className="h-4 w-4" />
+            )}
+            {hasUnsavedChanges ? 'Save Changes' : 'Saved'}
+          </Button>
+        </div>
+      </div>
+
+      {/* Dashboard Grid */}
+      {widgets.length === 0 ? (
+        <Card>
+          <CardContent className="py-12 text-center">
+            <LayoutDashboard className="h-12 w-12 mx-auto text-muted-foreground mb-4" />
+            <h3 className="text-lg font-semibold mb-2">No widgets yet</h3>
+            <p className="text-muted-foreground mb-4">
+              Add widgets to visualize your NATS metrics
+            </p>
+            <Button onClick={() => setShowAddWidget(true)}>
+              <Plus className="h-4 w-4" />
+              Add Your First Widget
+            </Button>
+          </CardContent>
+        </Card>
+      ) : (
+        <div className="grid grid-cols-12 gap-4">
+          {widgets.map((widget) => (
+            <div
+              key={widget.id}
+              className="col-span-6"
+              style={{
+                gridColumn: `span ${widget.position.w}`,
+              }}
+            >
+              <Card className="group relative h-full">
+                <div className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity flex gap-1 z-10">
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-8 w-8"
+                    onClick={() => setShowWidgetConfig(widget)}
+                  >
+                    <Settings className="h-4 w-4" />
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-8 w-8 text-destructive"
+                    onClick={() => removeWidget(widget.id)}
+                  >
+                    <Trash2 className="h-4 w-4" />
+                  </Button>
+                </div>
+                <CardHeader className="pb-2">
+                  <div className="flex items-center gap-2">
+                    <GripVertical className="h-4 w-4 text-muted-foreground cursor-move opacity-0 group-hover:opacity-100" />
+                    <CardTitle className="text-sm font-medium">{widget.title}</CardTitle>
+                  </div>
+                </CardHeader>
+                <CardContent>
+                  <DashboardWidget widget={widget} />
+                </CardContent>
+              </Card>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Add Widget Dialog */}
+      <Dialog open={showAddWidget} onOpenChange={setShowAddWidget}>
+        <DialogContent className="max-w-2xl">
+          <DialogHeader>
+            <DialogTitle>Add Widget</DialogTitle>
+            <DialogDescription>
+              Choose a widget type and configure it
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            {/* Widget Type Selection */}
+            <div className="grid grid-cols-3 gap-3">
+              {WIDGET_TYPES.map((type) => {
+                const Icon = type.icon;
+                return (
+                  <button
+                    key={type.id}
+                    onClick={() => setSelectedWidgetType(type.id)}
+                    className={`p-4 border rounded-lg text-left transition-colors ${
+                      selectedWidgetType === type.id
+                        ? 'border-primary bg-primary/5'
+                        : 'hover:border-primary/50'
+                    }`}
+                  >
+                    <Icon className="h-6 w-6 mb-2 text-primary" />
+                    <div className="font-medium">{type.name}</div>
+                    <div className="text-sm text-muted-foreground">{type.description}</div>
+                  </button>
+                );
+              })}
+            </div>
+
+            {selectedWidgetType && (
+              <>
+                <div className="space-y-2">
+                  <label className="text-sm font-medium">Widget Title *</label>
+                  <Input
+                    placeholder="e.g., Message Throughput"
+                    value={newWidgetTitle}
+                    onChange={(e) => setNewWidgetTitle(e.target.value)}
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <label className="text-sm font-medium">Cluster</label>
+                  <Select value={newWidgetCluster} onValueChange={setNewWidgetCluster}>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select a cluster" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {clustersData?.clusters?.map((cluster: any) => (
+                        <SelectItem key={cluster.id} value={cluster.id}>
+                          {cluster.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <div className="space-y-2">
+                  <label className="text-sm font-medium">Metric</label>
+                  <Select value={newWidgetMetric} onValueChange={setNewWidgetMetric}>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select a metric" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="messages_rate">Message Rate</SelectItem>
+                      <SelectItem value="bytes_rate">Bytes Rate</SelectItem>
+                      <SelectItem value="consumer_lag">Consumer Lag</SelectItem>
+                      <SelectItem value="connections">Connections</SelectItem>
+                      <SelectItem value="cpu_percent">CPU %</SelectItem>
+                      <SelectItem value="memory_bytes">Memory</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              </>
+            )}
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowAddWidget(false)}>
+              Cancel
+            </Button>
+            <Button
+              onClick={addWidget}
+              disabled={!selectedWidgetType || !newWidgetTitle}
+            >
+              <Plus className="h-4 w-4" />
+              Add Widget
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Widget Config Dialog */}
+      <Dialog open={!!showWidgetConfig} onOpenChange={() => setShowWidgetConfig(null)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Configure Widget</DialogTitle>
+            <DialogDescription>
+              Update the widget settings
+            </DialogDescription>
+          </DialogHeader>
+          {showWidgetConfig && (
+            <div className="space-y-4 py-4">
+              <div className="space-y-2">
+                <label className="text-sm font-medium">Title</label>
+                <Input
+                  value={showWidgetConfig.title}
+                  onChange={(e) =>
+                    setWidgets(
+                      widgets.map((w) =>
+                        w.id === showWidgetConfig.id ? { ...w, title: e.target.value } : w
+                      )
+                    )
+                  }
+                />
+              </div>
+              <div className="space-y-2">
+                <label className="text-sm font-medium">Cluster</label>
+                <Select
+                  value={(showWidgetConfig.config.clusterId as string) || ''}
+                  onValueChange={(v) =>
+                    updateWidgetConfig(showWidgetConfig.id, { clusterId: v })
+                  }
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select a cluster" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {clustersData?.clusters?.map((cluster: any) => (
+                      <SelectItem key={cluster.id} value={cluster.id}>
+                        {cluster.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-2">
+                <label className="text-sm font-medium">Metric</label>
+                <Select
+                  value={(showWidgetConfig.config.metric as string) || ''}
+                  onValueChange={(v) =>
+                    updateWidgetConfig(showWidgetConfig.id, { metric: v })
+                  }
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select a metric" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="messages_rate">Message Rate</SelectItem>
+                    <SelectItem value="bytes_rate">Bytes Rate</SelectItem>
+                    <SelectItem value="consumer_lag">Consumer Lag</SelectItem>
+                    <SelectItem value="connections">Connections</SelectItem>
+                    <SelectItem value="cpu_percent">CPU %</SelectItem>
+                    <SelectItem value="memory_bytes">Memory</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+          )}
+          <DialogFooter>
+            <Button onClick={() => setShowWidgetConfig(null)}>Done</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </div>
+  );
+}

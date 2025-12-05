@@ -1,9 +1,12 @@
 import type { FastifyRequest, FastifyReply } from 'fastify';
 import * as argon2 from 'argon2';
-import { verifyToken, getPermissionsForRole } from '../../modules/auth/auth.service';
+import { verifyToken as verifyJwtToken, getPermissionsForRole } from '../../modules/auth/auth.service';
 import { getSession, updateSessionActivity } from '../../lib/redis';
 import { prisma } from '../../lib/prisma';
 import type { JwtPayload } from '../../../../shared/src/index';
+
+// Re-export verifyToken for use by other modules (e.g., websocket)
+export { verifyJwtToken as verifyToken };
 
 // Extend FastifyRequest to include user and apiKeyId
 declare module 'fastify' {
@@ -137,7 +140,7 @@ export async function authenticate(
 
   // Regular JWT token
   try {
-    const payload = await verifyToken(token);
+    const payload = await verifyJwtToken(token);
     request.user = payload;
 
     // Validate session in Redis and update activity
@@ -178,7 +181,7 @@ export async function optionalAuth(
   const token = authHeader.slice(7);
 
   try {
-    const payload = await verifyToken(token);
+    const payload = await verifyJwtToken(token);
     request.user = payload;
   } catch {
     // Invalid token, continue without user

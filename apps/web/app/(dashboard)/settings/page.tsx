@@ -20,6 +20,11 @@ import {
   EyeOff,
   Plus,
   Clock,
+  Globe,
+  FileText,
+  Database,
+  Download,
+  AlertTriangle,
 } from 'lucide-react';
 import { useSearchParams, useRouter, usePathname } from 'next/navigation';
 import { useAuthStore } from '@/stores/auth';
@@ -61,6 +66,9 @@ const tabs = [
   { id: 'security', label: 'Security', icon: Shield },
   { id: 'api-keys', label: 'API Keys', icon: Key },
   { id: 'appearance', label: 'Appearance', icon: Palette },
+  { id: 'ip-allowlist', label: 'IP Allowlist', icon: Globe, adminOnly: true },
+  { id: 'compliance', label: 'Compliance', icon: FileText, adminOnly: true },
+  { id: 'data-privacy', label: 'Data Privacy', icon: Database },
 ];
 
 function SettingsPageContent() {
@@ -120,6 +128,22 @@ function SettingsPageContent() {
   const [mfaError, setMfaError] = useState('');
   const [showDisable2faDialog, setShowDisable2faDialog] = useState(false);
 
+  // Enterprise features state
+  const [ipAllowlistForm, setIpAllowlistForm] = useState({
+    enabled: false,
+    allowedIps: [] as string[],
+    allowedCidrs: [] as string[],
+  });
+  const [newIp, setNewIp] = useState('');
+  const [newCidr, setNewCidr] = useState('');
+  const [retentionForm, setRetentionForm] = useState({
+    metricsRetentionDays: 30,
+    auditLogsRetentionDays: 90,
+    alertEventsRetentionDays: 90,
+    messageSamplesRetentionDays: 7,
+  });
+  const [showDeleteAccountDialog, setShowDeleteAccountDialog] = useState(false);
+
   // Initialize form with user data
   useEffect(() => {
     if (user) {
@@ -142,6 +166,40 @@ function SettingsPageContent() {
     queryKey: ['api-keys'],
     queryFn: () => api.settings.listApiKeys(),
   });
+
+  // Fetch IP allowlist (admin only)
+  const { data: ipAllowlistData, isLoading: ipAllowlistLoading } = useQuery({
+    queryKey: ['ip-allowlist'],
+    queryFn: () => api.settings.getIpAllowlist(),
+    enabled: user && ['owner', 'admin'].includes(user.role || ''),
+  });
+
+  // Fetch retention policy (admin only)
+  const { data: retentionData, isLoading: retentionLoading } = useQuery({
+    queryKey: ['retention-policy'],
+    queryFn: () => api.settings.getRetentionPolicy(),
+    enabled: user && ['owner', 'admin'].includes(user.role || ''),
+  });
+
+  // Fetch compliance report (admin only)
+  const { data: complianceData, isLoading: complianceLoading } = useQuery({
+    queryKey: ['compliance-report'],
+    queryFn: () => api.settings.getComplianceReport(),
+    enabled: user && ['owner', 'admin'].includes(user.role || ''),
+  });
+
+  // Initialize enterprise forms
+  useEffect(() => {
+    if (ipAllowlistData?.ipAllowlist) {
+      setIpAllowlistForm(ipAllowlistData.ipAllowlist);
+    }
+  }, [ipAllowlistData]);
+
+  useEffect(() => {
+    if (retentionData?.retention) {
+      setRetentionForm(retentionData.retention);
+    }
+  }, [retentionData]);
 
   // Profile update mutation
   const profileMutation = useMutation({
@@ -261,6 +319,32 @@ function SettingsPageContent() {
     },
   });
 
+  // IP Allowlist mutation
+  const ipAllowlistMutation = useMutation({
+    mutationFn: (data: typeof ipAllowlistForm) => api.settings.updateIpAllowlist(data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['ip-allowlist'] });
+    },
+  });
+
+  // Retention policy mutation
+  const retentionMutation = useMutation({
+    mutationFn: (data: typeof retentionForm) => api.settings.updateRetentionPolicy(data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['retention-policy'] });
+    },
+  });
+
+  // Delete account mutation
+  const deleteAccountMutation = useMutation({
+    mutationFn: () => api.settings.deleteAccount(),
+    onSuccess: () => {
+      // Logout and redirect
+      useAuthStore.getState().logout();
+      window.location.href = '/login';
+    },
+  });
+
   const handleProfileSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     profileMutation.mutate(profileForm);
@@ -323,23 +407,25 @@ function SettingsPageContent() {
       <div className="flex gap-6">
         {/* Sidebar */}
         <div className="w-48 space-y-1">
-          {tabs.map((tab) => {
-            const Icon = tab.icon;
-            return (
-              <button
-                key={tab.id}
-                onClick={() => setActiveTab(tab.id)}
-                className={`w-full flex items-center gap-3 px-3 py-2 text-sm font-medium rounded-lg transition-colors ${
-                  activeTab === tab.id
-                    ? 'bg-primary text-primary-foreground'
-                    : 'hover:bg-muted'
-                }`}
-              >
-                <Icon className="h-4 w-4" />
-                {tab.label}
-              </button>
-            );
-          })}
+          {tabs
+            .filter((tab) => !tab.adminOnly || (user && ['owner', 'admin'].includes(user.role || '')))
+            .map((tab) => {
+              const Icon = tab.icon;
+              return (
+                <button
+                  key={tab.id}
+                  onClick={() => setActiveTab(tab.id)}
+                  className={`w-full flex items-center gap-3 px-3 py-2 text-sm font-medium rounded-lg transition-colors ${
+                    activeTab === tab.id
+                      ? 'bg-primary text-primary-foreground'
+                      : 'hover:bg-muted'
+                  }`}
+                >
+                  <Icon className="h-4 w-4" />
+                  {tab.label}
+                </button>
+              );
+            })}
         </div>
 
         {/* Content */}
@@ -974,8 +1060,482 @@ function SettingsPageContent() {
               </CardContent>
             </Card>
           )}
+
+          {activeTab === 'ip-allowlist' && (
+            <Card>
+              <CardHeader>
+                <CardTitle>IP Allowlist</CardTitle>
+                <CardDescription>
+                  Restrict access to your organization from specific IP addresses or CIDR ranges
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-6">
+                {ipAllowlistLoading && (
+                  <div className="flex items-center justify-center h-32">
+                    <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+                  </div>
+                )}
+
+                {!ipAllowlistLoading && (
+                  <>
+                    {ipAllowlistMutation.isSuccess && (
+                      <div className="p-3 text-sm text-green-600 bg-green-50 rounded-md flex items-center gap-2">
+                        <CheckCircle2 className="h-4 w-4" />
+                        IP allowlist updated successfully
+                      </div>
+                    )}
+
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <p className="font-medium">Enable IP Allowlist</p>
+                        <p className="text-sm text-muted-foreground">
+                          When enabled, only listed IPs can access the system
+                        </p>
+                      </div>
+                      <input
+                        type="checkbox"
+                        checked={ipAllowlistForm.enabled}
+                        onChange={(e) =>
+                          setIpAllowlistForm({ ...ipAllowlistForm, enabled: e.target.checked })
+                        }
+                        className="h-4 w-4"
+                      />
+                    </div>
+
+                    <div className="space-y-4">
+                      <div>
+                        <label className="text-sm font-medium">Allowed IP Addresses</label>
+                        <div className="flex gap-2 mt-2">
+                          <Input
+                            placeholder="e.g., 192.168.1.100"
+                            value={newIp}
+                            onChange={(e) => setNewIp(e.target.value)}
+                          />
+                          <Button
+                            variant="outline"
+                            onClick={() => {
+                              if (newIp && !ipAllowlistForm.allowedIps.includes(newIp)) {
+                                setIpAllowlistForm({
+                                  ...ipAllowlistForm,
+                                  allowedIps: [...ipAllowlistForm.allowedIps, newIp],
+                                });
+                                setNewIp('');
+                              }
+                            }}
+                          >
+                            <Plus className="h-4 w-4" />
+                            Add
+                          </Button>
+                        </div>
+                        <div className="flex flex-wrap gap-2 mt-2">
+                          {ipAllowlistForm.allowedIps.map((ip) => (
+                            <span
+                              key={ip}
+                              className="inline-flex items-center gap-1 px-3 py-1 bg-muted rounded-full text-sm"
+                            >
+                              {ip}
+                              <button
+                                onClick={() =>
+                                  setIpAllowlistForm({
+                                    ...ipAllowlistForm,
+                                    allowedIps: ipAllowlistForm.allowedIps.filter((i) => i !== ip),
+                                  })
+                                }
+                                className="text-muted-foreground hover:text-foreground"
+                              >
+                                ×
+                              </button>
+                            </span>
+                          ))}
+                        </div>
+                      </div>
+
+                      <div>
+                        <label className="text-sm font-medium">Allowed CIDR Ranges</label>
+                        <div className="flex gap-2 mt-2">
+                          <Input
+                            placeholder="e.g., 10.0.0.0/8"
+                            value={newCidr}
+                            onChange={(e) => setNewCidr(e.target.value)}
+                          />
+                          <Button
+                            variant="outline"
+                            onClick={() => {
+                              if (newCidr && !ipAllowlistForm.allowedCidrs.includes(newCidr)) {
+                                setIpAllowlistForm({
+                                  ...ipAllowlistForm,
+                                  allowedCidrs: [...ipAllowlistForm.allowedCidrs, newCidr],
+                                });
+                                setNewCidr('');
+                              }
+                            }}
+                          >
+                            <Plus className="h-4 w-4" />
+                            Add
+                          </Button>
+                        </div>
+                        <div className="flex flex-wrap gap-2 mt-2">
+                          {ipAllowlistForm.allowedCidrs.map((cidr) => (
+                            <span
+                              key={cidr}
+                              className="inline-flex items-center gap-1 px-3 py-1 bg-muted rounded-full text-sm"
+                            >
+                              {cidr}
+                              <button
+                                onClick={() =>
+                                  setIpAllowlistForm({
+                                    ...ipAllowlistForm,
+                                    allowedCidrs: ipAllowlistForm.allowedCidrs.filter((c) => c !== cidr),
+                                  })
+                                }
+                                className="text-muted-foreground hover:text-foreground"
+                              >
+                                ×
+                              </button>
+                            </span>
+                          ))}
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="p-4 bg-yellow-50 border border-yellow-200 rounded-lg">
+                      <p className="text-sm text-yellow-800">
+                        <AlertTriangle className="h-4 w-4 inline mr-2" />
+                        Warning: Enabling IP allowlist without adding your current IP may lock you out.
+                        Localhost (127.0.0.1, ::1) is always allowed.
+                      </p>
+                    </div>
+
+                    <Button
+                      onClick={() => ipAllowlistMutation.mutate(ipAllowlistForm)}
+                      disabled={ipAllowlistMutation.isPending}
+                    >
+                      {ipAllowlistMutation.isPending ? (
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                      ) : (
+                        <Save className="h-4 w-4" />
+                      )}
+                      Save Changes
+                    </Button>
+                  </>
+                )}
+              </CardContent>
+            </Card>
+          )}
+
+          {activeTab === 'compliance' && (
+            <div className="space-y-6">
+              <Card>
+                <CardHeader>
+                  <CardTitle>Data Retention Policies</CardTitle>
+                  <CardDescription>
+                    Configure how long data is retained in the system
+                  </CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-6">
+                  {retentionLoading && (
+                    <div className="flex items-center justify-center h-32">
+                      <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+                    </div>
+                  )}
+
+                  {!retentionLoading && (
+                    <>
+                      {retentionMutation.isSuccess && (
+                        <div className="p-3 text-sm text-green-600 bg-green-50 rounded-md flex items-center gap-2">
+                          <CheckCircle2 className="h-4 w-4" />
+                          Retention policies updated successfully
+                        </div>
+                      )}
+
+                      <div className="grid grid-cols-2 gap-4">
+                        <div className="space-y-2">
+                          <label className="text-sm font-medium">Metrics Retention</label>
+                          <Select
+                            value={String(retentionForm.metricsRetentionDays)}
+                            onValueChange={(v) =>
+                              setRetentionForm({ ...retentionForm, metricsRetentionDays: parseInt(v) })
+                            }
+                          >
+                            <SelectTrigger>
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="7">7 days</SelectItem>
+                              <SelectItem value="14">14 days</SelectItem>
+                              <SelectItem value="30">30 days</SelectItem>
+                              <SelectItem value="60">60 days</SelectItem>
+                              <SelectItem value="90">90 days</SelectItem>
+                              <SelectItem value="180">180 days</SelectItem>
+                              <SelectItem value="365">365 days</SelectItem>
+                            </SelectContent>
+                          </Select>
+                        </div>
+
+                        <div className="space-y-2">
+                          <label className="text-sm font-medium">Audit Logs Retention</label>
+                          <Select
+                            value={String(retentionForm.auditLogsRetentionDays)}
+                            onValueChange={(v) =>
+                              setRetentionForm({ ...retentionForm, auditLogsRetentionDays: parseInt(v) })
+                            }
+                          >
+                            <SelectTrigger>
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="30">30 days</SelectItem>
+                              <SelectItem value="60">60 days</SelectItem>
+                              <SelectItem value="90">90 days</SelectItem>
+                              <SelectItem value="180">180 days</SelectItem>
+                              <SelectItem value="365">365 days</SelectItem>
+                            </SelectContent>
+                          </Select>
+                        </div>
+
+                        <div className="space-y-2">
+                          <label className="text-sm font-medium">Alert Events Retention</label>
+                          <Select
+                            value={String(retentionForm.alertEventsRetentionDays)}
+                            onValueChange={(v) =>
+                              setRetentionForm({ ...retentionForm, alertEventsRetentionDays: parseInt(v) })
+                            }
+                          >
+                            <SelectTrigger>
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="30">30 days</SelectItem>
+                              <SelectItem value="60">60 days</SelectItem>
+                              <SelectItem value="90">90 days</SelectItem>
+                              <SelectItem value="180">180 days</SelectItem>
+                              <SelectItem value="365">365 days</SelectItem>
+                            </SelectContent>
+                          </Select>
+                        </div>
+
+                        <div className="space-y-2">
+                          <label className="text-sm font-medium">Message Samples Retention</label>
+                          <Select
+                            value={String(retentionForm.messageSamplesRetentionDays)}
+                            onValueChange={(v) =>
+                              setRetentionForm({ ...retentionForm, messageSamplesRetentionDays: parseInt(v) })
+                            }
+                          >
+                            <SelectTrigger>
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="1">1 day</SelectItem>
+                              <SelectItem value="3">3 days</SelectItem>
+                              <SelectItem value="7">7 days</SelectItem>
+                              <SelectItem value="14">14 days</SelectItem>
+                              <SelectItem value="30">30 days</SelectItem>
+                            </SelectContent>
+                          </Select>
+                        </div>
+                      </div>
+
+                      <Button
+                        onClick={() => retentionMutation.mutate(retentionForm)}
+                        disabled={retentionMutation.isPending}
+                      >
+                        {retentionMutation.isPending ? (
+                          <Loader2 className="h-4 w-4 animate-spin" />
+                        ) : (
+                          <Save className="h-4 w-4" />
+                        )}
+                        Save Retention Policies
+                      </Button>
+                    </>
+                  )}
+                </CardContent>
+              </Card>
+
+              <Card>
+                <CardHeader>
+                  <CardTitle>Audit Log Export</CardTitle>
+                  <CardDescription>Export audit logs for compliance purposes</CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  <p className="text-sm text-muted-foreground">
+                    Export audit logs as JSON or CSV files for compliance review and record-keeping.
+                  </p>
+                  <div className="flex gap-2">
+                    <Button variant="outline" asChild>
+                      <a
+                        href={`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001/api/v1'}${api.settings.exportAuditLogs({ format: 'json' })}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                      >
+                        <Download className="h-4 w-4" />
+                        Export JSON
+                      </a>
+                    </Button>
+                    <Button variant="outline" asChild>
+                      <a
+                        href={`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001/api/v1'}${api.settings.exportAuditLogs({ format: 'csv' })}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                      >
+                        <Download className="h-4 w-4" />
+                        Export CSV
+                      </a>
+                    </Button>
+                  </div>
+                </CardContent>
+              </Card>
+
+              <Card>
+                <CardHeader>
+                  <CardTitle>Compliance Report</CardTitle>
+                  <CardDescription>View your organization's compliance status</CardDescription>
+                </CardHeader>
+                <CardContent>
+                  {complianceLoading && (
+                    <div className="flex items-center justify-center h-32">
+                      <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+                    </div>
+                  )}
+
+                  {!complianceLoading && complianceData?.report && (
+                    <div className="space-y-6">
+                      <div className="grid grid-cols-3 gap-4">
+                        <div className="p-4 border rounded-lg">
+                          <p className="text-sm text-muted-foreground">Total Users</p>
+                          <p className="text-2xl font-bold">{complianceData.report.security.totalUsers}</p>
+                        </div>
+                        <div className="p-4 border rounded-lg">
+                          <p className="text-sm text-muted-foreground">2FA Adoption</p>
+                          <p className="text-2xl font-bold">{complianceData.report.security.mfaAdoptionRate}%</p>
+                        </div>
+                        <div className="p-4 border rounded-lg">
+                          <p className="text-sm text-muted-foreground">Active API Keys</p>
+                          <p className="text-2xl font-bold">{complianceData.report.security.activeApiKeys}</p>
+                        </div>
+                      </div>
+
+                      <div>
+                        <h4 className="font-medium mb-2">Security Status</h4>
+                        <div className="space-y-2">
+                          <div className="flex items-center justify-between p-3 border rounded-lg">
+                            <span>IP Allowlist</span>
+                            <span className={`px-2 py-1 text-xs rounded-full ${
+                              complianceData.report.security.ipAllowlistEnabled
+                                ? 'bg-green-100 text-green-700'
+                                : 'bg-yellow-100 text-yellow-700'
+                            }`}>
+                              {complianceData.report.security.ipAllowlistEnabled ? 'Enabled' : 'Disabled'}
+                            </span>
+                          </div>
+                          <div className="flex items-center justify-between p-3 border rounded-lg">
+                            <span>Active Sessions</span>
+                            <span className="text-muted-foreground">
+                              {complianceData.report.security.activeSessions}
+                            </span>
+                          </div>
+                        </div>
+                      </div>
+
+                      {complianceData.report.recommendations.length > 0 && (
+                        <div>
+                          <h4 className="font-medium mb-2">Recommendations</h4>
+                          <div className="space-y-2">
+                            {complianceData.report.recommendations.map((rec, idx) => (
+                              <div key={idx} className="flex items-start gap-2 p-3 bg-yellow-50 border border-yellow-200 rounded-lg">
+                                <AlertTriangle className="h-4 w-4 text-yellow-600 mt-0.5 flex-shrink-0" />
+                                <p className="text-sm text-yellow-800">{rec}</p>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+            </div>
+          )}
+
+          {activeTab === 'data-privacy' && (
+            <div className="space-y-6">
+              <Card>
+                <CardHeader>
+                  <CardTitle>Export Your Data</CardTitle>
+                  <CardDescription>
+                    Download a copy of all your personal data (GDPR Article 20)
+                  </CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  <p className="text-sm text-muted-foreground">
+                    Export includes your profile information, organization memberships, dashboards,
+                    saved queries, and API keys.
+                  </p>
+                  <Button variant="outline" asChild>
+                    <a
+                      href={`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001/api/v1'}${api.settings.exportUserData()}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                    >
+                      <Download className="h-4 w-4" />
+                      Export My Data
+                    </a>
+                  </Button>
+                </CardContent>
+              </Card>
+
+              <Card>
+                <CardHeader>
+                  <CardTitle>Delete Account</CardTitle>
+                  <CardDescription>
+                    Permanently delete your account and all associated data (GDPR Article 17)
+                  </CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  <div className="p-4 bg-red-50 border border-red-200 rounded-lg">
+                    <p className="text-sm text-red-800">
+                      <AlertTriangle className="h-4 w-4 inline mr-2" />
+                      Warning: This action cannot be undone. All your data will be permanently deleted.
+                    </p>
+                  </div>
+                  <Button
+                    variant="destructive"
+                    onClick={() => setShowDeleteAccountDialog(true)}
+                  >
+                    <Trash2 className="h-4 w-4" />
+                    Delete My Account
+                  </Button>
+                </CardContent>
+              </Card>
+            </div>
+          )}
         </div>
       </div>
+
+      {/* Delete Account Dialog */}
+      <AlertDialog open={showDeleteAccountDialog} onOpenChange={setShowDeleteAccountDialog}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Are you absolutely sure?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This action cannot be undone. This will permanently delete your account and remove all
+              your data from our servers, including organization memberships, dashboards, and API keys.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => deleteAccountMutation.mutate()}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              {deleteAccountMutation.isPending ? (
+                <Loader2 className="h-4 w-4 animate-spin mr-2" />
+              ) : null}
+              Yes, Delete My Account
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       {/* Create API Key Dialog */}
       <Dialog open={showCreateApiKeyDialog} onOpenChange={(open) => {

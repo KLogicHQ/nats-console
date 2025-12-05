@@ -168,7 +168,7 @@ export default function DashboardsPage() {
                     </div>
                     <div className="flex items-center gap-1">
                       <User className="h-4 w-4" />
-                      <span>{dashboard.isPublic ? 'Public' : 'Private'}</span>
+                      <span>{dashboard.isShared ? 'Shared' : 'Private'}</span>
                     </div>
                   </div>
                 </CardContent>

@@ -26,6 +26,7 @@ import { inviteRoutes } from './modules/invites/invites.routes';
 import { settingsRoutes } from './modules/settings/settings.routes';
 import { auditRoutes } from './modules/audit/audit.routes';
 import { auditPlugin } from './common/middleware/audit';
+import { ipAllowlistMiddleware } from './common/middleware/ip-allowlist';
 
 const app = Fastify({
   logger: {
@@ -81,6 +82,9 @@ app.register(
   async (api) => {
     // Register audit logging middleware
     await api.register(auditPlugin);
+
+    // Register IP allowlist middleware (runs after authentication)
+    api.addHook('preHandler', ipAllowlistMiddleware);
 
     // Register all routes
     await api.register(authRoutes, { prefix: '/auth' });

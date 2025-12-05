@@ -1,8 +1,8 @@
 # NATS JetStream Console - Roadmap
 
-## Current Status: Alpha (v0.3.0)
+## Current Status: Beta (v0.5.0)
 
-Phase 1 (Core MVP), Phase 2 (Detail Views & Forms), and Phase 3 (Real-time & Monitoring) are complete. The application now includes full CRUD operations, detailed management views, metrics charts, real-time WebSocket updates, and a complete alert system with notification channels.
+Phases 1-5 are complete. The application now includes full CRUD operations, detailed management views, metrics charts, real-time WebSocket updates, alert system with notification channels, message search/export/replay, multi-tenancy features (RBAC, API keys, audit logging, 2FA), custom dashboards, and enterprise features (IP allowlisting, data retention policies, audit trail export, GDPR compliance tools, and compliance reports).
 
 ---
 
@@ -110,45 +110,45 @@ Phase 1 (Core MVP), Phase 2 (Detail Views & Forms), and Phase 3 (Real-time & Mon
 
 ---
 
-## Phase 4: Advanced Features
+## Phase 4: Advanced Features ✅ (Completed)
 
 ### Message Operations
-- [ ] Message search with filters
-- [ ] Message replay functionality
+- [x] Message search with filters
+- [x] Message replay functionality
 - [ ] Dead letter queue management
 - [ ] Message schema viewer
-- [ ] Export messages to JSON/CSV
+- [x] Export messages to JSON/CSV
 
 ### Multi-tenancy
-- [ ] Organization management
-- [ ] Team management
-- [ ] Role-based access control (RBAC)
-- [ ] Audit logging
-- [ ] API key management
+- [x] Organization management
+- [x] Team management
+- [x] Role-based access control (RBAC)
+- [x] Audit logging
+- [x] API key management
 
 ### Custom Dashboards
-- [ ] Dashboard builder
-- [ ] Widget library
+- [x] Dashboard builder
+- [x] Widget library
 - [ ] Saved queries
 - [ ] Dashboard sharing
 - [ ] Export to PDF
 
 ---
 
-## Phase 5: Enterprise Features
+## Phase 5: Enterprise Features ✅ (Completed)
 
 ### Security
 - [ ] SSO/SAML integration
-- [ ] Two-factor authentication
-- [ ] IP allowlisting
+- [x] Two-factor authentication
+- [x] IP allowlisting
 - [ ] Encryption at rest
 - [ ] Secrets management
 
 ### Compliance
-- [ ] GDPR compliance tools
-- [ ] Data retention policies
-- [ ] Audit trail export
-- [ ] Compliance reports
+- [x] GDPR compliance tools
+- [x] Data retention policies
+- [x] Audit trail export
+- [x] Compliance reports
 
 ### Scaling
 - [ ] Multi-region support
@@ -217,13 +217,14 @@ Phase 1 (Core MVP), Phase 2 (Detail Views & Forms), and Phase 3 (Real-time & Mon
 
 ## Release Schedule
 
-| Version | Target | Focus |
+| Version | Status | Focus |
 |---------|--------|-------|
-| 0.1.0 | Current | Core MVP |
-| 0.2.0 | +2 weeks | Detail views & forms |
-| 0.3.0 | +4 weeks | Real-time & monitoring |
-| 0.4.0 | +6 weeks | Advanced features |
-| 1.0.0 | +10 weeks | Production ready |
+| 0.1.0 | ✅ Complete | Core MVP |
+| 0.2.0 | ✅ Complete | Detail views & forms |
+| 0.3.0 | ✅ Complete | Real-time & monitoring |
+| 0.4.0 | ✅ Complete | Advanced features |
+| 0.5.0 | ✅ Current | Enterprise features |
+| 1.0.0 | Planned | Production ready |
 
 ---
 

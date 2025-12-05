@@ -464,6 +464,69 @@ export const settings = {
     }),
 
   deleteApiKey: (id: string) => request(`/settings/api-keys/${id}`, { method: 'DELETE' }),
+
+  // Security settings (admin only)
+  getIpAllowlist: () =>
+    request<{ ipAllowlist: { enabled: boolean; allowedIps: string[]; allowedCidrs: string[] } }>(
+      '/settings/security/ip-allowlist'
+    ),
+
+  updateIpAllowlist: (data: { enabled: boolean; allowedIps: string[]; allowedCidrs: string[] }) =>
+    request<{ ipAllowlist: any }>('/settings/security/ip-allowlist', {
+      method: 'PUT',
+      body: data,
+    }),
+
+  // Compliance settings (admin only)
+  getRetentionPolicy: () =>
+    request<{
+      retention: {
+        metricsRetentionDays: number;
+        auditLogsRetentionDays: number;
+        alertEventsRetentionDays: number;
+        messageSamplesRetentionDays: number;
+      };
+    }>('/settings/compliance/retention'),
+
+  updateRetentionPolicy: (data: {
+    metricsRetentionDays: number;
+    auditLogsRetentionDays: number;
+    alertEventsRetentionDays: number;
+    messageSamplesRetentionDays: number;
+  }) =>
+    request<{ retention: any }>('/settings/compliance/retention', {
+      method: 'PUT',
+      body: data,
+    }),
+
+  exportAuditLogs: (params?: { from?: string; to?: string; action?: string; format?: 'json' | 'csv' }) => {
+    const query = params ? `?${new URLSearchParams(params as Record<string, string>)}` : '';
+    return `/settings/compliance/audit-export${query}`;
+  },
+
+  getComplianceReport: () =>
+    request<{
+      report: {
+        generatedAt: string;
+        organization: any;
+        security: {
+          totalUsers: number;
+          mfaEnabledUsers: number;
+          mfaAdoptionRate: number;
+          ipAllowlistEnabled: boolean;
+          activeApiKeys: number;
+          activeSessions: number;
+        };
+        dataRetention: any;
+        recommendations: string[];
+      };
+    }>('/settings/compliance/report'),
+
+  // GDPR (all users)
+  exportUserData: () => `/settings/gdpr/export`,
+
+  deleteAccount: () =>
+    request<{ message: string }>('/settings/gdpr/delete-account', { method: 'DELETE' }),
 };
 
 // MFA API (via auth endpoints)
