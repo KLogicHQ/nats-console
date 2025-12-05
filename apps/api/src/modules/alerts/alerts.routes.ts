@@ -11,6 +11,7 @@ import {
 import { prisma } from '../../lib/prisma';
 import { authenticate } from '../../common/middleware/auth';
 import { IncidentStatus } from '@prisma/client';
+import { getClickHouseClient } from '../../lib/clickhouse';
 
 // Incident Schemas
 const UpdateIncidentSchema = z.object({
@@ -276,8 +277,145 @@ export const alertRoutes: FastifyPluginAsync = async (fastify) => {
       throw new NotFoundError('Notification channel', request.params.id);
     }
 
-    // TODO: Implement actual test notification
-    return { success: true, message: 'Test notification sent' };
+    const config = channel.config as Record<string, unknown>;
+    const testMessage = {
+      rule: 'Test Alert Rule',
+      severity: 'info',
+      status: 'test',
+      metricValue: 42,
+      threshold: 100,
+      message: 'This is a test notification from NATS Console',
+      incidentId: 'test-' + Date.now(),
+      timestamp: new Date().toISOString(),
+    };
+
+    try {
+      switch (channel.type) {
+        case 'webhook': {
+          const url = config.url as string;
+          if (!url) throw new Error('Webhook URL not configured');
+          const response = await fetch(url, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(testMessage),
+          });
+          if (!response.ok) throw new Error(`Webhook returned ${response.status}`);
+          break;
+        }
+
+        case 'slack': {
+          const webhookUrl = config.webhookUrl as string;
+          if (!webhookUrl) throw new Error('Slack webhook URL not configured');
+          const payload = {
+            attachments: [{
+              color: '#3b82f6',
+              blocks: [
+                { type: 'header', text: { type: 'plain_text', text: '🧪 Test Notification', emoji: true } },
+                { type: 'section', text: { type: 'mrkdwn', text: 'This is a test notification from NATS Console. Your Slack integration is working correctly!' } },
+              ],
+            }],
+          };
+          const response = await fetch(webhookUrl, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload),
+          });
+          if (!response.ok) throw new Error(`Slack returned ${response.status}`);
+          break;
+        }
+
+        case 'email': {
+          const apiKey = (config.apiKey as string) || process.env.RESEND_API_KEY;
+          const recipients = config.recipients as string[];
+          if (!apiKey) throw new Error('Email API key not configured');
+          if (!recipients?.length) throw new Error('No email recipients configured');
+          const response = await fetch('https://api.resend.com/emails', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${apiKey}` },
+            body: JSON.stringify({
+              from: (config.fromEmail as string) || 'alerts@nats-console.local',
+              to: recipients,
+              subject: '🧪 Test Notification - NATS Console',
+              html: '<h2>Test Notification</h2><p>This is a test notification from NATS Console. Your email integration is working correctly!</p>',
+            }),
+          });
+          if (!response.ok) throw new Error(`Email API returned ${response.status}`);
+          break;
+        }
+
+        case 'teams': {
+          const webhookUrl = config.webhookUrl as string;
+          if (!webhookUrl) throw new Error('Teams webhook URL not configured');
+          const payload = {
+            '@type': 'MessageCard',
+            '@context': 'http://schema.org/extensions',
+            themeColor: '3b82f6',
+            summary: 'Test Notification',
+            sections: [{
+              activityTitle: '🧪 Test Notification',
+              text: 'This is a test notification from NATS Console. Your Teams integration is working correctly!',
+            }],
+          };
+          const response = await fetch(webhookUrl, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload),
+          });
+          if (!response.ok) throw new Error(`Teams returned ${response.status}`);
+          break;
+        }
+
+        case 'pagerduty': {
+          const routingKey = config.routingKey as string;
+          if (!routingKey) throw new Error('PagerDuty routing key not configured');
+          const payload = {
+            routing_key: routingKey,
+            event_action: 'trigger',
+            dedup_key: `nats-console-test-${Date.now()}`,
+            payload: {
+              summary: 'Test notification from NATS Console',
+              severity: 'info',
+              source: 'NATS Console',
+              custom_details: { test: true },
+            },
+          };
+          const response = await fetch('https://events.pagerduty.com/v2/enqueue', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload),
+          });
+          if (!response.ok) throw new Error(`PagerDuty returned ${response.status}`);
+          break;
+        }
+
+        case 'google_chat': {
+          const webhookUrl = config.webhookUrl as string;
+          if (!webhookUrl) throw new Error('Google Chat webhook URL not configured');
+          const payload = {
+            cards: [{
+              header: { title: '🧪 Test Notification', subtitle: 'NATS Console' },
+              sections: [{
+                widgets: [{ textParagraph: { text: 'This is a test notification. Your Google Chat integration is working correctly!' } }],
+              }],
+            }],
+          };
+          const response = await fetch(webhookUrl, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload),
+          });
+          if (!response.ok) throw new Error(`Google Chat returned ${response.status}`);
+          break;
+        }
+
+        default:
+          throw new Error(`Unknown channel type: ${channel.type}`);
+      }
+
+      return { success: true, message: 'Test notification sent successfully' };
+    } catch (error: any) {
+      return { success: false, message: error.message || 'Failed to send test notification' };
+    }
   });
 
   // ==================== Incidents ====================
@@ -460,14 +598,184 @@ export const alertRoutes: FastifyPluginAsync = async (fastify) => {
   fastify.get<{
     Querystring: { ruleId?: string; from?: string; to?: string; limit?: string };
   }>('/events', async (request) => {
-    // TODO: Query from ClickHouse
-    return { events: [] };
+    const { ruleId, from, to, limit = '100' } = request.query;
+    const ch = getClickHouseClient();
+
+    const conditions = ['org_id = {orgId:UUID}'];
+    const params: Record<string, unknown> = { orgId: request.user!.orgId };
+
+    if (ruleId) {
+      conditions.push('alert_rule_id = {ruleId:UUID}');
+      params.ruleId = ruleId;
+    }
+
+    if (from) {
+      conditions.push('timestamp >= {from:DateTime64(3)}');
+      params.from = new Date(from).toISOString();
+    }
+
+    if (to) {
+      conditions.push('timestamp <= {to:DateTime64(3)}');
+      params.to = new Date(to).toISOString();
+    }
+
+    const whereClause = conditions.join(' AND ');
+
+    try {
+      const result = await ch.query({
+        query: `
+          SELECT
+            id,
+            org_id,
+            alert_rule_id,
+            cluster_id,
+            timestamp,
+            severity,
+            status,
+            metric_value,
+            threshold_value,
+            message,
+            notified_at,
+            resolved_at
+          FROM alert_events
+          WHERE ${whereClause}
+          ORDER BY timestamp DESC
+          LIMIT ${parseInt(limit)}
+        `,
+        query_params: params,
+        format: 'JSONEachRow',
+      });
+
+      const rows = await result.json() as Record<string, unknown>[];
+      const events = rows.map((row) => ({
+        id: row.id,
+        orgId: row.org_id,
+        ruleId: row.alert_rule_id,
+        clusterId: row.cluster_id,
+        timestamp: row.timestamp,
+        severity: row.severity,
+        status: row.status,
+        metricValue: Number(row.metric_value),
+        thresholdValue: Number(row.threshold_value),
+        message: row.message,
+        notifiedAt: row.notified_at,
+        resolvedAt: row.resolved_at,
+      }));
+
+      return { events };
+    } catch (err) {
+      fastify.log.error({ err }, 'Error querying alert events');
+      return { events: [] };
+    }
   });
 
-  // POST /alerts/test - Test alert rule
-  fastify.post('/test', async (request) => {
+  // POST /alerts/test - Test alert rule evaluation
+  fastify.post<{ Body: z.infer<typeof CreateAlertRuleSchema> }>('/test', async (request) => {
     const body = CreateAlertRuleSchema.parse(request.body);
-    // TODO: Implement test alert
-    return { success: true, message: 'Test alert sent' };
+    const ch = getClickHouseClient();
+
+    const { metric, aggregation, window } = body.condition;
+    const parts = metric.split('.');
+    const metricType = parts[0];
+
+    const windowStart = new Date(Date.now() - window * 1000);
+    const windowEnd = new Date();
+
+    try {
+      let metricValue: number | null = null;
+
+      if (metricType === 'stream' && parts.length >= 3) {
+        const streamName = parts[1];
+        const metricName = parts[2];
+
+        const result = await ch.query({
+          query: `
+            SELECT ${aggregation}(${metricName}) as value
+            FROM stream_metrics
+            WHERE stream_name = {streamName:String}
+              ${body.clusterId ? 'AND cluster_id = {clusterId:UUID}' : ''}
+              AND timestamp >= {from:DateTime64(3)}
+              AND timestamp <= {to:DateTime64(3)}
+          `,
+          query_params: {
+            streamName,
+            clusterId: body.clusterId,
+            from: windowStart.toISOString(),
+            to: windowEnd.toISOString(),
+          },
+          format: 'JSONEachRow',
+        });
+
+        const rows = await result.json() as { value: number }[];
+        metricValue = rows[0]?.value ?? null;
+      } else if (metricType === 'consumer' && parts.length >= 4) {
+        const streamName = parts[1];
+        const consumerName = parts[2];
+        const metricName = parts[3];
+
+        const result = await ch.query({
+          query: `
+            SELECT ${aggregation}(${metricName}) as value
+            FROM consumer_metrics
+            WHERE stream_name = {streamName:String}
+              AND consumer_name = {consumerName:String}
+              ${body.clusterId ? 'AND cluster_id = {clusterId:UUID}' : ''}
+              AND timestamp >= {from:DateTime64(3)}
+              AND timestamp <= {to:DateTime64(3)}
+          `,
+          query_params: {
+            streamName,
+            consumerName,
+            clusterId: body.clusterId,
+            from: windowStart.toISOString(),
+            to: windowEnd.toISOString(),
+          },
+          format: 'JSONEachRow',
+        });
+
+        const rows = await result.json() as { value: number }[];
+        metricValue = rows[0]?.value ?? null;
+      }
+
+      if (metricValue === null) {
+        return {
+          success: true,
+          wouldFire: false,
+          message: 'No metric data available for the specified window',
+          metricValue: null,
+          threshold: body.threshold.value,
+        };
+      }
+
+      // Check threshold
+      const { operator } = body.condition;
+      let wouldFire = false;
+      switch (operator) {
+        case 'gt': wouldFire = metricValue > body.threshold.value; break;
+        case 'lt': wouldFire = metricValue < body.threshold.value; break;
+        case 'gte': wouldFire = metricValue >= body.threshold.value; break;
+        case 'lte': wouldFire = metricValue <= body.threshold.value; break;
+        case 'eq': wouldFire = metricValue === body.threshold.value; break;
+        case 'neq': wouldFire = metricValue !== body.threshold.value; break;
+      }
+
+      return {
+        success: true,
+        wouldFire,
+        message: wouldFire
+          ? `Alert would fire: ${metricValue} ${operator} ${body.threshold.value}`
+          : `Alert would not fire: ${metricValue} ${operator} ${body.threshold.value}`,
+        metricValue,
+        threshold: body.threshold.value,
+      };
+    } catch (err: any) {
+      return {
+        success: false,
+        wouldFire: false,
+        message: err.message || 'Failed to evaluate alert rule',
+        metricValue: null,
+        threshold: body.threshold.value,
+      };
+    }
   });
 };

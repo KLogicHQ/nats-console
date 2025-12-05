@@ -3,6 +3,7 @@ import pino from 'pino';
 import cron from 'node-cron';
 import { MetricsCollector } from './collectors/metrics';
 import { AlertProcessor } from './processors/alerts';
+import { CleanupProcessor } from './processors/cleanup';
 import { config } from './config';
 
 const logger = pino({
@@ -22,6 +23,7 @@ const logger = pino({
 
 const metricsCollector = new MetricsCollector();
 const alertProcessor = new AlertProcessor();
+const cleanupProcessor = new CleanupProcessor();
 
 // Health check server
 const healthServer = createServer((req, res) => {
@@ -48,6 +50,7 @@ async function shutdown(signal: string): Promise<void> {
   healthServer.close();
   await metricsCollector.stop();
   await alertProcessor.stop();
+  await cleanupProcessor.close();
 
   logger.info('Shutdown complete');
   process.exit(0);
@@ -73,11 +76,14 @@ async function start(): Promise<void> {
       await metricsCollector.refreshConnections();
     });
 
-    // Schedule cleanup job daily at 2 AM
-    cron.schedule('0 2 * * *', async () => {
+    // Schedule cleanup job every 6 hours
+    cron.schedule('0 */6 * * *', async () => {
       logger.info('Running cleanup job...');
-      // TODO: Implement cleanup (expired sessions, old data archival)
+      await cleanupProcessor.runCleanup();
     });
+
+    // Run initial cleanup on startup
+    await cleanupProcessor.runCleanup();
 
     // Start health server
     healthServer.listen(config.PORT, () => {

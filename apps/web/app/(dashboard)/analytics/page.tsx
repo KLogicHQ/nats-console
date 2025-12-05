@@ -2,9 +2,10 @@
 
 import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { BarChart3, TrendingUp, TrendingDown, Activity, ArrowUpRight, ArrowDownRight } from 'lucide-react';
+import { BarChart3, TrendingUp, TrendingDown, Activity, ArrowUpRight, ArrowDownRight, Loader2 } from 'lucide-react';
 import { api } from '@/lib/api';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { LineChart, BarChart, MultiLineChart } from '@/components/charts';
 import { formatBytes, formatNumber } from '@nats-console/shared';
 
 export default function AnalyticsPage() {
@@ -21,6 +22,34 @@ export default function AnalyticsPage() {
     queryFn: () =>
       selectedCluster
         ? api.analytics.overview(selectedCluster, timeRange)
+        : null,
+    enabled: !!selectedCluster,
+  });
+
+  // Chart data queries
+  const { data: throughputData, isLoading: throughputLoading } = useQuery({
+    queryKey: ['analytics-throughput', selectedCluster, timeRange],
+    queryFn: () =>
+      selectedCluster
+        ? api.analytics.chartThroughput(selectedCluster, timeRange)
+        : null,
+    enabled: !!selectedCluster,
+  });
+
+  const { data: consumerLagData, isLoading: consumerLagLoading } = useQuery({
+    queryKey: ['analytics-consumer-lag', selectedCluster, timeRange],
+    queryFn: () =>
+      selectedCluster
+        ? api.analytics.chartConsumerLag(selectedCluster, timeRange)
+        : null,
+    enabled: !!selectedCluster,
+  });
+
+  const { data: streamActivityData, isLoading: streamActivityLoading } = useQuery({
+    queryKey: ['analytics-stream-activity', selectedCluster, timeRange],
+    queryFn: () =>
+      selectedCluster
+        ? api.analytics.chartStreamActivity(selectedCluster, timeRange)
         : null,
     enabled: !!selectedCluster,
   });
@@ -185,13 +214,27 @@ export default function AnalyticsPage() {
                 <CardDescription>Messages per second over time</CardDescription>
               </CardHeader>
               <CardContent>
-                <div className="h-[300px] flex items-center justify-center text-muted-foreground">
-                  <div className="text-center">
-                    <BarChart3 className="h-12 w-12 mx-auto mb-4 opacity-50" />
-                    <p>Chart visualization coming soon</p>
-                    <p className="text-sm">Integrate with your preferred charting library</p>
+                {throughputLoading ? (
+                  <div className="h-[300px] flex items-center justify-center">
+                    <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
                   </div>
-                </div>
+                ) : throughputData?.data && throughputData.data.length > 0 ? (
+                  <LineChart
+                    data={throughputData.data}
+                    yAxisLabel="msg/s"
+                    color="#2563eb"
+                    height={300}
+                    showArea={true}
+                  />
+                ) : (
+                  <div className="h-[300px] flex items-center justify-center text-muted-foreground">
+                    <div className="text-center">
+                      <BarChart3 className="h-12 w-12 mx-auto mb-4 opacity-50" />
+                      <p>No throughput data available</p>
+                      <p className="text-sm">Start producing messages to see metrics</p>
+                    </div>
+                  </div>
+                )}
               </CardContent>
             </Card>
 
@@ -201,13 +244,27 @@ export default function AnalyticsPage() {
                 <CardDescription>Pending messages by consumer</CardDescription>
               </CardHeader>
               <CardContent>
-                <div className="h-[300px] flex items-center justify-center text-muted-foreground">
-                  <div className="text-center">
-                    <BarChart3 className="h-12 w-12 mx-auto mb-4 opacity-50" />
-                    <p>Chart visualization coming soon</p>
-                    <p className="text-sm">Integrate with your preferred charting library</p>
+                {consumerLagLoading ? (
+                  <div className="h-[300px] flex items-center justify-center">
+                    <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
                   </div>
-                </div>
+                ) : consumerLagData?.data && consumerLagData.data.length > 0 ? (
+                  <BarChart
+                    data={consumerLagData.data}
+                    yAxisLabel="pending"
+                    color="#dc2626"
+                    height={300}
+                    horizontal={true}
+                  />
+                ) : (
+                  <div className="h-[300px] flex items-center justify-center text-muted-foreground">
+                    <div className="text-center">
+                      <BarChart3 className="h-12 w-12 mx-auto mb-4 opacity-50" />
+                      <p>No consumer lag data available</p>
+                      <p className="text-sm">Create consumers to see lag metrics</p>
+                    </div>
+                  </div>
+                )}
               </CardContent>
             </Card>
           </div>
@@ -218,13 +275,26 @@ export default function AnalyticsPage() {
               <CardDescription>Messages by stream over time</CardDescription>
             </CardHeader>
             <CardContent>
-              <div className="h-[300px] flex items-center justify-center text-muted-foreground">
-                <div className="text-center">
-                  <BarChart3 className="h-12 w-12 mx-auto mb-4 opacity-50" />
-                  <p>Chart visualization coming soon</p>
-                  <p className="text-sm">Integrate with your preferred charting library</p>
+              {streamActivityLoading ? (
+                <div className="h-[300px] flex items-center justify-center">
+                  <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
                 </div>
-              </div>
+              ) : streamActivityData?.streams && Object.keys(streamActivityData.streams).length > 0 ? (
+                <MultiLineChart
+                  series={streamActivityData.streams}
+                  yAxisLabel="msg/s"
+                  height={300}
+                  showArea={false}
+                />
+              ) : (
+                <div className="h-[300px] flex items-center justify-center text-muted-foreground">
+                  <div className="text-center">
+                    <BarChart3 className="h-12 w-12 mx-auto mb-4 opacity-50" />
+                    <p>No stream activity data available</p>
+                    <p className="text-sm">Create streams and produce messages to see activity</p>
+                  </div>
+                </div>
+              )}
             </CardContent>
           </Card>
         </>

@@ -24,6 +24,12 @@ import {
   ChevronsRight,
   Maximize2,
   Minimize2,
+  Search,
+  Download,
+  RotateCcw,
+  Filter,
+  X,
+  Loader2,
 } from 'lucide-react';
 import Link from 'next/link';
 import { api } from '@/lib/api';
@@ -41,6 +47,21 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
 import { formatBytes, formatNumber, formatDuration } from '@nats-console/shared';
 import { LineChart } from '@/components/charts';
 import { CreateStreamDialog } from '@/components/forms/create-stream-dialog';
@@ -74,6 +95,23 @@ function StreamDetailContent() {
 
   // Metrics time range
   const [metricsTimeRange, setMetricsTimeRange] = useState('1h');
+
+  // Search/Filter state
+  const [showFilters, setShowFilters] = useState(false);
+  const [subjectFilter, setSubjectFilter] = useState('');
+  const [activeSubjectFilter, setActiveSubjectFilter] = useState('');
+
+  // Export dialog state
+  const [showExportDialog, setShowExportDialog] = useState(false);
+  const [exportFormat, setExportFormat] = useState<'json' | 'csv'>('json');
+  const [exportLimit, setExportLimit] = useState('1000');
+
+  // Replay dialog state
+  const [showReplayDialog, setShowReplayDialog] = useState(false);
+  const [replayTargetSubject, setReplayTargetSubject] = useState('');
+  const [replayStartSeq, setReplayStartSeq] = useState('');
+  const [replayEndSeq, setReplayEndSeq] = useState('');
+  const [replayLimit, setReplayLimit] = useState('100');
 
   // Helper to format message data - detect JSON and pretty print
   const formatMessageData = (data: unknown): { formatted: string; isJson: boolean } => {
@@ -136,14 +174,64 @@ function StreamDetailContent() {
   });
 
   const { data: messagesData, refetch: refetchMessages, isFetching: isLoadingMessages } = useQuery({
-    queryKey: ['messages', clusterId, streamName, currentPage, pageSize],
+    queryKey: ['messages', clusterId, streamName, currentPage, pageSize, activeSubjectFilter],
     queryFn: () => {
       const firstSeq = streamData?.stream?.state?.first_seq || 1;
       const startSeq = String(firstSeq + (currentPage - 1) * pageSize);
-      return api.streams.messages(clusterId, streamName, { start_seq: startSeq, limit: String(pageSize) });
+      const params: Record<string, string> = { start_seq: startSeq, limit: String(pageSize) };
+      if (activeSubjectFilter) {
+        params.subject = activeSubjectFilter;
+      }
+      return api.streams.messages(clusterId, streamName, params);
     },
     enabled: activeTab === 'messages' && !!streamData?.stream,
   });
+
+  // Replay mutation
+  const replayMutation = useMutation({
+    mutationFn: (data: { targetSubject: string; startSeq?: number; endSeq?: number; limit?: number }) =>
+      api.streams.replayMessages(clusterId, streamName, data),
+    onSuccess: () => {
+      setShowReplayDialog(false);
+      setReplayTargetSubject('');
+      setReplayStartSeq('');
+      setReplayEndSeq('');
+    },
+  });
+
+  // Apply subject filter
+  const applyFilter = () => {
+    setActiveSubjectFilter(subjectFilter);
+    setCurrentPage(1);
+  };
+
+  // Clear filters
+  const clearFilters = () => {
+    setSubjectFilter('');
+    setActiveSubjectFilter('');
+    setCurrentPage(1);
+  };
+
+  // Handle export
+  const handleExport = () => {
+    const url = api.streams.exportMessages(clusterId, streamName, exportFormat, {
+      limit: parseInt(exportLimit),
+      subject: activeSubjectFilter || undefined,
+    });
+    window.open(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001/api/v1'}${url}`, '_blank');
+    setShowExportDialog(false);
+  };
+
+  // Handle replay
+  const handleReplay = () => {
+    if (!replayTargetSubject) return;
+    replayMutation.mutate({
+      targetSubject: replayTargetSubject,
+      startSeq: replayStartSeq ? parseInt(replayStartSeq) : undefined,
+      endSeq: replayEndSeq ? parseInt(replayEndSeq) : undefined,
+      limit: parseInt(replayLimit),
+    });
+  };
 
   // Metrics data
   const getTimeRangeParams = () => {
@@ -316,6 +404,148 @@ function StreamDetailContent() {
         mode="edit"
       />
 
+      {/* Export Dialog */}
+      <Dialog open={showExportDialog} onOpenChange={setShowExportDialog}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Export Messages</DialogTitle>
+            <DialogDescription>
+              Export messages from this stream in JSON or CSV format
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <label className="text-sm font-medium">Format</label>
+              <Select value={exportFormat} onValueChange={(v: 'json' | 'csv') => setExportFormat(v)}>
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="json">JSON</SelectItem>
+                  <SelectItem value="csv">CSV</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-2">
+              <label className="text-sm font-medium">Max Messages</label>
+              <Select value={exportLimit} onValueChange={setExportLimit}>
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="100">100 messages</SelectItem>
+                  <SelectItem value="500">500 messages</SelectItem>
+                  <SelectItem value="1000">1,000 messages</SelectItem>
+                  <SelectItem value="5000">5,000 messages</SelectItem>
+                  <SelectItem value="10000">10,000 messages</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            {activeSubjectFilter && (
+              <div className="p-3 bg-muted rounded-lg text-sm">
+                <span className="text-muted-foreground">Filter applied: </span>
+                <span className="font-medium">{activeSubjectFilter}</span>
+              </div>
+            )}
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowExportDialog(false)}>
+              Cancel
+            </Button>
+            <Button onClick={handleExport}>
+              <Download className="h-4 w-4" />
+              Export {exportFormat.toUpperCase()}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Replay Dialog */}
+      <Dialog open={showReplayDialog} onOpenChange={setShowReplayDialog}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Replay Messages</DialogTitle>
+            <DialogDescription>
+              Replay messages from this stream to another subject
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <label className="text-sm font-medium">Target Subject *</label>
+              <Input
+                placeholder="e.g., orders.replay or orders.reprocess"
+                value={replayTargetSubject}
+                onChange={(e) => setReplayTargetSubject(e.target.value)}
+              />
+              <p className="text-xs text-muted-foreground">
+                Messages will be published to this subject
+              </p>
+            </div>
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <label className="text-sm font-medium">Start Sequence</label>
+                <Input
+                  type="number"
+                  placeholder="From beginning"
+                  value={replayStartSeq}
+                  onChange={(e) => setReplayStartSeq(e.target.value)}
+                />
+              </div>
+              <div className="space-y-2">
+                <label className="text-sm font-medium">End Sequence</label>
+                <Input
+                  type="number"
+                  placeholder="To end"
+                  value={replayEndSeq}
+                  onChange={(e) => setReplayEndSeq(e.target.value)}
+                />
+              </div>
+            </div>
+            <div className="space-y-2">
+              <label className="text-sm font-medium">Max Messages</label>
+              <Select value={replayLimit} onValueChange={setReplayLimit}>
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="10">10 messages</SelectItem>
+                  <SelectItem value="50">50 messages</SelectItem>
+                  <SelectItem value="100">100 messages</SelectItem>
+                  <SelectItem value="500">500 messages</SelectItem>
+                  <SelectItem value="1000">1,000 messages</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            {replayMutation.isSuccess && (
+              <div className="p-3 bg-green-50 text-green-700 rounded-lg text-sm">
+                Successfully replayed {replayMutation.data?.replayed} of {replayMutation.data?.total} messages
+              </div>
+            )}
+            {replayMutation.isError && (
+              <div className="p-3 bg-red-50 text-red-700 rounded-lg text-sm">
+                Failed to replay messages: {(replayMutation.error as Error).message}
+              </div>
+            )}
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowReplayDialog(false)}>
+              Cancel
+            </Button>
+            <Button
+              onClick={handleReplay}
+              disabled={!replayTargetSubject || replayMutation.isPending}
+            >
+              {replayMutation.isPending ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <RotateCcw className="h-4 w-4" />
+              )}
+              Replay Messages
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
       {/* Tabs */}
       <TabsList tabs={tabs} activeTab={activeTab} onTabChange={setActiveTab} />
 
@@ -451,52 +681,113 @@ function StreamDetailContent() {
 
           {/* Message Browser */}
           <Card>
-            <CardHeader className="flex flex-row items-center justify-between">
-              <div>
-                <CardTitle>Message Browser</CardTitle>
-                <CardDescription>
-                  {totalMessages > 0 ? `${formatNumber(totalMessages)} messages total` : 'Browse messages in this stream'}
-                </CardDescription>
+            <CardHeader className="space-y-4">
+              <div className="flex flex-row items-center justify-between">
+                <div>
+                  <CardTitle>Message Browser</CardTitle>
+                  <CardDescription>
+                    {totalMessages > 0 ? `${formatNumber(totalMessages)} messages total` : 'Browse messages in this stream'}
+                    {activeSubjectFilter && (
+                      <span className="ml-2 text-primary">
+                        (filtered by: {activeSubjectFilter})
+                      </span>
+                    )}
+                  </CardDescription>
+                </div>
+                <div className="flex items-center gap-2">
+                  <Button
+                    variant={showFilters ? 'secondary' : 'outline'}
+                    size="sm"
+                    onClick={() => setShowFilters(!showFilters)}
+                  >
+                    <Filter className="h-4 w-4" />
+                    Filter
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setShowExportDialog(true)}
+                    disabled={!messagesData?.messages?.length}
+                  >
+                    <Download className="h-4 w-4" />
+                    Export
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setShowReplayDialog(true)}
+                    disabled={!messagesData?.messages?.length}
+                  >
+                    <RotateCcw className="h-4 w-4" />
+                    Replay
+                  </Button>
+                  <div className="w-px h-6 bg-border" />
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="h-8 text-xs"
+                    onClick={expandAllMessages}
+                    disabled={!messagesData?.messages?.length}
+                  >
+                    <Maximize2 className="h-3 w-3 mr-1" />
+                    Expand All
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="h-8 text-xs"
+                    onClick={collapseAllMessages}
+                    disabled={expandedMessages.size === 0}
+                  >
+                    <Minimize2 className="h-3 w-3 mr-1" />
+                    Collapse All
+                  </Button>
+                  <div className="w-px h-6 bg-border" />
+                  <select
+                    className="h-9 px-3 border rounded-md bg-background text-sm"
+                    value={pageSize}
+                    onChange={(e) => {
+                      setPageSize(Number(e.target.value));
+                      setCurrentPage(1);
+                    }}
+                  >
+                    <option value={10}>10 / page</option>
+                    <option value={20}>20 / page</option>
+                    <option value={50}>50 / page</option>
+                    <option value={100}>100 / page</option>
+                  </select>
+                  <Button variant="outline" size="sm" onClick={() => refetchMessages()} disabled={isLoadingMessages}>
+                    <RefreshCw className={`h-4 w-4 ${isLoadingMessages ? 'animate-spin' : ''}`} />
+                  </Button>
+                </div>
               </div>
-              <div className="flex items-center gap-2">
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  className="h-8 text-xs"
-                  onClick={expandAllMessages}
-                  disabled={!messagesData?.messages?.length}
-                >
-                  <Maximize2 className="h-3 w-3 mr-1" />
-                  Expand All
-                </Button>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  className="h-8 text-xs"
-                  onClick={collapseAllMessages}
-                  disabled={expandedMessages.size === 0}
-                >
-                  <Minimize2 className="h-3 w-3 mr-1" />
-                  Collapse All
-                </Button>
-                <div className="w-px h-6 bg-border" />
-                <select
-                  className="h-9 px-3 border rounded-md bg-background text-sm"
-                  value={pageSize}
-                  onChange={(e) => {
-                    setPageSize(Number(e.target.value));
-                    setCurrentPage(1);
-                  }}
-                >
-                  <option value={10}>10 / page</option>
-                  <option value={20}>20 / page</option>
-                  <option value={50}>50 / page</option>
-                  <option value={100}>100 / page</option>
-                </select>
-                <Button variant="outline" size="sm" onClick={() => refetchMessages()} disabled={isLoadingMessages}>
-                  <RefreshCw className={`h-4 w-4 ${isLoadingMessages ? 'animate-spin' : ''}`} />
-                </Button>
-              </div>
+
+              {/* Filters Panel */}
+              {showFilters && (
+                <div className="flex items-center gap-4 p-4 bg-muted/50 rounded-lg">
+                  <div className="flex-1">
+                    <label className="text-sm font-medium mb-1 block">Subject Filter</label>
+                    <div className="flex gap-2">
+                      <Input
+                        placeholder="e.g., orders.* or orders.created"
+                        value={subjectFilter}
+                        onChange={(e) => setSubjectFilter(e.target.value)}
+                        onKeyDown={(e) => e.key === 'Enter' && applyFilter()}
+                      />
+                      <Button onClick={applyFilter}>
+                        <Search className="h-4 w-4" />
+                        Search
+                      </Button>
+                      {activeSubjectFilter && (
+                        <Button variant="ghost" onClick={clearFilters}>
+                          <X className="h-4 w-4" />
+                          Clear
+                        </Button>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              )}
             </CardHeader>
             <CardContent>
               {isLoadingMessages && !messagesData?.messages?.length ? (

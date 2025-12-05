@@ -24,6 +24,8 @@ import { alertRoutes } from './modules/alerts/alerts.routes';
 import { dashboardRoutes } from './modules/dashboards/dashboards.routes';
 import { inviteRoutes } from './modules/invites/invites.routes';
 import { settingsRoutes } from './modules/settings/settings.routes';
+import { auditRoutes } from './modules/audit/audit.routes';
+import { auditPlugin } from './common/middleware/audit';
 
 const app = Fastify({
   logger: {
@@ -77,6 +79,9 @@ app.get('/health', async () => {
 // API version prefix
 app.register(
   async (api) => {
+    // Register audit logging middleware
+    await api.register(auditPlugin);
+
     // Register all routes
     await api.register(authRoutes, { prefix: '/auth' });
     await api.register(organizationRoutes, { prefix: '/organizations' });
@@ -90,6 +95,7 @@ app.register(
     await api.register(dashboardRoutes, { prefix: '/dashboards' });
     await api.register(inviteRoutes, { prefix: '/invites' });
     await api.register(settingsRoutes, { prefix: '/settings' });
+    await api.register(auditRoutes, { prefix: '/audit' });
   },
   { prefix: '/api/v1' }
 );

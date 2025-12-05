@@ -147,4 +147,121 @@ export const streamRoutes: FastifyPluginAsync = async (fastify) => {
       return reply.status(204).send();
     }
   );
+
+  // GET /clusters/:cid/streams/:name/messages/export - Export messages
+  fastify.get<{
+    Params: { cid: string; name: string };
+    Querystring: {
+      format?: 'json' | 'csv';
+      start_seq?: string;
+      limit?: string;
+      subject?: string;
+    };
+  }>('/:cid/streams/:name/messages/export', async (request, reply) => {
+    const { format = 'json', start_seq, limit = '1000', subject } = request.query;
+
+    const messages = await streamService.getMessages(
+      request.user!.orgId,
+      request.params.cid,
+      request.params.name,
+      {
+        startSeq: start_seq ? parseInt(start_seq) : undefined,
+        limit: Math.min(parseInt(limit), 10000), // Max 10k messages per export
+        subject,
+      }
+    );
+
+    if (format === 'csv') {
+      // CSV format
+      const headers = ['sequence', 'subject', 'time', 'data'];
+      const csvRows = [headers.join(',')];
+
+      for (const msg of messages) {
+        const row = [
+          msg.sequence,
+          `"${msg.subject.replace(/"/g, '""')}"`,
+          msg.time,
+          `"${String(msg.data).replace(/"/g, '""').replace(/\n/g, '\\n')}"`,
+        ];
+        csvRows.push(row.join(','));
+      }
+
+      reply.header('Content-Type', 'text/csv');
+      reply.header(
+        'Content-Disposition',
+        `attachment; filename="${request.params.name}-messages.csv"`
+      );
+      return csvRows.join('\n');
+    }
+
+    // JSON format (default)
+    reply.header('Content-Type', 'application/json');
+    reply.header(
+      'Content-Disposition',
+      `attachment; filename="${request.params.name}-messages.json"`
+    );
+    return JSON.stringify(messages, null, 2);
+  });
+
+  // POST /clusters/:cid/streams/:name/messages/replay - Replay messages to another subject
+  fastify.post<{
+    Params: { cid: string; name: string };
+    Body: {
+      targetSubject: string;
+      startSeq?: number;
+      endSeq?: number;
+      limit?: number;
+    };
+  }>('/:cid/streams/:name/messages/replay', async (request) => {
+    const { targetSubject, startSeq, endSeq, limit = 100 } = request.body as {
+      targetSubject: string;
+      startSeq?: number;
+      endSeq?: number;
+      limit?: number;
+    };
+
+    // Get messages to replay
+    const messages = await streamService.getMessages(
+      request.user!.orgId,
+      request.params.cid,
+      request.params.name,
+      {
+        startSeq,
+        limit: Math.min(limit, 1000), // Max 1000 messages per replay
+      }
+    );
+
+    // Filter by end sequence if specified
+    const filteredMessages = endSeq
+      ? messages.filter((m) => m.sequence <= endSeq)
+      : messages;
+
+    // Replay each message
+    let replayedCount = 0;
+    const errors: Array<{ sequence: number; error: string }> = [];
+
+    for (const msg of filteredMessages) {
+      try {
+        await streamService.publishMessage(
+          request.user!.orgId,
+          request.params.cid,
+          targetSubject,
+          String(msg.data),
+          msg.headers
+        );
+        replayedCount++;
+      } catch (err) {
+        errors.push({
+          sequence: msg.sequence,
+          error: err instanceof Error ? err.message : 'Unknown error',
+        });
+      }
+    }
+
+    return {
+      replayed: replayedCount,
+      total: filteredMessages.length,
+      errors: errors.length > 0 ? errors : undefined,
+    };
+  });
 };

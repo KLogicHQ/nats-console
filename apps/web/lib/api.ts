@@ -196,6 +196,29 @@ export const streams = {
       method: 'POST',
       body: data,
     }),
+
+  exportMessages: (
+    clusterId: string,
+    name: string,
+    format: 'json' | 'csv' = 'json',
+    options?: { startSeq?: number; limit?: number; subject?: string }
+  ) => {
+    const params = new URLSearchParams({ format });
+    if (options?.startSeq) params.set('start_seq', String(options.startSeq));
+    if (options?.limit) params.set('limit', String(options.limit));
+    if (options?.subject) params.set('subject', options.subject);
+    return `/clusters/${clusterId}/streams/${name}/messages/export?${params}`;
+  },
+
+  replayMessages: (
+    clusterId: string,
+    name: string,
+    data: { targetSubject: string; startSeq?: number; endSeq?: number; limit?: number }
+  ) =>
+    request<{ replayed: number; total: number; errors?: Array<{ sequence: number; error: string }> }>(
+      `/clusters/${clusterId}/streams/${name}/messages/replay`,
+      { method: 'POST', body: data }
+    ),
 };
 
 // Consumers API
@@ -267,6 +290,23 @@ export const analytics = {
     const query = clusterId ? `?clusterId=${clusterId}` : '';
     return request<any>(`/analytics/cluster/overview${query}`);
   },
+
+  chartThroughput: (clusterId: string, timeRange: string = '24h') =>
+    request<{
+      data: Array<{ name: string; value: number; time: string }>;
+      interval: string;
+    }>(`/analytics/charts/throughput?clusterId=${clusterId}&timeRange=${timeRange}`),
+
+  chartConsumerLag: (clusterId: string, timeRange: string = '24h') =>
+    request<{
+      data: Array<{ name: string; value: number }>;
+    }>(`/analytics/charts/consumer-lag?clusterId=${clusterId}&timeRange=${timeRange}`),
+
+  chartStreamActivity: (clusterId: string, timeRange: string = '24h') =>
+    request<{
+      streams: Record<string, Array<{ time: string; value: number }>>;
+      interval: string;
+    }>(`/analytics/charts/stream-activity?clusterId=${clusterId}&timeRange=${timeRange}`),
 };
 
 // Alerts API

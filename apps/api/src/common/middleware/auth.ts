@@ -1,13 +1,87 @@
 import type { FastifyRequest, FastifyReply } from 'fastify';
-import { verifyToken } from '../../modules/auth/auth.service';
+import * as argon2 from 'argon2';
+import { verifyToken, getPermissionsForRole } from '../../modules/auth/auth.service';
 import { getSession, updateSessionActivity } from '../../lib/redis';
+import { prisma } from '../../lib/prisma';
 import type { JwtPayload } from '../../../../shared/src/index';
 
-// Extend FastifyRequest to include user
+// Extend FastifyRequest to include user and apiKeyId
 declare module 'fastify' {
   interface FastifyRequest {
     user?: JwtPayload;
+    apiKeyId?: string;
   }
+}
+
+// Check if the token is an API key (starts with nats_)
+function isApiKey(token: string): boolean {
+  return token.startsWith('nats_');
+}
+
+// Validate API key and return user context
+async function validateApiKey(
+  apiKey: string
+): Promise<{ payload: JwtPayload; keyId: string } | null> {
+  // Extract the actual key (remove nats_ prefix)
+  const rawKey = apiKey.slice(5);
+  const prefix = rawKey.substring(0, 8);
+
+  // Find API keys with matching prefix
+  const candidates = await prisma.apiKey.findMany({
+    where: {
+      prefix,
+      OR: [{ expiresAt: null }, { expiresAt: { gt: new Date() } }],
+    },
+    include: {
+      user: {
+        include: {
+          organizationMemberships: {
+            take: 1,
+          },
+        },
+      },
+    },
+  });
+
+  // Verify the key hash
+  for (const candidate of candidates) {
+    try {
+      const isValid = await argon2.verify(candidate.keyHash, rawKey);
+      if (isValid) {
+        // Update last used timestamp
+        await prisma.apiKey.update({
+          where: { id: candidate.id },
+          data: { lastUsedAt: new Date() },
+        });
+
+        const membership = candidate.user.organizationMemberships[0];
+        if (!membership) {
+          return null;
+        }
+
+        // Build JWT-like payload for API key
+        const permissions =
+          candidate.permissions.length > 0
+            ? candidate.permissions
+            : getPermissionsForRole(membership.role);
+
+        return {
+          payload: {
+            sub: candidate.userId,
+            email: candidate.user.email,
+            orgId: membership.orgId,
+            role: membership.role as 'owner' | 'admin' | 'member' | 'viewer',
+            permissions,
+          },
+          keyId: candidate.id,
+        };
+      }
+    } catch {
+      // Hash verification failed, continue to next candidate
+    }
+  }
+
+  return null;
 }
 
 export async function authenticate(
@@ -15,7 +89,25 @@ export async function authenticate(
   reply: FastifyReply
 ): Promise<void> {
   const authHeader = request.headers.authorization;
+  const apiKeyHeader = request.headers['x-api-key'] as string | undefined;
 
+  // Check for API key in X-API-Key header first
+  if (apiKeyHeader && isApiKey(apiKeyHeader)) {
+    const result = await validateApiKey(apiKeyHeader);
+    if (result) {
+      request.user = result.payload;
+      request.apiKeyId = result.keyId;
+      return;
+    }
+    return reply.status(401).send({
+      error: {
+        code: 'INVALID_API_KEY',
+        message: 'Invalid or expired API key',
+      },
+    });
+  }
+
+  // Check for Bearer token (could be JWT or API key)
   if (!authHeader?.startsWith('Bearer ')) {
     return reply.status(401).send({
       error: {
@@ -27,6 +119,23 @@ export async function authenticate(
 
   const token = authHeader.slice(7);
 
+  // Check if it's an API key
+  if (isApiKey(token)) {
+    const result = await validateApiKey(token);
+    if (result) {
+      request.user = result.payload;
+      request.apiKeyId = result.keyId;
+      return;
+    }
+    return reply.status(401).send({
+      error: {
+        code: 'INVALID_API_KEY',
+        message: 'Invalid or expired API key',
+      },
+    });
+  }
+
+  // Regular JWT token
   try {
     const payload = await verifyToken(token);
     request.user = payload;

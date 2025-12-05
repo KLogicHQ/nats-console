@@ -1,8 +1,11 @@
 import * as argon2 from 'argon2';
 import { SignJWT, jwtVerify } from 'jose';
+import * as OTPAuth from 'otpauth';
+import * as QRCode from 'qrcode';
 import { prisma } from '../../lib/prisma';
 import { redis, setSession, getSession, deleteSession } from '../../lib/redis';
 import { config } from '../../config/index';
+import { sendPasswordResetEmail } from '../../lib/email';
 import {
   UnauthorizedError,
   NotFoundError,
@@ -12,6 +15,68 @@ import {
 import type { User, AuthTokens, JwtPayload } from '../../../../shared/src/index';
 
 const JWT_SECRET = new TextEncoder().encode(config.JWT_SECRET);
+
+// ==================== RBAC Permissions ====================
+
+// Permission format: resource:action:scope
+// Resources: clusters, streams, consumers, alerts, dashboards, settings, users, teams
+// Actions: read, write, delete, admin
+// Scope: * (all) or specific ID
+
+const ROLE_PERMISSIONS: Record<string, string[]> = {
+  owner: ['*:*:*'], // Full access to everything
+  admin: [
+    'clusters:*:*',
+    'streams:*:*',
+    'consumers:*:*',
+    'alerts:*:*',
+    'dashboards:*:*',
+    'settings:read:*',
+    'settings:write:*',
+    'users:read:*',
+    'users:write:*',
+    'teams:*:*',
+  ],
+  member: [
+    'clusters:read:*',
+    'streams:read:*',
+    'streams:write:*',
+    'consumers:read:*',
+    'consumers:write:*',
+    'alerts:read:*',
+    'dashboards:read:*',
+    'dashboards:write:own',
+    'settings:read:*',
+  ],
+  viewer: [
+    'clusters:read:*',
+    'streams:read:*',
+    'consumers:read:*',
+    'alerts:read:*',
+    'dashboards:read:*',
+  ],
+};
+
+export function getPermissionsForRole(role: string): string[] {
+  return ROLE_PERMISSIONS[role] || ROLE_PERMISSIONS.viewer;
+}
+
+export function hasPermission(permissions: string[], resource: string, action: string, scope: string = '*'): boolean {
+  return permissions.some((perm) => {
+    const [permResource, permAction, permScope] = perm.split(':');
+
+    // Check resource match (wildcard or exact)
+    const resourceMatch = permResource === '*' || permResource === resource;
+
+    // Check action match (wildcard or exact)
+    const actionMatch = permAction === '*' || permAction === action;
+
+    // Check scope match (wildcard or exact)
+    const scopeMatch = permScope === '*' || permScope === scope || permScope === 'own';
+
+    return resourceMatch && actionMatch && scopeMatch;
+  });
+}
 
 // ==================== Password Hashing ====================
 
@@ -208,13 +273,16 @@ export async function login(
   // Generate tokens
   const tokens = await generateTokens(user.id, user.email, membership.orgId, membership.role);
 
+  // Get permissions based on role
+  const permissions = getPermissionsForRole(membership.role);
+
   // Store session in Redis
   await setSession(tokens.accessToken.split('.')[2]!, {
     userId: user.id,
     orgId: membership.orgId,
     email: user.email,
     role: membership.role,
-    permissions: ['*:*:*'], // TODO: Fetch actual permissions
+    permissions,
     ipAddress: ipAddress || '',
     createdAt: new Date().toISOString(),
     lastActivity: new Date().toISOString(),
@@ -302,21 +370,9 @@ export async function requestPasswordReset(email: string): Promise<void> {
   // Store in Redis with 1 hour TTL
   await redis.set(`password_reset:${user.id}`, resetToken, 'EX', 3600);
 
-  // Build reset URL
-  const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:3000';
-  const resetUrl = `${frontendUrl}/reset-password?token=${resetToken}`;
-
-  // In dev mode, print the URL to console
-  if (config.NODE_ENV === 'development') {
-    console.log('\n========================================');
-    console.log('📧 PASSWORD RESET EMAIL (DEV MODE)');
-    console.log('========================================');
-    console.log(`To: ${email}`);
-    console.log(`Reset URL: ${resetUrl}`);
-    console.log('========================================\n');
-  }
-
-  // TODO: In production, send email with reset link
+  // Send password reset email
+  const userName = user.firstName || undefined;
+  await sendPasswordResetEmail(email, resetToken, userName);
 }
 
 export async function resetPassword(token: string, newPassword: string): Promise<void> {
@@ -346,13 +402,73 @@ export async function resetPassword(token: string, newPassword: string): Promise
 // ==================== MFA ====================
 
 export async function enableMfa(userId: string): Promise<{ secret: string; qrCode: string }> {
-  // TODO: Implement TOTP generation with speakeasy
-  throw new Error('MFA not implemented yet');
+  const user = await prisma.user.findUnique({
+    where: { id: userId },
+  });
+
+  if (!user) {
+    throw new NotFoundError('User', userId);
+  }
+
+  // Generate a new TOTP secret
+  const totp = new OTPAuth.TOTP({
+    issuer: 'NATS Console',
+    label: user.email,
+    algorithm: 'SHA1',
+    digits: 6,
+    period: 30,
+    secret: OTPAuth.Secret.fromHex(crypto.randomUUID().replace(/-/g, '')),
+  });
+
+  const secret = totp.secret.base32;
+
+  // Generate QR code
+  const otpauthUrl = totp.toString();
+  const qrCode = await QRCode.toDataURL(otpauthUrl);
+
+  // Store secret temporarily (not enabled yet until verified)
+  await prisma.user.update({
+    where: { id: userId },
+    data: { mfaSecret: secret },
+  });
+
+  return { secret, qrCode };
 }
 
 export async function verifyMfa(userId: string, code: string): Promise<boolean> {
-  // TODO: Implement TOTP verification
-  throw new Error('MFA not implemented yet');
+  const user = await prisma.user.findUnique({
+    where: { id: userId },
+  });
+
+  if (!user || !user.mfaSecret) {
+    throw new ValidationError('MFA not set up for this user');
+  }
+
+  const totp = new OTPAuth.TOTP({
+    issuer: 'NATS Console',
+    label: user.email,
+    algorithm: 'SHA1',
+    digits: 6,
+    period: 30,
+    secret: OTPAuth.Secret.fromBase32(user.mfaSecret),
+  });
+
+  // Validate the code (allow 1 period window for clock drift)
+  const delta = totp.validate({ token: code, window: 1 });
+
+  if (delta === null) {
+    return false;
+  }
+
+  // If MFA was not yet enabled, enable it now (first successful verification)
+  if (!user.mfaEnabled) {
+    await prisma.user.update({
+      where: { id: userId },
+      data: { mfaEnabled: true },
+    });
+  }
+
+  return true;
 }
 
 export async function disableMfa(userId: string): Promise<void> {
@@ -429,8 +545,7 @@ async function generateTokens(
   orgId: string,
   role: string
 ): Promise<AuthTokens> {
-  // TODO: Fetch actual permissions from database
-  const permissions = ['*:*:*'];
+  const permissions = getPermissionsForRole(role);
 
   const accessToken = await generateAccessToken({
     sub: userId,

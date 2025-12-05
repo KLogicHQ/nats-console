@@ -113,6 +113,13 @@ function SettingsPageContent() {
   const [showApiKey, setShowApiKey] = useState(false);
   const [deleteApiKeyId, setDeleteApiKeyId] = useState<string | null>(null);
 
+  // 2FA state
+  const [show2faDialog, setShow2faDialog] = useState(false);
+  const [mfaSetupData, setMfaSetupData] = useState<{ secret: string; qrCode: string } | null>(null);
+  const [mfaVerifyCode, setMfaVerifyCode] = useState('');
+  const [mfaError, setMfaError] = useState('');
+  const [showDisable2faDialog, setShowDisable2faDialog] = useState(false);
+
   // Initialize form with user data
   useEffect(() => {
     if (user) {
@@ -201,6 +208,56 @@ function SettingsPageContent() {
     mutationFn: (id: string) => api.invites.revoke(id),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['invites'] });
+    },
+  });
+
+  // 2FA mutations
+  const enable2faMutation = useMutation({
+    mutationFn: () => api.mfa.enable(),
+    onSuccess: (data) => {
+      setMfaSetupData(data);
+      setShow2faDialog(true);
+    },
+    onError: (err: any) => {
+      setMfaError(err.message || 'Failed to enable 2FA');
+    },
+  });
+
+  const verify2faMutation = useMutation({
+    mutationFn: (code: string) => api.mfa.verify(code),
+    onSuccess: (data) => {
+      if (data.valid) {
+        setShow2faDialog(false);
+        setMfaSetupData(null);
+        setMfaVerifyCode('');
+        setMfaError('');
+        // Refresh user data to get updated mfaEnabled status
+        queryClient.invalidateQueries({ queryKey: ['user'] });
+        // Update local user state
+        if (user) {
+          setUser({ ...user, mfaEnabled: true });
+        }
+      } else {
+        setMfaError('Invalid verification code. Please try again.');
+      }
+    },
+    onError: (err: any) => {
+      setMfaError(err.message || 'Failed to verify code');
+    },
+  });
+
+  const disable2faMutation = useMutation({
+    mutationFn: () => api.mfa.disable(),
+    onSuccess: () => {
+      setShowDisable2faDialog(false);
+      queryClient.invalidateQueries({ queryKey: ['user'] });
+      // Update local user state
+      if (user) {
+        setUser({ ...user, mfaEnabled: false });
+      }
+    },
+    onError: (err: any) => {
+      setMfaError(err.message || 'Failed to disable 2FA');
     },
   });
 
@@ -631,18 +688,128 @@ function SettingsPageContent() {
                           : 'Two-factor authentication is not enabled'}
                       </p>
                     </div>
-                    <Button
-                      variant={user?.mfaEnabled ? 'destructive' : 'outline'}
-                      disabled
-                    >
-                      {user?.mfaEnabled ? 'Disable 2FA' : 'Enable 2FA'}
-                    </Button>
+                    {user?.mfaEnabled ? (
+                      <Button
+                        variant="destructive"
+                        onClick={() => setShowDisable2faDialog(true)}
+                        disabled={disable2faMutation.isPending}
+                      >
+                        {disable2faMutation.isPending ? (
+                          <Loader2 className="h-4 w-4 animate-spin" />
+                        ) : null}
+                        Disable 2FA
+                      </Button>
+                    ) : (
+                      <Button
+                        variant="outline"
+                        onClick={() => enable2faMutation.mutate()}
+                        disabled={enable2faMutation.isPending}
+                      >
+                        {enable2faMutation.isPending ? (
+                          <Loader2 className="h-4 w-4 animate-spin" />
+                        ) : (
+                          <Shield className="h-4 w-4" />
+                        )}
+                        Enable 2FA
+                      </Button>
+                    )}
                   </div>
                   <p className="text-sm text-muted-foreground mt-4">
-                    2FA setup coming soon. This will allow you to use an authenticator app for additional security.
+                    Use an authenticator app like Google Authenticator, Authy, or 1Password to generate verification codes.
                   </p>
                 </CardContent>
               </Card>
+
+              {/* 2FA Setup Dialog */}
+              <Dialog open={show2faDialog} onOpenChange={setShow2faDialog}>
+                <DialogContent className="max-w-md">
+                  <DialogHeader>
+                    <DialogTitle>Set Up Two-Factor Authentication</DialogTitle>
+                    <DialogDescription>
+                      Scan the QR code with your authenticator app, then enter the verification code.
+                    </DialogDescription>
+                  </DialogHeader>
+                  {mfaSetupData && (
+                    <div className="space-y-4">
+                      <div className="flex justify-center p-4 bg-white rounded-lg">
+                        <img src={mfaSetupData.qrCode} alt="QR Code" className="w-48 h-48" />
+                      </div>
+                      <div className="text-center">
+                        <p className="text-sm text-muted-foreground mb-1">Or enter this secret manually:</p>
+                        <code className="px-3 py-1 bg-muted rounded text-sm font-mono">
+                          {mfaSetupData.secret}
+                        </code>
+                      </div>
+                      <div className="space-y-2">
+                        <label className="text-sm font-medium">Verification Code</label>
+                        <Input
+                          type="text"
+                          inputMode="numeric"
+                          pattern="[0-9]*"
+                          maxLength={6}
+                          placeholder="Enter 6-digit code"
+                          value={mfaVerifyCode}
+                          onChange={(e) => {
+                            setMfaVerifyCode(e.target.value.replace(/\D/g, ''));
+                            setMfaError('');
+                          }}
+                          className="text-center text-lg tracking-widest"
+                        />
+                      </div>
+                      {mfaError && (
+                        <div className="p-3 text-sm text-destructive bg-destructive/10 rounded-md">
+                          {mfaError}
+                        </div>
+                      )}
+                    </div>
+                  )}
+                  <DialogFooter>
+                    <Button variant="outline" onClick={() => {
+                      setShow2faDialog(false);
+                      setMfaSetupData(null);
+                      setMfaVerifyCode('');
+                      setMfaError('');
+                    }}>
+                      Cancel
+                    </Button>
+                    <Button
+                      onClick={() => verify2faMutation.mutate(mfaVerifyCode)}
+                      disabled={mfaVerifyCode.length !== 6 || verify2faMutation.isPending}
+                    >
+                      {verify2faMutation.isPending ? (
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                      ) : (
+                        <CheckCircle2 className="h-4 w-4" />
+                      )}
+                      Verify & Enable
+                    </Button>
+                  </DialogFooter>
+                </DialogContent>
+              </Dialog>
+
+              {/* Disable 2FA Confirmation Dialog */}
+              <AlertDialog open={showDisable2faDialog} onOpenChange={setShowDisable2faDialog}>
+                <AlertDialogContent>
+                  <AlertDialogHeader>
+                    <AlertDialogTitle>Disable Two-Factor Authentication?</AlertDialogTitle>
+                    <AlertDialogDescription>
+                      This will remove the extra layer of security from your account. You can re-enable it at any time.
+                    </AlertDialogDescription>
+                  </AlertDialogHeader>
+                  <AlertDialogFooter>
+                    <AlertDialogCancel>Cancel</AlertDialogCancel>
+                    <AlertDialogAction
+                      onClick={() => disable2faMutation.mutate()}
+                      className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                    >
+                      {disable2faMutation.isPending ? (
+                        <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                      ) : null}
+                      Disable 2FA
+                    </AlertDialogAction>
+                  </AlertDialogFooter>
+                </AlertDialogContent>
+              </AlertDialog>
 
               <Card>
                 <CardHeader>

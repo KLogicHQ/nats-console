@@ -35,6 +35,13 @@ const envSchema = z.object({
   // Rate limiting (only applies in production, disabled in development)
   RATE_LIMIT_MAX: z.coerce.number().default(1000), // 1000 requests per window in production
   RATE_LIMIT_WINDOW: z.coerce.number().default(60000), // 1 minute
+
+  // Email (Resend)
+  RESEND_API_KEY: z.string().optional(),
+  EMAIL_FROM: z.string().default('NATS Console <noreply@nats-console.local>'),
+
+  // Frontend URL (for links in emails)
+  FRONTEND_URL: z.string().default('http://localhost:3000'),
 });
 
 function loadConfig() {
