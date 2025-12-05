@@ -1,6 +1,6 @@
 'use client';
 
-import { Suspense } from 'react';
+import { Suspense, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
@@ -22,6 +22,16 @@ import { api } from '@/lib/api';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { TabsList, useTabs, Tab } from '@/components/ui/tabs';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
 import { formatNumber, formatDuration } from '@nats-console/shared';
 
 const tabs: Tab[] = [
@@ -37,6 +47,7 @@ function ConsumerDetailContent() {
   const clusterId = params.clusterId as string;
   const streamName = params.stream as string;
   const consumerName = params.name as string;
+  const [showDeleteDialog, setShowDeleteDialog] = useState(false);
 
   const { activeTab, setActiveTab } = useTabs(tabs, 'overview');
 
@@ -107,25 +118,49 @@ function ConsumerDetailContent() {
           </div>
         </div>
         <div className="flex gap-2">
+          <Button
+            variant="outline"
+            size="icon"
+            onClick={() => queryClient.invalidateQueries({ queryKey: ['consumer', clusterId, streamName, consumerName] })}
+          >
+            <RefreshCw className="h-4 w-4" />
+          </Button>
           <Button variant="outline" size="sm">
-            <Edit className="h-4 w-4" />
+            <Edit className="h-4 w-4 mr-2" />
             Edit
           </Button>
           <Button
             variant="destructive"
             size="sm"
-            onClick={() => {
-              if (confirm('Are you sure you want to delete this consumer?')) {
-                deleteMutation.mutate();
-              }
-            }}
+            onClick={() => setShowDeleteDialog(true)}
             disabled={deleteMutation.isPending}
           >
-            <Trash2 className="h-4 w-4" />
+            <Trash2 className="h-4 w-4 mr-2" />
             Delete
           </Button>
         </div>
       </div>
+
+      {/* Delete Confirmation Dialog */}
+      <AlertDialog open={showDeleteDialog} onOpenChange={setShowDeleteDialog}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete Consumer</AlertDialogTitle>
+            <AlertDialogDescription>
+              Are you sure you want to delete consumer &quot;{consumerName}&quot;? This action cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => deleteMutation.mutate()}
+              className="bg-red-600 hover:bg-red-700"
+            >
+              {deleteMutation.isPending ? 'Deleting...' : 'Delete'}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       {/* Tabs */}
       <TabsList tabs={tabs} activeTab={activeTab} onTabChange={setActiveTab} />

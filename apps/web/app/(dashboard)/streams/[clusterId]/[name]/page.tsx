@@ -22,6 +22,16 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { TabsList, useTabs, Tab } from '@/components/ui/tabs';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
 import { formatBytes, formatNumber, formatDuration } from '@nats-console/shared';
 
 const tabs: Tab[] = [
@@ -43,6 +53,7 @@ function StreamDetailContent() {
   const [messageSubject, setMessageSubject] = useState('');
   const [messageData, setMessageData] = useState('');
   const [startSeq, setStartSeq] = useState('1');
+  const [showDeleteDialog, setShowDeleteDialog] = useState(false);
 
   const { data: streamData, isLoading } = useQuery({
     queryKey: ['stream', clusterId, streamName],
@@ -147,18 +158,35 @@ function StreamDetailContent() {
           <Button
             variant="destructive"
             size="sm"
-            onClick={() => {
-              if (confirm('Are you sure you want to delete this stream?')) {
-                deleteMutation.mutate();
-              }
-            }}
+            onClick={() => setShowDeleteDialog(true)}
             disabled={deleteMutation.isPending}
           >
-            <Trash2 className="h-4 w-4" />
+            <Trash2 className="h-4 w-4 mr-2" />
             Delete
           </Button>
         </div>
       </div>
+
+      {/* Delete Confirmation Dialog */}
+      <AlertDialog open={showDeleteDialog} onOpenChange={setShowDeleteDialog}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete Stream</AlertDialogTitle>
+            <AlertDialogDescription>
+              Are you sure you want to delete stream &quot;{streamName}&quot;? This action cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => deleteMutation.mutate()}
+              className="bg-red-600 hover:bg-red-700"
+            >
+              {deleteMutation.isPending ? 'Deleting...' : 'Delete'}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       {/* Tabs */}
       <TabsList tabs={tabs} activeTab={activeTab} onTabChange={setActiveTab} />

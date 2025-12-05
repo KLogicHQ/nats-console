@@ -2,6 +2,11 @@ import { createClient, ClickHouseClient } from '@clickhouse/client';
 import { config } from '../config/index';
 import type { StreamMetrics, ConsumerMetrics, ClusterMetrics, AuditLog } from '../../../shared/src/index';
 
+// Format timestamp for ClickHouse DateTime64(3)
+function formatTimestamp(date: Date): string {
+  return date.toISOString().replace('T', ' ').replace('Z', '');
+}
+
 let client: ClickHouseClient | null = null;
 
 export function getClickHouseClient(): ClickHouseClient {
@@ -32,7 +37,7 @@ export async function insertStreamMetrics(metrics: StreamMetrics[]): Promise<voi
     values: metrics.map((m) => ({
       cluster_id: m.clusterId,
       stream_name: m.streamName,
-      timestamp: m.timestamp.toISOString(),
+      timestamp: formatTimestamp(m.timestamp),
       messages_total: m.messagesTotal,
       bytes_total: m.bytesTotal,
       messages_rate: m.messagesRate,
@@ -113,7 +118,7 @@ export async function insertConsumerMetrics(metrics: ConsumerMetrics[]): Promise
       cluster_id: m.clusterId,
       stream_name: m.streamName,
       consumer_name: m.consumerName,
-      timestamp: m.timestamp.toISOString(),
+      timestamp: formatTimestamp(m.timestamp),
       pending_count: m.pendingCount,
       ack_pending: m.ackPending,
       redelivered: m.redelivered,
@@ -196,7 +201,7 @@ export async function insertClusterMetrics(metrics: ClusterMetrics[]): Promise<v
       cluster_id: m.clusterId,
       server_id: m.serverId,
       server_name: m.serverName,
-      timestamp: m.timestamp.toISOString(),
+      timestamp: formatTimestamp(m.timestamp),
       cpu_percent: m.cpuPercent,
       memory_bytes: m.memoryBytes,
       connections: m.connections,
@@ -223,7 +228,7 @@ export async function insertAuditLog(log: Omit<AuditLog, 'id'>): Promise<void> {
         org_id: log.orgId,
         user_id: log.userId,
         user_email: log.userEmail,
-        timestamp: log.timestamp.toISOString(),
+        timestamp: formatTimestamp(log.timestamp),
         action: log.action,
         resource_type: log.resourceType,
         resource_id: log.resourceId,

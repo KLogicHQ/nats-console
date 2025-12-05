@@ -1,6 +1,6 @@
 'use client';
 
-import { Suspense } from 'react';
+import { Suspense, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
@@ -24,6 +24,16 @@ import { api } from '@/lib/api';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { TabsList, TabsContent, useTabs, Tab } from '@/components/ui/tabs';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
 import { formatBytes, formatNumber } from '@nats-console/shared';
 
 const tabs: Tab[] = [
@@ -38,6 +48,7 @@ function ClusterDetailContent() {
   const router = useRouter();
   const queryClient = useQueryClient();
   const clusterId = params.id as string;
+  const [showDeleteDialog, setShowDeleteDialog] = useState(false);
 
   const { activeTab, setActiveTab } = useTabs(tabs, 'overview');
 
@@ -151,18 +162,35 @@ function ClusterDetailContent() {
           <Button
             variant="destructive"
             size="sm"
-            onClick={() => {
-              if (confirm('Are you sure you want to delete this cluster?')) {
-                deleteMutation.mutate();
-              }
-            }}
+            onClick={() => setShowDeleteDialog(true)}
             disabled={deleteMutation.isPending}
           >
-            <Trash2 className="h-4 w-4" />
+            <Trash2 className="h-4 w-4 mr-2" />
             Delete
           </Button>
         </div>
       </div>
+
+      {/* Delete Confirmation Dialog */}
+      <AlertDialog open={showDeleteDialog} onOpenChange={setShowDeleteDialog}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete Cluster</AlertDialogTitle>
+            <AlertDialogDescription>
+              Are you sure you want to delete cluster &quot;{cluster.name}&quot;? This action cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => deleteMutation.mutate()}
+              className="bg-red-600 hover:bg-red-700"
+            >
+              {deleteMutation.isPending ? 'Deleting...' : 'Delete'}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       {/* Tabs */}
       <TabsList tabs={tabs} activeTab={activeTab} onTabChange={setActiveTab} />

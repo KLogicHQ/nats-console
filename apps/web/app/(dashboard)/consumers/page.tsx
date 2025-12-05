@@ -1,21 +1,33 @@
 'use client';
 
 import { useState } from 'react';
-import { useQuery } from '@tanstack/react-query';
-import { Plus, Users, Search, AlertTriangle, CheckCircle, ChevronRight } from 'lucide-react';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { Plus, Users, Search, AlertTriangle, CheckCircle, ChevronRight, RefreshCw, Trash2 } from 'lucide-react';
 import Link from 'next/link';
 import { api } from '@/lib/api';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent } from '@/components/ui/card';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
 import { formatNumber, formatDuration } from '@nats-console/shared';
 import { CreateConsumerDialog } from '@/components/forms/create-consumer-dialog';
 
 export default function ConsumersPage() {
+  const queryClient = useQueryClient();
   const [selectedCluster, setSelectedCluster] = useState<string | null>(null);
   const [selectedStream, setSelectedStream] = useState<string | null>(null);
   const [search, setSearch] = useState('');
   const [showCreateDialog, setShowCreateDialog] = useState(false);
+  const [consumerToDelete, setConsumerToDelete] = useState<string | null>(null);
 
   const { data: clustersData } = useQuery({
     queryKey: ['clusters'],
@@ -28,13 +40,22 @@ export default function ConsumersPage() {
     enabled: !!selectedCluster,
   });
 
-  const { data: consumersData, isLoading } = useQuery({
+  const { data: consumersData, isLoading, refetch } = useQuery({
     queryKey: ['consumers', selectedCluster, selectedStream],
     queryFn: () =>
       selectedCluster && selectedStream
         ? api.consumers.list(selectedCluster, selectedStream)
         : null,
     enabled: !!selectedCluster && !!selectedStream,
+  });
+
+  const deleteMutation = useMutation({
+    mutationFn: (consumerName: string) =>
+      api.consumers.delete(selectedCluster!, selectedStream!, consumerName),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['consumers', selectedCluster, selectedStream] });
+      setConsumerToDelete(null);
+    },
   });
 
   // Auto-select first cluster
@@ -65,10 +86,15 @@ export default function ConsumersPage() {
           <h1 className="text-3xl font-bold">Consumers</h1>
           <p className="text-muted-foreground">Manage JetStream consumers</p>
         </div>
-        <Button disabled={!selectedStream} onClick={() => setShowCreateDialog(true)}>
-          <Plus className="h-4 w-4" />
-          Create Consumer
-        </Button>
+        <div className="flex gap-2">
+          <Button variant="outline" size="icon" onClick={() => refetch()} disabled={!selectedStream}>
+            <RefreshCw className="h-4 w-4" />
+          </Button>
+          <Button disabled={!selectedStream} onClick={() => setShowCreateDialog(true)}>
+            <Plus className="h-4 w-4 mr-2" />
+            Create Consumer
+          </Button>
+        </div>
         {selectedCluster && selectedStream && (
           <CreateConsumerDialog
             open={showCreateDialog}
@@ -165,6 +191,7 @@ export default function ConsumersPage() {
                 <th className="text-right p-4 font-medium">Ack Pending</th>
                 <th className="text-right p-4 font-medium">Ack Wait</th>
                 <th className="text-center p-4 font-medium">Health</th>
+                <th className="text-center p-4 font-medium">Actions</th>
               </tr>
             </thead>
             <tbody>
@@ -202,6 +229,18 @@ export default function ConsumersPage() {
                     <td className="p-4 text-center">
                       <HealthIcon className={`h-5 w-5 mx-auto ${health.color}`} />
                     </td>
+                    <td className="p-4 text-center">
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        onClick={(e) => {
+                          e.preventDefault();
+                          setConsumerToDelete(consumer.name);
+                        }}
+                      >
+                        <Trash2 className="h-4 w-4 text-red-500" />
+                      </Button>
+                    </td>
                   </tr>
                 );
               })}
@@ -209,6 +248,27 @@ export default function ConsumersPage() {
           </table>
         </div>
       )}
+
+      {/* Delete Confirmation Dialog */}
+      <AlertDialog open={!!consumerToDelete} onOpenChange={(open) => !open && setConsumerToDelete(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete Consumer</AlertDialogTitle>
+            <AlertDialogDescription>
+              Are you sure you want to delete consumer &quot;{consumerToDelete}&quot;? This action cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => consumerToDelete && deleteMutation.mutate(consumerToDelete)}
+              className="bg-red-600 hover:bg-red-700"
+            >
+              {deleteMutation.isPending ? 'Deleting...' : 'Delete'}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

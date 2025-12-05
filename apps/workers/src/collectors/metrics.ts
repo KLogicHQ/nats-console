@@ -7,6 +7,11 @@ import type { StreamMetrics, ConsumerMetrics, ClusterMetrics } from '../../../sh
 
 const logger = pino({ name: 'metrics-collector' });
 
+// Format timestamp for ClickHouse DateTime64(3)
+function formatTimestamp(date: Date): string {
+  return date.toISOString().replace('T', ' ').replace('Z', '');
+}
+
 interface ClusterConnection {
   id: string;
   nc: NatsConnection;
@@ -203,7 +208,7 @@ export class MetricsCollector {
           values: streamMetrics.map((m) => ({
             cluster_id: m.clusterId,
             stream_name: m.streamName,
-            timestamp: m.timestamp.toISOString(),
+            timestamp: formatTimestamp(m.timestamp),
             messages_total: m.messagesTotal,
             bytes_total: m.bytesTotal,
             messages_rate: m.messagesRate,
@@ -230,7 +235,7 @@ export class MetricsCollector {
             cluster_id: m.clusterId,
             stream_name: m.streamName,
             consumer_name: m.consumerName,
-            timestamp: m.timestamp.toISOString(),
+            timestamp: formatTimestamp(m.timestamp),
             pending_count: m.pendingCount,
             ack_pending: m.ackPending,
             redelivered: m.redelivered,
@@ -288,7 +293,7 @@ export class MetricsCollector {
             cluster_id: m.clusterId,
             server_id: m.serverId,
             server_name: m.serverName,
-            timestamp: m.timestamp.toISOString(),
+            timestamp: formatTimestamp(m.timestamp),
             cpu_percent: m.cpuPercent,
             memory_bytes: m.memoryBytes,
             connections: m.connections,

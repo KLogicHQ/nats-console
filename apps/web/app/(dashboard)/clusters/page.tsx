@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { Plus, Server, MoreVertical, CheckCircle, XCircle, AlertCircle } from 'lucide-react';
+import { Plus, Server, MoreVertical, CheckCircle, XCircle, AlertCircle, RefreshCw } from 'lucide-react';
 import Link from 'next/link';
 import { api } from '@/lib/api';
 import { Button } from '@/components/ui/button';
@@ -12,7 +12,7 @@ import { CreateClusterDialog } from '@/components/forms/create-cluster-dialog';
 export default function ClustersPage() {
   const [showCreateDialog, setShowCreateDialog] = useState(false);
 
-  const { data, isLoading, error } = useQuery({
+  const { data, isLoading, error, refetch } = useQuery({
     queryKey: ['clusters'],
     queryFn: () => api.clusters.list(),
   });
@@ -50,10 +50,15 @@ export default function ClustersPage() {
           <h1 className="text-3xl font-bold">Clusters</h1>
           <p className="text-muted-foreground">Manage your NATS JetStream clusters</p>
         </div>
-        <Button onClick={() => setShowCreateDialog(true)}>
-          <Plus className="h-4 w-4" />
-          Add Cluster
-        </Button>
+        <div className="flex gap-2">
+          <Button variant="outline" size="icon" onClick={() => refetch()}>
+            <RefreshCw className="h-4 w-4" />
+          </Button>
+          <Button onClick={() => setShowCreateDialog(true)}>
+            <Plus className="h-4 w-4 mr-2" />
+            Add Cluster
+          </Button>
+        </div>
         <CreateClusterDialog open={showCreateDialog} onOpenChange={setShowCreateDialog} />
       </div>
 

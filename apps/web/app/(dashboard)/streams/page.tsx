@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { Plus, Database, Search, ChevronRight } from 'lucide-react';
+import { Plus, Database, Search, ChevronRight, RefreshCw } from 'lucide-react';
 import Link from 'next/link';
 import { api } from '@/lib/api';
 import { Button } from '@/components/ui/button';
@@ -21,7 +21,7 @@ export default function StreamsPage() {
     queryFn: () => api.clusters.list(),
   });
 
-  const { data: streamsData, isLoading } = useQuery({
+  const { data: streamsData, isLoading, refetch } = useQuery({
     queryKey: ['streams', selectedCluster],
     queryFn: () => (selectedCluster ? api.streams.list(selectedCluster) : null),
     enabled: !!selectedCluster,
@@ -43,10 +43,15 @@ export default function StreamsPage() {
           <h1 className="text-3xl font-bold">Streams</h1>
           <p className="text-muted-foreground">Manage JetStream streams</p>
         </div>
-        <Button disabled={!selectedCluster} onClick={() => setShowCreateDialog(true)}>
-          <Plus className="h-4 w-4" />
-          Create Stream
-        </Button>
+        <div className="flex gap-2">
+          <Button variant="outline" size="icon" onClick={() => refetch()} disabled={!selectedCluster}>
+            <RefreshCw className="h-4 w-4" />
+          </Button>
+          <Button disabled={!selectedCluster} onClick={() => setShowCreateDialog(true)}>
+            <Plus className="h-4 w-4 mr-2" />
+            Create Stream
+          </Button>
+        </div>
         {selectedCluster && (
           <CreateStreamDialog
             open={showCreateDialog}
@@ -136,7 +141,6 @@ export default function StreamsPage() {
                       className="font-medium text-primary hover:underline flex items-center gap-1"
                     >
                       {stream.config.name}
-                      <ChevronRight className="h-4 w-4" />
                     </Link>
                   </td>
                   <td className="p-4 text-muted-foreground">

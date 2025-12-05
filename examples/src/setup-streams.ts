@@ -15,7 +15,7 @@ async function main() {
   // Stream 1: ORDERS - typical e-commerce order stream
   await createStreamIfNotExists(jsm, {
     name: 'ORDERS',
-    subjects: ['orders.>', 'orders.created', 'orders.updated', 'orders.shipped', 'orders.completed'],
+    subjects: ['orders.>'],
     retention: RetentionPolicy.Limits,
     storage: StorageType.File,
     max_msgs: 100000,
@@ -37,7 +37,7 @@ async function main() {
   // Stream 3: LOGS - log aggregation stream
   await createStreamIfNotExists(jsm, {
     name: 'LOGS',
-    subjects: ['logs.>', 'logs.info', 'logs.warn', 'logs.error'],
+    subjects: ['logs.>'],
     retention: RetentionPolicy.Limits,
     storage: StorageType.File,
     max_msgs: 1000000,
