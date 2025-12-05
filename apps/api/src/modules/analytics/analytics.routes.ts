@@ -4,6 +4,8 @@ import {
   queryStreamMetrics,
   queryConsumerMetrics,
   queryAuditLogs,
+  queryClusterOverview,
+  queryOverviewMetrics,
 } from '../../lib/clickhouse';
 import { authenticate } from '../../common/middleware/auth';
 
@@ -106,14 +108,8 @@ export const analyticsRoutes: FastifyPluginAsync = async (fastify) => {
   fastify.get<{ Querystring: { clusterId?: string } }>(
     '/cluster/overview',
     async (request) => {
-      // TODO: Implement cluster overview metrics
-      return {
-        totalStreams: 0,
-        totalConsumers: 0,
-        totalMessages: 0,
-        messageRate: 0,
-        activeAlerts: 0,
-      };
+      const { clusterId } = request.query;
+      return queryClusterOverview(clusterId);
     }
   );
 
@@ -121,17 +117,8 @@ export const analyticsRoutes: FastifyPluginAsync = async (fastify) => {
   fastify.get<{ Querystring: { clusterId?: string; timeRange?: string } }>(
     '/overview',
     async (request) => {
-      // TODO: Implement real metrics from ClickHouse
-      return {
-        totalMessages: 0,
-        totalBytes: 0,
-        avgThroughput: 0,
-        avgLatency: 0,
-        messagesTrend: 0,
-        bytesTrend: 0,
-        throughputTrend: 0,
-        latencyTrend: 0,
-      };
+      const { clusterId, timeRange } = request.query;
+      return queryOverviewMetrics(clusterId, timeRange || '1h');
     }
   );
 };

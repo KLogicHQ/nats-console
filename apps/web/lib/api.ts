@@ -220,6 +220,18 @@ export const consumers = {
 
   delete: (clusterId: string, streamName: string, name: string) =>
     request(`/clusters/${clusterId}/streams/${streamName}/consumers/${name}`, { method: 'DELETE' }),
+
+  pause: (clusterId: string, streamName: string, name: string, pauseUntil?: string) =>
+    request<{ consumer: any; paused: boolean }>(`/clusters/${clusterId}/streams/${streamName}/consumers/${name}/pause`, {
+      method: 'POST',
+      body: pauseUntil ? { pauseUntil } : {},
+    }),
+
+  resume: (clusterId: string, streamName: string, name: string) =>
+    request<{ consumer: any; resumed: boolean }>(`/clusters/${clusterId}/streams/${streamName}/consumers/${name}/resume`, {
+      method: 'POST',
+      body: {},
+    }),
 };
 
 // Analytics API

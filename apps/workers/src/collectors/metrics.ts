@@ -1,6 +1,7 @@
 import { connect, NatsConnection, JetStreamManager } from 'nats';
 import { createClient, ClickHouseClient } from '@clickhouse/client';
 import { PrismaClient } from '@prisma/client';
+import Redis from 'ioredis';
 import pino from 'pino';
 import { config } from '../config';
 import type { StreamMetrics, ConsumerMetrics, ClusterMetrics } from '../../../shared/src/index';
@@ -19,14 +20,24 @@ interface ClusterConnection {
   serverUrl: string;
 }
 
+interface ConsumerStats {
+  delivered: number;
+  ackFloor: number;
+  timestamp: number;
+}
+
+const METRICS_CHANNEL = 'metrics';
+
 export class MetricsCollector {
   private prisma: PrismaClient;
   private clickhouse: ClickHouseClient;
+  private redis: Redis;
   private connections: Map<string, ClusterConnection> = new Map();
   private streamMetricsInterval: NodeJS.Timeout | null = null;
   private clusterMetricsInterval: NodeJS.Timeout | null = null;
   private previousStreamStats: Map<string, { messages: number; bytes: number; timestamp: number }> =
     new Map();
+  private previousConsumerStats: Map<string, ConsumerStats> = new Map();
 
   constructor() {
     this.prisma = new PrismaClient();
@@ -36,6 +47,7 @@ export class MetricsCollector {
       username: config.CLICKHOUSE_USER,
       password: config.CLICKHOUSE_PASSWORD,
     });
+    this.redis = new Redis(config.REDIS_URL);
   }
 
   async start(): Promise<void> {
@@ -79,6 +91,7 @@ export class MetricsCollector {
     this.connections.clear();
 
     await this.clickhouse.close();
+    await this.redis.quit();
     await this.prisma.$disconnect();
 
     logger.info('Metrics collector stopped');
@@ -177,6 +190,31 @@ export class MetricsCollector {
           // Collect consumer metrics for this stream
           try {
             for await (const consumerInfo of conn.jsm.consumers.list(streamName)) {
+              const consumerKey = `${clusterId}:${streamName}:${consumerInfo.name}`;
+              const prevConsumer = this.previousConsumerStats.get(consumerKey);
+              const now = Date.now();
+
+              // Get delivered and ack sequences
+              const delivered = consumerInfo.delivered?.stream_seq || 0;
+              const ackFloor = consumerInfo.ack_floor?.stream_seq || 0;
+
+              let deliveredRate = 0;
+              let ackRate = 0;
+
+              if (prevConsumer) {
+                const timeDiff = (now - prevConsumer.timestamp) / 1000; // seconds
+                if (timeDiff > 0) {
+                  deliveredRate = Math.max(0, (delivered - prevConsumer.delivered) / timeDiff);
+                  ackRate = Math.max(0, (ackFloor - prevConsumer.ackFloor) / timeDiff);
+                }
+              }
+
+              this.previousConsumerStats.set(consumerKey, {
+                delivered,
+                ackFloor,
+                timestamp: now,
+              });
+
               consumerMetrics.push({
                 clusterId,
                 streamName,
@@ -186,8 +224,8 @@ export class MetricsCollector {
                 ackPending: consumerInfo.num_ack_pending,
                 redelivered: consumerInfo.num_redelivered,
                 waiting: consumerInfo.num_waiting,
-                deliveredRate: 0, // TODO: Calculate from delivered sequence
-                ackRate: 0, // TODO: Calculate from ack floor
+                deliveredRate,
+                ackRate,
                 lag: consumerInfo.num_pending,
               });
             }
@@ -222,6 +260,9 @@ export class MetricsCollector {
         });
 
         logger.debug({ count: streamMetrics.length }, 'Inserted stream metrics');
+
+        // Publish to Redis for real-time streaming
+        await this.publishStreamMetrics(streamMetrics);
       } catch (err) {
         logger.error({ err }, 'Error inserting stream metrics');
       }
@@ -248,9 +289,65 @@ export class MetricsCollector {
         });
 
         logger.debug({ count: consumerMetrics.length }, 'Inserted consumer metrics');
+
+        // Publish to Redis for real-time streaming
+        await this.publishConsumerMetrics(consumerMetrics);
       } catch (err) {
         logger.error({ err }, 'Error inserting consumer metrics');
       }
+    }
+  }
+
+  private async publishStreamMetrics(metrics: StreamMetrics[]): Promise<void> {
+    try {
+      for (const metric of metrics) {
+        await this.redis.publish(
+          METRICS_CHANNEL,
+          JSON.stringify({
+            type: 'stream',
+            channel: `stream:${metric.clusterId}:${metric.streamName}`,
+            data: {
+              clusterId: metric.clusterId,
+              streamName: metric.streamName,
+              timestamp: metric.timestamp.toISOString(),
+              messagesTotal: metric.messagesTotal,
+              bytesTotal: metric.bytesTotal,
+              messagesRate: metric.messagesRate,
+              bytesRate: metric.bytesRate,
+              consumerCount: metric.consumerCount,
+            },
+          })
+        );
+      }
+    } catch (err) {
+      logger.error({ err }, 'Error publishing stream metrics to Redis');
+    }
+  }
+
+  private async publishConsumerMetrics(metrics: ConsumerMetrics[]): Promise<void> {
+    try {
+      for (const metric of metrics) {
+        await this.redis.publish(
+          METRICS_CHANNEL,
+          JSON.stringify({
+            type: 'consumer',
+            channel: `consumer:${metric.clusterId}:${metric.streamName}:${metric.consumerName}`,
+            data: {
+              clusterId: metric.clusterId,
+              streamName: metric.streamName,
+              consumerName: metric.consumerName,
+              timestamp: metric.timestamp.toISOString(),
+              pendingCount: metric.pendingCount,
+              ackPending: metric.ackPending,
+              lag: metric.lag,
+              deliveredRate: metric.deliveredRate,
+              ackRate: metric.ackRate,
+            },
+          })
+        );
+      }
+    } catch (err) {
+      logger.error({ err }, 'Error publishing consumer metrics to Redis');
     }
   }
 

@@ -93,4 +93,39 @@ export const consumerRoutes: FastifyPluginAsync = async (fastify) => {
       return { consumer };
     }
   );
+
+  // POST /clusters/:cid/streams/:sid/consumers/:name/pause - Pause consumer
+  fastify.post<{
+    Params: { cid: string; sid: string; name: string };
+    Body: { pauseUntil?: string };
+  }>(
+    '/:cid/streams/:sid/consumers/:name/pause',
+    async (request) => {
+      const pauseUntil = request.body?.pauseUntil
+        ? new Date(request.body.pauseUntil)
+        : undefined;
+      const consumer = await consumerService.pauseConsumer(
+        request.user!.orgId,
+        request.params.cid,
+        request.params.sid,
+        request.params.name,
+        pauseUntil
+      );
+      return { consumer, paused: true };
+    }
+  );
+
+  // POST /clusters/:cid/streams/:sid/consumers/:name/resume - Resume consumer
+  fastify.post<{ Params: { cid: string; sid: string; name: string } }>(
+    '/:cid/streams/:sid/consumers/:name/resume',
+    async (request) => {
+      const consumer = await consumerService.resumeConsumer(
+        request.user!.orgId,
+        request.params.cid,
+        request.params.sid,
+        request.params.name
+      );
+      return { consumer, resumed: true };
+    }
+  );
 };

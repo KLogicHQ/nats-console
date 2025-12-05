@@ -5,6 +5,8 @@ import {
   createConsumer as natsCreateConsumer,
   updateConsumer as natsUpdateConsumer,
   deleteConsumer as natsDeleteConsumer,
+  pauseConsumer as natsPauseConsumer,
+  resumeConsumer as natsResumeConsumer,
 } from '../../lib/nats';
 import { NotFoundError } from '../../../../shared/src/index';
 import type { ConsumerInfo, CreateConsumerInput, UpdateConsumerInput } from '../../../../shared/src/index';
@@ -227,4 +229,43 @@ function mapReplayPolicy(policy: string): any {
     original: 'original',
   };
   return map[policy] || 'instant';
+}
+
+// ==================== Pause/Resume Operations ====================
+
+export async function pauseConsumer(
+  orgId: string,
+  clusterId: string,
+  streamName: string,
+  consumerName: string,
+  pauseUntil?: Date
+): Promise<ConsumerInfo> {
+  // Verify cluster belongs to org
+  const cluster = await prisma.natsCluster.findFirst({
+    where: { id: clusterId, orgId },
+  });
+
+  if (!cluster) {
+    throw new NotFoundError('Cluster', clusterId);
+  }
+
+  return natsPauseConsumer(clusterId, streamName, consumerName, pauseUntil);
+}
+
+export async function resumeConsumer(
+  orgId: string,
+  clusterId: string,
+  streamName: string,
+  consumerName: string
+): Promise<ConsumerInfo> {
+  // Verify cluster belongs to org
+  const cluster = await prisma.natsCluster.findFirst({
+    where: { id: clusterId, orgId },
+  });
+
+  if (!cluster) {
+    throw new NotFoundError('Cluster', clusterId);
+  }
+
+  return natsResumeConsumer(clusterId, streamName, consumerName);
 }

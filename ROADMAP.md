@@ -1,8 +1,8 @@
 # NATS JetStream Console - Roadmap
 
-## Current Status: Alpha
+## Current Status: Alpha (v0.3.0)
 
-The core infrastructure is in place with basic CRUD operations for clusters, streams, and consumers.
+Phase 1 (Core MVP), Phase 2 (Detail Views & Forms), and Phase 3 (Real-time & Monitoring) are complete. The application now includes full CRUD operations, detailed management views, metrics charts, real-time WebSocket updates, and a complete alert system with notification channels.
 
 ---
 
@@ -37,73 +37,76 @@ The core infrastructure is in place with basic CRUD operations for clusters, str
 
 ---
 
-## Phase 2: Detail Views & Forms 🚧 (In Progress)
+## Phase 2: Detail Views & Forms ✅ (Completed)
 
 ### Stream Management
-- [ ] Stream detail page
-  - [ ] Overview tab with stats
-  - [ ] Messages tab with browser
-  - [ ] Consumers tab
-  - [ ] Configuration tab
-  - [ ] Metrics tab with charts
-- [ ] Create stream dialog/page
-- [ ] Edit stream configuration
-- [ ] Delete stream with confirmation
-- [ ] Purge stream messages
-- [ ] Message publishing interface
+- [x] Stream detail page
+  - [x] Overview tab with stats
+  - [x] Messages tab with browser (pagination, JSON formatting, copy, expand/collapse)
+  - [x] Consumers tab
+  - [x] Configuration tab
+  - [x] Metrics tab with charts (message throughput, data throughput)
+- [x] Create stream dialog
+- [x] Edit stream configuration
+- [x] Delete stream with confirmation
+- [x] Purge stream messages
+- [x] Message publishing interface
 
 ### Consumer Management
-- [ ] Consumer detail page
-  - [ ] Overview with lag visualization
-  - [ ] Configuration details
-  - [ ] Metrics and performance
-- [ ] Create consumer dialog
-- [ ] Edit consumer configuration
-- [ ] Delete consumer
-- [ ] Pause/Resume consumer
+- [x] Consumer detail page
+  - [x] Overview with lag visualization (progress bars)
+  - [x] Configuration details
+  - [x] Metrics tab with charts (lag, pending, ack rate)
+- [x] Create consumer dialog
+- [x] Edit consumer configuration
+- [x] Delete consumer with confirmation
+- [x] Pause/Resume consumer
 
 ### Cluster Management
-- [ ] Cluster detail page
-  - [ ] Server info and health
-  - [ ] JetStream account info
-  - [ ] Connected streams overview
-  - [ ] Real-time metrics
-- [ ] Add cluster wizard
-- [ ] Edit cluster connection
-- [ ] Test connection functionality
-- [ ] Cluster health monitoring
+- [x] Cluster detail page
+  - [x] Server info and health
+  - [x] JetStream account info
+  - [x] Connected streams overview
+  - [x] Metrics tab with gauge charts (memory, connections, storage)
+- [x] Add cluster wizard
+- [x] Edit cluster connection
+- [x] Test connection functionality
+- [x] Cluster health monitoring
 
 ---
 
-## Phase 3: Real-time & Monitoring
+## Phase 3: Real-time & Monitoring ✅ (Completed)
 
 ### WebSocket Integration
-- [ ] WebSocket server in API
-- [ ] Real-time metrics streaming
-- [ ] Live message preview
-- [ ] Alert notifications
-- [ ] Connection status indicators
+- [x] WebSocket server in API
+- [x] Real-time metrics streaming via Redis pub/sub
+- [x] Live message preview
+- [x] Alert notifications (real-time via WebSocket)
+- [x] Connection status indicators in UI
 
 ### Charts & Visualization
-- [ ] Integrate charting library (Recharts/Chart.js)
-- [ ] Message throughput charts
-- [ ] Consumer lag visualization
-- [ ] Storage usage graphs
-- [ ] Historical trends
+- [x] Integrate charting library (ECharts)
+- [x] Message throughput charts
+- [x] Consumer lag visualization
+- [x] Storage usage graphs (gauge charts)
+- [x] Historical trends (via ClickHouse time-series)
 
 ### Alert System
-- [ ] Alert rule builder UI
-- [ ] Condition types:
-  - [ ] Consumer lag threshold
-  - [ ] Message rate anomaly
-  - [ ] Storage capacity
-  - [ ] Connection health
-- [ ] Notification channels:
-  - [ ] Email notifications
-  - [ ] Slack integration
-  - [ ] Webhook endpoints
-  - [ ] PagerDuty integration
-- [ ] Alert history and acknowledgment
+- [x] Alert rule builder UI
+- [x] Condition types:
+  - [x] Consumer lag threshold
+  - [x] Message rate anomaly
+  - [x] Storage capacity
+  - [x] Connection health
+- [x] Notification channels:
+  - [x] Email notifications (via Resend)
+  - [x] Slack integration
+  - [x] Webhook endpoints
+  - [x] PagerDuty integration
+  - [x] Microsoft Teams integration
+  - [x] Google Chat integration
+- [x] Alert history and acknowledgment
+- [x] Incident management (create, acknowledge, resolve, close)
 
 ---
 

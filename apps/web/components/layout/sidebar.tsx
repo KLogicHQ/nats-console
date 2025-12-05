@@ -16,6 +16,7 @@ import { cn } from '@/lib/utils';
 import { useAuthStore } from '@/stores/auth';
 import { Button } from '@/components/ui/button';
 import { Logo } from '@/components/logo';
+import { ConnectionStatus } from '@/components/ui/connection-status';
 
 const navigation = [
   { name: 'Overview', href: '/overview', icon: LayoutDashboard },
@@ -34,8 +35,9 @@ export function Sidebar() {
   return (
     <div className="flex h-full w-52 flex-col border-r bg-sidebar">
       {/* Logo */}
-      <div className="flex h-14 items-center border-b px-4">
+      <div className="flex h-14 items-center justify-between border-b px-4">
         <Logo href="/clusters" size="sm" />
+        <ConnectionStatus />
       </div>
 
       {/* Navigation */}

@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, Suspense } from 'react';
+import { useState, Suspense, useMemo } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
@@ -42,6 +42,8 @@ import {
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
 import { formatBytes, formatNumber, formatDuration } from '@nats-console/shared';
+import { LineChart } from '@/components/charts';
+import { CreateStreamDialog } from '@/components/forms/create-stream-dialog';
 
 const tabs: Tab[] = [
   { id: 'overview', label: 'Overview', icon: Database },
@@ -62,12 +64,16 @@ function StreamDetailContent() {
   const [messageSubject, setMessageSubject] = useState('');
   const [messageData, setMessageData] = useState('');
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
+  const [showEditDialog, setShowEditDialog] = useState(false);
   const [copiedMessageId, setCopiedMessageId] = useState<number | null>(null);
   const [expandedMessages, setExpandedMessages] = useState<Set<number>>(new Set());
 
   // Pagination state
   const [currentPage, setCurrentPage] = useState(1);
   const [pageSize, setPageSize] = useState(20);
+
+  // Metrics time range
+  const [metricsTimeRange, setMetricsTimeRange] = useState('1h');
 
   // Helper to format message data - detect JSON and pretty print
   const formatMessageData = (data: unknown): { formatted: string; isJson: boolean } => {
@@ -138,6 +144,47 @@ function StreamDetailContent() {
     },
     enabled: activeTab === 'messages' && !!streamData?.stream,
   });
+
+  // Metrics data
+  const getTimeRangeParams = () => {
+    const now = new Date();
+    const ranges: Record<string, number> = {
+      '1h': 60 * 60 * 1000,
+      '6h': 6 * 60 * 60 * 1000,
+      '24h': 24 * 60 * 60 * 1000,
+      '7d': 7 * 24 * 60 * 60 * 1000,
+    };
+    const from = new Date(now.getTime() - (ranges[metricsTimeRange] || ranges['1h']));
+    return {
+      clusterId,
+      from: from.toISOString(),
+      to: now.toISOString(),
+      interval: metricsTimeRange === '7d' ? '1h' : metricsTimeRange === '24h' ? '30m' : '5m',
+    };
+  };
+
+  const { data: metricsData, isLoading: isLoadingMetrics } = useQuery({
+    queryKey: ['stream-metrics', clusterId, streamName, metricsTimeRange],
+    queryFn: () => api.analytics.streamThroughput(streamName, getTimeRangeParams()),
+    enabled: activeTab === 'metrics',
+  });
+
+  // Transform metrics data for charts
+  const chartData = useMemo(() => {
+    if (!metricsData?.data?.length) return { messages: [], bytes: [] };
+    return {
+      messages: metricsData.data.map((d: any) => ({
+        name: 'Messages/s',
+        value: d.messagesRate || 0,
+        time: new Date(d.timestamp).toLocaleTimeString(),
+      })),
+      bytes: metricsData.data.map((d: any) => ({
+        name: 'Bytes/s',
+        value: d.bytesRate || 0,
+        time: new Date(d.timestamp).toLocaleTimeString(),
+      })),
+    };
+  }, [metricsData]);
 
   const publishMutation = useMutation({
     mutationFn: (data: { subject: string; data: string }) =>
@@ -214,7 +261,7 @@ function StreamDetailContent() {
           </div>
         </div>
         <div className="flex gap-2">
-          <Button variant="outline" size="sm">
+          <Button variant="outline" size="sm" onClick={() => setShowEditDialog(true)}>
             <Edit className="h-4 w-4" />
             Edit
           </Button>
@@ -259,6 +306,15 @@ function StreamDetailContent() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      {/* Edit Stream Dialog */}
+      <CreateStreamDialog
+        open={showEditDialog}
+        onOpenChange={setShowEditDialog}
+        clusterId={clusterId}
+        stream={stream}
+        mode="edit"
+      />
 
       {/* Tabs */}
       <TabsList tabs={tabs} activeTab={activeTab} onTabChange={setActiveTab} />
@@ -674,21 +730,119 @@ function StreamDetailContent() {
 
       {/* Metrics Tab */}
       {activeTab === 'metrics' && (
-        <Card>
-          <CardHeader>
-            <CardTitle>Stream Metrics</CardTitle>
-            <CardDescription>Performance metrics and trends</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <div className="h-64 flex items-center justify-center text-muted-foreground">
-              <div className="text-center">
-                <BarChart3 className="h-12 w-12 mx-auto mb-4 opacity-50" />
-                <p>Chart visualization coming soon</p>
-                <p className="text-sm">Integrate with your preferred charting library</p>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
+        <div className="space-y-6">
+          {/* Time Range Selector */}
+          <div className="flex justify-end">
+            <select
+              className="h-9 px-3 border rounded-md bg-background text-sm"
+              value={metricsTimeRange}
+              onChange={(e) => setMetricsTimeRange(e.target.value)}
+            >
+              <option value="1h">Last 1 hour</option>
+              <option value="6h">Last 6 hours</option>
+              <option value="24h">Last 24 hours</option>
+              <option value="7d">Last 7 days</option>
+            </select>
+          </div>
+
+          {/* Message Throughput Chart */}
+          <Card>
+            <CardHeader>
+              <CardTitle>Message Throughput</CardTitle>
+              <CardDescription>Messages per second over time</CardDescription>
+            </CardHeader>
+            <CardContent>
+              {isLoadingMetrics ? (
+                <div className="h-64 flex items-center justify-center">
+                  <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
+                </div>
+              ) : chartData.messages.length > 0 ? (
+                <LineChart
+                  data={chartData.messages}
+                  title=""
+                  yAxisLabel="msg/s"
+                  color="#2563eb"
+                  height={250}
+                />
+              ) : (
+                <div className="h-64 flex items-center justify-center text-muted-foreground">
+                  <div className="text-center">
+                    <BarChart3 className="h-12 w-12 mx-auto mb-4 opacity-50" />
+                    <p>No metrics data available</p>
+                    <p className="text-sm">Metrics will appear once the stream has activity</p>
+                  </div>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+
+          {/* Bytes Throughput Chart */}
+          <Card>
+            <CardHeader>
+              <CardTitle>Data Throughput</CardTitle>
+              <CardDescription>Bytes per second over time</CardDescription>
+            </CardHeader>
+            <CardContent>
+              {isLoadingMetrics ? (
+                <div className="h-64 flex items-center justify-center">
+                  <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
+                </div>
+              ) : chartData.bytes.length > 0 ? (
+                <LineChart
+                  data={chartData.bytes}
+                  title=""
+                  yAxisLabel="bytes/s"
+                  color="#16a34a"
+                  height={250}
+                />
+              ) : (
+                <div className="h-64 flex items-center justify-center text-muted-foreground">
+                  <div className="text-center">
+                    <BarChart3 className="h-12 w-12 mx-auto mb-4 opacity-50" />
+                    <p>No metrics data available</p>
+                    <p className="text-sm">Metrics will appear once the stream has activity</p>
+                  </div>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+
+          {/* Quick Stats */}
+          <div className="grid gap-4 md:grid-cols-4">
+            <Card>
+              <CardHeader className="pb-2">
+                <CardTitle className="text-sm font-medium">Current Messages</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="text-2xl font-bold">{formatNumber(stream.state?.messages || 0)}</div>
+              </CardContent>
+            </Card>
+            <Card>
+              <CardHeader className="pb-2">
+                <CardTitle className="text-sm font-medium">Current Size</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="text-2xl font-bold">{formatBytes(stream.state?.bytes || 0)}</div>
+              </CardContent>
+            </Card>
+            <Card>
+              <CardHeader className="pb-2">
+                <CardTitle className="text-sm font-medium">First Sequence</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="text-2xl font-bold">{formatNumber(stream.state?.first_seq || 0)}</div>
+              </CardContent>
+            </Card>
+            <Card>
+              <CardHeader className="pb-2">
+                <CardTitle className="text-sm font-medium">Last Sequence</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="text-2xl font-bold">{formatNumber(stream.state?.last_seq || 0)}</div>
+              </CardContent>
+            </Card>
+          </div>
+        </div>
       )}
     </div>
   );

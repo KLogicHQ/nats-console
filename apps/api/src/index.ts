@@ -9,6 +9,7 @@ import { connectDatabase, disconnectDatabase } from './lib/prisma';
 import { redis } from './lib/redis';
 import { connectInternalNats, disconnectInternalNats, disconnectAllClusters } from './lib/nats';
 import { closeClickHouseClient } from './lib/clickhouse';
+import { setupWebSocket } from './lib/websocket';
 
 // Import routes
 import { authRoutes } from './modules/auth/auth.routes';
@@ -136,6 +137,10 @@ async function start() {
 
     // Connect to internal NATS
     await connectInternalNats();
+
+    // Setup WebSocket server
+    setupWebSocket(app);
+    app.log.info('WebSocket server ready at /ws');
 
     // Start HTTP server
     await app.listen({

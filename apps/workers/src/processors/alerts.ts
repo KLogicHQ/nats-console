@@ -1,8 +1,11 @@
 import { PrismaClient, IncidentStatus, NotificationChannelType } from '@prisma/client';
 import { createClient, ClickHouseClient } from '@clickhouse/client';
+import Redis from 'ioredis';
 import pino from 'pino';
 import { config } from '../config';
 import type { AlertSeverity } from '../../../shared/src/index';
+
+const ALERTS_CHANNEL = 'alerts';
 
 const logger = pino({ name: 'alert-processor' });
 
@@ -44,6 +47,7 @@ interface AlertState {
 export class AlertProcessor {
   private prisma: PrismaClient;
   private clickhouse: ClickHouseClient;
+  private redis: Redis;
   private alertStates: Map<string, AlertState> = new Map();
   private processInterval: NodeJS.Timeout | null = null;
 
@@ -55,6 +59,7 @@ export class AlertProcessor {
       username: config.CLICKHOUSE_USER,
       password: config.CLICKHOUSE_PASSWORD,
     });
+    this.redis = new Redis(config.REDIS_URL);
   }
 
   async start(): Promise<void> {
@@ -77,6 +82,7 @@ export class AlertProcessor {
     }
 
     await this.clickhouse.close();
+    await this.redis.quit();
     await this.prisma.$disconnect();
 
     logger.info('Alert processor stopped');
@@ -307,6 +313,21 @@ export class AlertProcessor {
       where: { id: incident.id },
       data: { notifiedAt: new Date() },
     });
+
+    // Broadcast to WebSocket clients via Redis
+    await this.broadcastAlert({
+      type: 'incident_created',
+      incident: {
+        id: incident.id,
+        ruleId: rule.id,
+        ruleName: rule.name,
+        severity: rule.severity,
+        status: 'open',
+        metricValue,
+        threshold: rule.threshold.value,
+        triggeredAt: new Date().toISOString(),
+      },
+    });
   }
 
   private async resolveAlert(rule: AlertRule, incidentId: string): Promise<void> {
@@ -350,6 +371,27 @@ export class AlertProcessor {
 
     for (const channel of enabledChannels) {
       await this.sendNotification(channel, rule, 0, 'resolved', incidentId);
+    }
+
+    // Broadcast to WebSocket clients via Redis
+    await this.broadcastAlert({
+      type: 'incident_resolved',
+      incident: {
+        id: incidentId,
+        ruleId: rule.id,
+        ruleName: rule.name,
+        status: 'resolved',
+        resolvedAt: new Date().toISOString(),
+      },
+    });
+  }
+
+  private async broadcastAlert(data: Record<string, unknown>): Promise<void> {
+    try {
+      await this.redis.publish(ALERTS_CHANNEL, JSON.stringify(data));
+      logger.debug({ type: data.type }, 'Alert broadcasted to WebSocket clients');
+    } catch (err) {
+      logger.error({ err }, 'Error broadcasting alert to Redis');
     }
   }
 

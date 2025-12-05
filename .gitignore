@@ -39,3 +39,9 @@ apps/api/prisma/*.db-journal
 
 # Docker volumes (if local)
 .docker-data
+
+# Compiled TypeScript in shared package
+apps/shared/src/**/*.js
+apps/shared/src/**/*.js.map
+apps/shared/src/**/*.d.ts
+apps/shared/src/**/*.d.ts.map

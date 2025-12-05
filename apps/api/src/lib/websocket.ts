@@ -2,6 +2,7 @@ import { FastifyInstance } from 'fastify';
 import { WebSocket, WebSocketServer } from 'ws';
 import { verifyToken } from '../common/middleware/auth';
 import { logger } from './logger';
+import { subscribeToChannel, METRICS_CHANNEL, ALERTS_CHANNEL } from './redis';
 
 interface Client {
   ws: WebSocket;
@@ -76,7 +77,27 @@ export function setupWebSocket(fastify: FastifyInstance): WebSocketServer {
     }
   });
 
+  // Set up Redis subscription bridge for real-time updates
+  setupRedisBridge();
+
   return wss;
+}
+
+function setupRedisBridge() {
+  // Subscribe to metrics channel and broadcast to WebSocket clients
+  subscribeToChannel(METRICS_CHANNEL, (data) => {
+    const channel = data.channel || 'metrics';
+    broadcast(channel, data);
+    logger.debug({ channel }, 'Broadcasting metrics to WebSocket clients');
+  });
+
+  // Subscribe to alerts channel and broadcast to WebSocket clients
+  subscribeToChannel(ALERTS_CHANNEL, (data) => {
+    broadcast('alerts', data);
+    logger.debug('Broadcasting alert to WebSocket clients');
+  });
+
+  logger.info('Redis to WebSocket bridge established');
 }
 
 function handleMessage(clientId: string, client: Client, message: any) {

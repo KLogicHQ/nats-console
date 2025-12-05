@@ -1,6 +1,6 @@
 'use client';
 
-import { Suspense, useState } from 'react';
+import { Suspense, useState, useMemo } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
@@ -36,6 +36,7 @@ import {
 } from '@/components/ui/alert-dialog';
 import { formatBytes, formatNumber } from '@nats-console/shared';
 import { CreateClusterDialog } from '@/components/forms/create-cluster-dialog';
+import { GaugeChart } from '@/components/charts';
 
 const tabs: Tab[] = [
   { id: 'overview', label: 'Overview', icon: Server },
@@ -425,21 +426,127 @@ function ClusterDetailContent() {
 
       {/* Metrics Tab */}
       {activeTab === 'metrics' && (
-        <Card>
-          <CardHeader>
-            <CardTitle>Cluster Metrics</CardTitle>
-            <CardDescription>Performance metrics and trends</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <div className="h-64 flex items-center justify-center text-muted-foreground">
-              <div className="text-center">
-                <BarChart3 className="h-12 w-12 mx-auto mb-4 opacity-50" />
-                <p>Chart visualization coming soon</p>
-                <p className="text-sm">Integrate with your preferred charting library</p>
+        <div className="space-y-6">
+          {/* Resource Usage Gauges */}
+          <div className="grid gap-4 md:grid-cols-3">
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-sm font-medium">Memory Usage</CardTitle>
+              </CardHeader>
+              <CardContent className="flex justify-center">
+                <GaugeChart
+                  value={healthData?.mem ? Math.round(healthData.mem / (1024 * 1024)) : 0}
+                  max={1024}
+                  title={formatBytes(healthData?.mem || 0)}
+                  unit=" MB"
+                  color="#2563eb"
+                  height={150}
+                />
+              </CardContent>
+            </Card>
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-sm font-medium">Connections</CardTitle>
+              </CardHeader>
+              <CardContent className="flex justify-center">
+                <GaugeChart
+                  value={healthData?.connections || 0}
+                  max={100}
+                  title={`${healthData?.connections || 0} active`}
+                  color="#16a34a"
+                  height={150}
+                />
+              </CardContent>
+            </Card>
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-sm font-medium">Storage Usage</CardTitle>
+              </CardHeader>
+              <CardContent className="flex justify-center">
+                <GaugeChart
+                  value={jetstream?.bytes ? Math.round(jetstream.bytes / (1024 * 1024)) : 0}
+                  max={1024}
+                  title={formatBytes(jetstream?.bytes || 0)}
+                  unit=" MB"
+                  color="#f59e0b"
+                  height={150}
+                />
+              </CardContent>
+            </Card>
+          </div>
+
+          {/* JetStream Stats */}
+          <Card>
+            <CardHeader>
+              <CardTitle>JetStream Overview</CardTitle>
+              <CardDescription>Current JetStream resource usage</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+                <div className="space-y-2">
+                  <p className="text-sm text-muted-foreground">Streams</p>
+                  <p className="text-3xl font-bold">{formatNumber(jetstream?.streams || 0)}</p>
+                </div>
+                <div className="space-y-2">
+                  <p className="text-sm text-muted-foreground">Consumers</p>
+                  <p className="text-3xl font-bold">{formatNumber(jetstream?.consumers || 0)}</p>
+                </div>
+                <div className="space-y-2">
+                  <p className="text-sm text-muted-foreground">Messages</p>
+                  <p className="text-3xl font-bold">{formatNumber(jetstream?.messages || 0)}</p>
+                </div>
+                <div className="space-y-2">
+                  <p className="text-sm text-muted-foreground">Data Size</p>
+                  <p className="text-3xl font-bold">{formatBytes(jetstream?.bytes || 0)}</p>
+                </div>
               </div>
-            </div>
-          </CardContent>
-        </Card>
+            </CardContent>
+          </Card>
+
+          {/* Server Info */}
+          <Card>
+            <CardHeader>
+              <CardTitle>Server Performance</CardTitle>
+              <CardDescription>Server runtime statistics</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="grid gap-4 md:grid-cols-2">
+                <div className="space-y-3">
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground">Uptime</span>
+                    <span className="font-medium">{healthData?.uptime || '-'}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground">Memory</span>
+                    <span className="font-medium">{formatBytes(healthData?.mem || 0)}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground">Connections</span>
+                    <span className="font-medium">{formatNumber(healthData?.connections || 0)}</span>
+                  </div>
+                </div>
+                <div className="space-y-3">
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground">Server Version</span>
+                    <span className="font-medium">{cluster.version || '-'}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground">Go Version</span>
+                    <span className="font-medium">{healthData?.go || '-'}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground">Status</span>
+                    <span className={`font-medium capitalize ${
+                      cluster.status === 'connected' ? 'text-green-500' : 'text-red-500'
+                    }`}>
+                      {cluster.status}
+                    </span>
+                  </div>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
       )}
     </div>
   );

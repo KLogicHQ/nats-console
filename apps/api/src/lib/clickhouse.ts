@@ -92,11 +92,11 @@ export async function queryStreamMetrics(
     format: 'JSONEachRow',
   });
 
-  const rows = await result.json<any[]>();
+  const rows = await result.json() as Record<string, unknown>[];
   return rows.map((row) => ({
-    clusterId: row.cluster_id,
-    streamName: row.stream_name,
-    timestamp: new Date(row.timestamp),
+    clusterId: row.cluster_id as string,
+    streamName: row.stream_name as string,
+    timestamp: new Date(row.timestamp as string),
     messagesTotal: Number(row.messages_total),
     bytesTotal: Number(row.bytes_total),
     messagesRate: Number(row.messages_rate),
@@ -104,7 +104,7 @@ export async function queryStreamMetrics(
     consumerCount: Number(row.consumer_count),
     firstSeq: Number(row.first_seq),
     lastSeq: Number(row.last_seq),
-    subjects: row.subjects || [],
+    subjects: (row.subjects as string[]) || [],
   }));
 }
 
@@ -175,12 +175,12 @@ export async function queryConsumerMetrics(
     format: 'JSONEachRow',
   });
 
-  const rows = await result.json<any[]>();
+  const rows = await result.json() as Record<string, unknown>[];
   return rows.map((row) => ({
-    clusterId: row.cluster_id,
-    streamName: row.stream_name,
-    consumerName: row.consumer_name,
-    timestamp: new Date(row.timestamp),
+    clusterId: row.cluster_id as string,
+    streamName: row.stream_name as string,
+    consumerName: row.consumer_name as string,
+    timestamp: new Date(row.timestamp as string),
     pendingCount: Number(row.pending_count),
     ackPending: Number(row.ack_pending),
     redelivered: Number(row.redelivered),
@@ -293,7 +293,7 @@ export async function queryAuditLogs(
     query_params: params,
     format: 'JSONEachRow',
   });
-  const countRows = await countResult.json<{ total: string }[]>();
+  const countRows = await countResult.json() as { total: string }[];
   const total = parseInt(countRows[0]?.total || '0');
 
   // Get logs
@@ -309,27 +309,193 @@ export async function queryAuditLogs(
     format: 'JSONEachRow',
   });
 
-  const rows = await result.json<any[]>();
+  const rows = await result.json() as Record<string, unknown>[];
   const logs = rows.map((row) => ({
-    id: row.id,
-    orgId: row.org_id,
-    userId: row.user_id,
-    userEmail: row.user_email,
-    timestamp: new Date(row.timestamp),
-    action: row.action,
-    resourceType: row.resource_type,
-    resourceId: row.resource_id,
-    resourceName: row.resource_name,
-    clusterId: row.cluster_id,
-    ipAddress: row.ip_address,
-    userAgent: row.user_agent,
-    requestId: row.request_id,
-    changes: row.changes,
-    status: row.status,
-    errorMessage: row.error_message,
+    id: row.id as string,
+    orgId: row.org_id as string,
+    userId: row.user_id as string,
+    userEmail: row.user_email as string,
+    timestamp: new Date(row.timestamp as string),
+    action: row.action as string,
+    resourceType: row.resource_type as string,
+    resourceId: row.resource_id as string,
+    resourceName: row.resource_name as string,
+    clusterId: (row.cluster_id as string) || null,
+    ipAddress: row.ip_address as string,
+    userAgent: row.user_agent as string,
+    requestId: row.request_id as string,
+    changes: row.changes as Record<string, unknown>,
+    status: row.status as string,
+    errorMessage: row.error_message as string | undefined,
   }));
 
   return { logs, total };
+}
+
+// ==================== Cluster Metrics Queries ====================
+
+export async function queryClusterOverview(
+  clusterId?: string
+): Promise<{
+  totalStreams: number;
+  totalConsumers: number;
+  totalMessages: number;
+  messageRate: number;
+  activeAlerts: number;
+}> {
+  const ch = getClickHouseClient();
+
+  // Get latest stream metrics for counts
+  const streamQuery = clusterId
+    ? `
+      SELECT
+        count(DISTINCT stream_name) as total_streams,
+        sum(consumer_count) as total_consumers,
+        sum(messages_total) as total_messages,
+        avg(messages_rate) as message_rate
+      FROM stream_metrics
+      WHERE cluster_id = {clusterId:UUID}
+        AND timestamp >= now() - INTERVAL 5 MINUTE
+    `
+    : `
+      SELECT
+        count(DISTINCT stream_name) as total_streams,
+        count(DISTINCT cluster_id, consumer_name) as total_consumers,
+        sum(messages_total) as total_messages,
+        avg(messages_rate) as message_rate
+      FROM stream_metrics
+      WHERE timestamp >= now() - INTERVAL 5 MINUTE
+    `;
+
+  try {
+    const result = await ch.query({
+      query: streamQuery,
+      query_params: clusterId ? { clusterId } : {},
+      format: 'JSONEachRow',
+    });
+
+    const rows = await result.json() as Record<string, unknown>[];
+    const row = rows[0] || {};
+
+    return {
+      totalStreams: Number(row.total_streams) || 0,
+      totalConsumers: Number(row.total_consumers) || 0,
+      totalMessages: Number(row.total_messages) || 0,
+      messageRate: Number(row.message_rate) || 0,
+      activeAlerts: 0, // Alerts are managed separately
+    };
+  } catch {
+    return {
+      totalStreams: 0,
+      totalConsumers: 0,
+      totalMessages: 0,
+      messageRate: 0,
+      activeAlerts: 0,
+    };
+  }
+}
+
+export async function queryOverviewMetrics(
+  clusterId?: string,
+  timeRange: string = '1h'
+): Promise<{
+  totalMessages: number;
+  totalBytes: number;
+  avgThroughput: number;
+  avgLatency: number;
+  messagesTrend: number;
+  bytesTrend: number;
+  throughputTrend: number;
+  latencyTrend: number;
+}> {
+  const ch = getClickHouseClient();
+
+  // Parse time range
+  const rangeHours: Record<string, number> = {
+    '1h': 1,
+    '6h': 6,
+    '24h': 24,
+    '7d': 168,
+  };
+  const hours = rangeHours[timeRange] || 1;
+
+  const clusterFilter = clusterId ? 'AND cluster_id = {clusterId:UUID}' : '';
+
+  try {
+    // Current period metrics
+    const currentResult = await ch.query({
+      query: `
+        SELECT
+          sum(messages_total) as total_messages,
+          sum(bytes_total) as total_bytes,
+          avg(messages_rate) as avg_throughput
+        FROM stream_metrics
+        WHERE timestamp >= now() - INTERVAL ${hours} HOUR
+          ${clusterFilter}
+      `,
+      query_params: clusterId ? { clusterId } : {},
+      format: 'JSONEachRow',
+    });
+
+    const currentRows = await currentResult.json() as Record<string, unknown>[];
+    const current = currentRows[0] || {};
+
+    // Previous period for trend calculation
+    const previousResult = await ch.query({
+      query: `
+        SELECT
+          sum(messages_total) as total_messages,
+          sum(bytes_total) as total_bytes,
+          avg(messages_rate) as avg_throughput
+        FROM stream_metrics
+        WHERE timestamp >= now() - INTERVAL ${hours * 2} HOUR
+          AND timestamp < now() - INTERVAL ${hours} HOUR
+          ${clusterFilter}
+      `,
+      query_params: clusterId ? { clusterId } : {},
+      format: 'JSONEachRow',
+    });
+
+    const previousRows = await previousResult.json() as Record<string, unknown>[];
+    const previous = previousRows[0] || {};
+
+    // Calculate trends (percentage change)
+    const calcTrend = (curr: number, prev: number) => {
+      if (prev === 0) return curr > 0 ? 100 : 0;
+      return ((curr - prev) / prev) * 100;
+    };
+
+    return {
+      totalMessages: Number(current.total_messages) || 0,
+      totalBytes: Number(current.total_bytes) || 0,
+      avgThroughput: Number(current.avg_throughput) || 0,
+      avgLatency: 0, // Latency requires message-level tracking
+      messagesTrend: calcTrend(
+        Number(current.total_messages) || 0,
+        Number(previous.total_messages) || 0
+      ),
+      bytesTrend: calcTrend(
+        Number(current.total_bytes) || 0,
+        Number(previous.total_bytes) || 0
+      ),
+      throughputTrend: calcTrend(
+        Number(current.avg_throughput) || 0,
+        Number(previous.avg_throughput) || 0
+      ),
+      latencyTrend: 0,
+    };
+  } catch {
+    return {
+      totalMessages: 0,
+      totalBytes: 0,
+      avgThroughput: 0,
+      avgLatency: 0,
+      messagesTrend: 0,
+      bytesTrend: 0,
+      throughputTrend: 0,
+      latencyTrend: 0,
+    };
+  }
 }
 
 // ==================== Helpers ====================

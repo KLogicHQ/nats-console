@@ -298,6 +298,40 @@ export async function deleteConsumer(clusterId: string, streamName: string, cons
   return jsm.consumers.delete(streamName, consumerName);
 }
 
+export async function pauseConsumer(
+  clusterId: string,
+  streamName: string,
+  consumerName: string,
+  pauseUntil?: Date
+): Promise<ConsumerInfo> {
+  const jsm = getClusterJetStreamManager(clusterId);
+  // Get current consumer info
+  const consumer = await jsm.consumers.info(streamName, consumerName);
+
+  // Update with pause_until set to a future time
+  const until = pauseUntil || new Date(Date.now() + 100 * 365 * 24 * 60 * 60 * 1000); // 100 years if no time specified
+  return jsm.consumers.update(streamName, consumerName, {
+    ...consumer.config,
+    pause_until: until,
+  });
+}
+
+export async function resumeConsumer(
+  clusterId: string,
+  streamName: string,
+  consumerName: string
+): Promise<ConsumerInfo> {
+  const jsm = getClusterJetStreamManager(clusterId);
+  // Get current consumer info
+  const consumer = await jsm.consumers.info(streamName, consumerName);
+
+  // Update with pause_until removed (set to epoch/past time)
+  return jsm.consumers.update(streamName, consumerName, {
+    ...consumer.config,
+    pause_until: undefined,
+  });
+}
+
 // ==================== Message Operations ====================
 
 export async function publishMessage(

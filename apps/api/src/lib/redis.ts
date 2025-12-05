@@ -145,3 +145,67 @@ export async function getUserPermissions(userId: string, orgId: string): Promise
 export async function invalidateUserPermissions(userId: string, orgId: string): Promise<void> {
   await redis.del(`${PERMISSIONS_PREFIX}${userId}:${orgId}`);
 }
+
+// Pub/Sub for real-time metrics
+const METRICS_CHANNEL = 'metrics';
+const ALERTS_CHANNEL = 'alerts';
+
+// Subscriber client for pub/sub (separate from main client)
+let subscriber: Redis | null = null;
+const messageHandlers = new Map<string, Set<(message: any) => void>>();
+
+export function getSubscriber(): Redis {
+  if (!subscriber) {
+    subscriber = new Redis(config.REDIS_URL, {
+      maxRetriesPerRequest: 3,
+      retryStrategy(times) {
+        const delay = Math.min(times * 50, 2000);
+        return delay;
+      },
+    });
+
+    subscriber.on('message', (channel, message) => {
+      try {
+        const data = JSON.parse(message);
+        const handlers = messageHandlers.get(channel);
+        handlers?.forEach((handler) => handler(data));
+      } catch (err) {
+        console.error('Failed to parse Redis message:', err);
+      }
+    });
+  }
+  return subscriber;
+}
+
+export function subscribeToChannel(channel: string, handler: (data: any) => void): () => void {
+  const sub = getSubscriber();
+
+  if (!messageHandlers.has(channel)) {
+    messageHandlers.set(channel, new Set());
+    sub.subscribe(channel);
+  }
+
+  messageHandlers.get(channel)!.add(handler);
+
+  // Return unsubscribe function
+  return () => {
+    const handlers = messageHandlers.get(channel);
+    if (handlers) {
+      handlers.delete(handler);
+      if (handlers.size === 0) {
+        sub.unsubscribe(channel);
+        messageHandlers.delete(channel);
+      }
+    }
+  };
+}
+
+export async function publishMetrics(data: any): Promise<void> {
+  await redis.publish(METRICS_CHANNEL, JSON.stringify(data));
+}
+
+export async function publishAlert(data: any): Promise<void> {
+  await redis.publish(ALERTS_CHANNEL, JSON.stringify(data));
+}
+
+export { METRICS_CHANNEL, ALERTS_CHANNEL };

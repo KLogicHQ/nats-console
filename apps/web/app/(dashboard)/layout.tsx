@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuthStore } from '@/stores/auth';
 import { Sidebar } from '@/components/layout/sidebar';
+import { WebSocketProvider } from '@/components/providers/websocket-provider';
 
 export default function DashboardLayout({
   children,
@@ -39,12 +40,12 @@ export default function DashboardLayout({
           <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
         </div>
       ) : (
-        <>
+        <WebSocketProvider>
           <Sidebar />
           <main className="flex-1 overflow-auto bg-white">
             <div className="p-6">{children}</div>
           </main>
-        </>
+        </WebSocketProvider>
       )}
     </div>
   );
