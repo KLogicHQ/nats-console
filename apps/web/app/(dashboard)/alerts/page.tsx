@@ -129,10 +129,17 @@ const defaultRule = {
   cooldownMins: 5,
 };
 
-const defaultChannel = {
+type ChannelType = 'email' | 'slack' | 'pagerduty' | 'webhook' | 'teams' | 'google_chat';
+
+const defaultChannel: {
+  name: string;
+  type: ChannelType;
+  config: Record<string, any>;
+  isEnabled: boolean;
+} = {
   name: '',
-  type: 'slack' as const,
-  config: {} as Record<string, any>,
+  type: 'slack',
+  config: {},
   isEnabled: true,
 };
 

@@ -48,7 +48,7 @@ export function CreateConsumerDialog({
   mode = 'create',
 }: CreateConsumerDialogProps) {
   const queryClient = useQueryClient();
-  const isEditMode = mode === 'edit' && consumer;
+  const isEditMode = mode === 'edit' && !!consumer;
 
   const getInitialFormData = () => ({
     name: consumer?.name || '',

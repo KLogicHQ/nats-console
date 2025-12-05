@@ -32,8 +32,8 @@ const envSchema = z.object({
   // CORS
   CORS_ORIGIN: z.string().default('http://localhost:3000'),
 
-  // Rate limiting
-  RATE_LIMIT_MAX: z.coerce.number().default(100),
+  // Rate limiting (only applies in production, disabled in development)
+  RATE_LIMIT_MAX: z.coerce.number().default(1000), // 1000 requests per window in production
   RATE_LIMIT_WINDOW: z.coerce.number().default(60000), // 1 minute
 });
 

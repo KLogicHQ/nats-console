@@ -52,10 +52,13 @@ await app.register(helmet, {
   contentSecurityPolicy: false, // Disable for API
 });
 
-await app.register(rateLimit, {
-  max: config.RATE_LIMIT_MAX,
-  timeWindow: config.RATE_LIMIT_WINDOW,
-});
+// Only enable rate limiting in production
+if (config.NODE_ENV !== 'development') {
+  await app.register(rateLimit, {
+    max: config.RATE_LIMIT_MAX,
+    timeWindow: config.RATE_LIMIT_WINDOW,
+  });
+}
 
 await app.register(sensible);
 

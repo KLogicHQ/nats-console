@@ -2,6 +2,8 @@
 
 A modern, enterprise-grade web console for managing NATS JetStream clusters. Built with Next.js, Node.js, and TypeScript, featuring real-time monitoring and a developer-friendly experience.
 
+**Maintained by [KLogic](https://klogic.io)**
+
 ![NATS Console](https://img.shields.io/badge/NATS-JetStream-blue)
 ![TypeScript](https://img.shields.io/badge/TypeScript-5.0-blue)
 ![Next.js](https://img.shields.io/badge/Next.js-15-black)
@@ -331,30 +333,40 @@ make docker-down            # Stop all containers
 
 ```
 ┌─────────────────────────────────────────────────────────────────┐
-│                         Load Balancer                           │
-└─────────────────────────┬───────────────────────────────────────┘
-                          │
-          ┌───────────────┴───────────────┐
-          │                               │
-    ┌─────▼─────┐                   ┌─────▼─────┐
-    │  Web UI   │                   │    API    │
-    │ (Next.js) │                   │ (Fastify) │
-    └─────┬─────┘                   └─────┬─────┘
-          │                               │
-          │     ┌─────────────────────────┼─────────────────┐
-          │     │                         │                 │
-          │  ┌──▼──┐  ┌────────┐  ┌──────▼─────┐  ┌───────▼──────┐
-          │  │Redis│  │ClickHo │  │ PostgreSQL │  │   Workers    │
-          │  │Cache│  │  use   │  │   (Data)   │  │ (Background) │
-          │  └─────┘  └────────┘  └────────────┘  └───────┬──────┘
-          │                                               │
-          │           ┌───────────────────────────────────┘
-          │           │
-     ┌────▼───────────▼────┐
-     │   NATS JetStream    │
-     │   (Message Broker)  │
-     └─────────────────────┘
+│                          Browser                                │
+└─────────────────────────────┬───────────────────────────────────┘
+                              │
+                        ┌─────▼─────┐
+                        │  Web UI   │
+                        │ (Next.js) │
+                        └─────┬─────┘
+                              │ HTTP/REST
+                              │
+                        ┌─────▼─────┐
+                        │    API    │◄─────────────────────────────┐
+                        │ (Fastify) │                              │
+                        └─────┬─────┘                              │
+                              │                                    │
+          ┌───────────────────┼───────────────────┐                │
+          │                   │                   │                │
+    ┌─────▼─────┐       ┌─────▼─────┐       ┌─────▼─────┐    ┌─────▼──────┐
+    │ PostgreSQL│       │   Redis   │       │ ClickHouse│    │  Workers   │
+    │   (Data)  │       │  (Cache)  │       │ (Metrics) │    │(Background)│
+    └───────────┘       └───────────┘       └───────────┘    └─────┬──────┘
+                                                                   │
+          ┌────────────────────────────────────────────────────────┘
+          │
+          │  ┌─────────────────────────────────────────────────────┐
+          │  │          NATS JetStream Clusters                    │
+          │  │  (Managed by API - streams, consumers, messages)    │
+          └──►                                                     │
+             └─────────────────────────────────────────────────────┘
 ```
+
+**Data Flow:**
+- **Web UI → API**: All frontend requests go through the REST API
+- **API → NATS**: API connects to NATS clusters to manage streams/consumers
+- **Workers → NATS**: Background jobs for metrics collection and alerting
 
 ---
 

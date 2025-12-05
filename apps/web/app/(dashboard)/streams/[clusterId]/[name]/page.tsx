@@ -93,14 +93,14 @@ function StreamDetailContent() {
     setTimeout(() => setCopiedMessageId(null), 2000);
   };
 
-  // Toggle message expansion
-  const toggleMessageExpand = (seq: number) => {
+  // Toggle message expansion (using index for unique identification)
+  const toggleMessageExpand = (index: number) => {
     setExpandedMessages(prev => {
       const next = new Set(prev);
-      if (next.has(seq)) {
-        next.delete(seq);
+      if (next.has(index)) {
+        next.delete(index);
       } else {
-        next.add(seq);
+        next.add(index);
       }
       return next;
     });
@@ -109,8 +109,8 @@ function StreamDetailContent() {
   // Expand all messages on current page
   const expandAllMessages = () => {
     if (messagesData?.messages) {
-      const allSeqs = new Set(messagesData.messages.map((msg: any) => msg.seq));
-      setExpandedMessages(allSeqs);
+      const allIndices = new Set(messagesData.messages.map((_: any, idx: number) => idx));
+      setExpandedMessages(allIndices);
     }
   };
 
@@ -403,6 +403,27 @@ function StreamDetailContent() {
                 </CardDescription>
               </div>
               <div className="flex items-center gap-2">
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="h-8 text-xs"
+                  onClick={expandAllMessages}
+                  disabled={!messagesData?.messages?.length}
+                >
+                  <Maximize2 className="h-3 w-3 mr-1" />
+                  Expand All
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="h-8 text-xs"
+                  onClick={collapseAllMessages}
+                  disabled={expandedMessages.size === 0}
+                >
+                  <Minimize2 className="h-3 w-3 mr-1" />
+                  Collapse All
+                </Button>
+                <div className="w-px h-6 bg-border" />
                 <select
                   className="h-9 px-3 border rounded-md bg-background text-sm"
                   value={pageSize}
@@ -436,7 +457,7 @@ function StreamDetailContent() {
                   <div className="space-y-2">
                     {messagesData?.messages?.map((msg: any, idx: number) => {
                       const { formatted, isJson } = formatMessageData(msg.data);
-                      const isExpanded = expandedMessages.has(msg.seq);
+                      const isExpanded = expandedMessages.has(idx);
                       const lineCount = formatted.split('\n').length;
                       const isLongContent = lineCount > 5 || formatted.length > 300;
 
@@ -444,9 +465,12 @@ function StreamDetailContent() {
                         <div key={idx} className="p-3 border rounded-lg">
                           <div className="flex justify-between items-center text-sm mb-2">
                             <div className="flex items-center gap-2">
-                              {isJson && isLongContent && (
+                              {isLongContent && (
                                 <button
-                                  onClick={() => toggleMessageExpand(msg.seq)}
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    toggleMessageExpand(idx);
+                                  }}
                                   className="p-0.5 hover:bg-muted rounded"
                                 >
                                   {isExpanded ? (
@@ -467,7 +491,10 @@ function StreamDetailContent() {
                                 variant="ghost"
                                 size="icon"
                                 className="h-6 w-6"
-                                onClick={() => copyMessage(msg, msg.seq)}
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  copyMessage(msg, msg.seq);
+                                }}
                               >
                                 {copiedMessageId === msg.seq ? (
                                   <Check className="h-3 w-3 text-green-500" />
@@ -493,7 +520,10 @@ function StreamDetailContent() {
                             {isLongContent && !isExpanded && (
                               <div
                                 className="absolute bottom-0 left-0 right-0 h-8 bg-gradient-to-t from-muted to-transparent cursor-pointer flex items-end justify-center pb-1"
-                                onClick={() => toggleMessageExpand(msg.seq)}
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  toggleMessageExpand(idx);
+                                }}
                               >
                                 <span className="text-[10px] text-muted-foreground">Click to expand</span>
                               </div>
@@ -504,37 +534,13 @@ function StreamDetailContent() {
                     })}
                   </div>
 
-                  {/* Pagination and Controls */}
+                  {/* Pagination */}
+                  {totalPages > 1 && (
                   <div className="flex items-center justify-between mt-4 pt-4 border-t">
-                    <div className="flex items-center gap-4">
-                      <div className="text-sm text-muted-foreground">
-                        {totalPages > 1 ? `Page ${currentPage} of ${formatNumber(totalPages)}` : `${formatNumber(messagesData?.messages?.length || 0)} messages`}
-                      </div>
-                      <div className="flex items-center gap-1 border-l pl-4">
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          className="h-7 text-xs"
-                          onClick={expandAllMessages}
-                          disabled={!messagesData?.messages?.length}
-                        >
-                          <Maximize2 className="h-3 w-3 mr-1" />
-                          Expand All
-                        </Button>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          className="h-7 text-xs"
-                          onClick={collapseAllMessages}
-                          disabled={expandedMessages.size === 0}
-                        >
-                          <Minimize2 className="h-3 w-3 mr-1" />
-                          Collapse All
-                        </Button>
-                      </div>
+                    <div className="text-sm text-muted-foreground">
+                      Page {currentPage} of {formatNumber(totalPages)}
                     </div>
-                    {totalPages > 1 && (
-                      <div className="flex items-center gap-1">
+                    <div className="flex items-center gap-1">
                         <Button
                           variant="outline"
                           size="icon"
@@ -584,9 +590,9 @@ function StreamDetailContent() {
                         >
                           <ChevronsRight className="h-4 w-4" />
                         </Button>
-                      </div>
-                    )}
+                    </div>
                   </div>
+                  )}
                 </>
               )}
             </CardContent>
