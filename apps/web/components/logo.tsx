@@ -1,4 +1,5 @@
 import Link from 'next/link';
+import Image from 'next/image';
 import { cn } from '@/lib/utils';
 
 interface LogoProps {
@@ -10,21 +11,20 @@ interface LogoProps {
 
 export function Logo({ className, showText = true, size = 'md', href = '/' }: LogoProps) {
   const sizes = {
-    sm: { icon: 'h-6 w-6', text: 'text-base' },
-    md: { icon: 'h-8 w-8', text: 'text-lg' },
-    lg: { icon: 'h-10 w-10', text: 'text-xl' },
+    sm: { icon: 24, text: 'text-base' },
+    md: { icon: 32, text: 'text-lg' },
+    lg: { icon: 40, text: 'text-xl' },
   };
 
   const content = (
     <div className={cn('flex items-center gap-2', className)}>
-      <div
-        className={cn(
-          'rounded-lg bg-primary flex items-center justify-center',
-          sizes[size].icon
-        )}
-      >
-        <span className="text-primary-foreground font-bold text-sm">N</span>
-      </div>
+      <Image
+        src="/icon.svg"
+        alt="NATS Console"
+        width={sizes[size].icon}
+        height={sizes[size].icon}
+        className="rounded-lg"
+      />
       {showText && (
         <span className={cn('font-semibold', sizes[size].text)}>NATS Console</span>
       )}
