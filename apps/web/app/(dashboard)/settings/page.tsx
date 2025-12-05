@@ -2,11 +2,13 @@
 
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { Save, User, Bell, Shield, Key, Palette } from 'lucide-react';
+import { Save, User, Bell, Shield, Key, Palette, Users, UserPlus, Trash2, Mail } from 'lucide-react';
 import { useAuthStore } from '@/stores/auth';
+import { api } from '@/lib/api';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { InviteUserDialog } from '@/components/forms/invite-user-dialog';
 
 export default function SettingsPage() {
   const { user } = useAuthStore();
@@ -26,8 +28,30 @@ export default function SettingsPage() {
     alertDigest: 'daily',
   });
 
+  const [showInviteDialog, setShowInviteDialog] = useState(false);
+
+  // Fetch team members
+  const { data: membersData } = useQuery({
+    queryKey: ['organization-members'],
+    queryFn: () => api.auth.me().then(() => []), // TODO: Add members endpoint
+  });
+
+  // Fetch pending invites
+  const { data: invitesData, refetch: refetchInvites } = useQuery({
+    queryKey: ['invites'],
+    queryFn: () => api.invites.list(),
+  });
+
+  const revokeMutation = useMutation({
+    mutationFn: (id: string) => api.invites.revoke(id),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['invites'] });
+    },
+  });
+
   const tabs = [
     { id: 'profile', label: 'Profile', icon: User },
+    { id: 'team', label: 'Team', icon: Users },
     { id: 'notifications', label: 'Notifications', icon: Bell },
     { id: 'security', label: 'Security', icon: Shield },
     { id: 'api-keys', label: 'API Keys', icon: Key },
@@ -103,11 +127,101 @@ export default function SettingsPage() {
                   />
                 </div>
                 <Button>
-                  <Save className="h-4 w-4 mr-2" />
+                  <Save className="h-4 w-4" />
                   Save Changes
                 </Button>
               </CardContent>
             </Card>
+          )}
+
+          {activeTab === 'team' && (
+            <div className="space-y-6">
+              <Card>
+                <CardHeader>
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <CardTitle>Team Members</CardTitle>
+                      <CardDescription>Manage your organization's team members</CardDescription>
+                    </div>
+                    <Button onClick={() => setShowInviteDialog(true)}>
+                      <UserPlus className="h-4 w-4" />
+                      Invite Member
+                    </Button>
+                  </div>
+                </CardHeader>
+                <CardContent>
+                  <div className="space-y-3">
+                    {/* Current user */}
+                    <div className="flex items-center justify-between p-3 border rounded-lg">
+                      <div className="flex items-center gap-3">
+                        <div className="h-10 w-10 rounded-full bg-primary/10 flex items-center justify-center">
+                          <User className="h-5 w-5 text-primary" />
+                        </div>
+                        <div>
+                          <p className="font-medium">{user?.firstName} {user?.lastName}</p>
+                          <p className="text-sm text-muted-foreground">{user?.email}</p>
+                        </div>
+                      </div>
+                      <span className="px-2 py-1 text-xs bg-primary/10 text-primary rounded-full">
+                        Owner
+                      </span>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+
+              <Card>
+                <CardHeader>
+                  <CardTitle>Pending Invites</CardTitle>
+                  <CardDescription>Invitations waiting to be accepted</CardDescription>
+                </CardHeader>
+                <CardContent>
+                  {invitesData?.invites && invitesData.invites.length > 0 ? (
+                    <div className="space-y-3">
+                      {invitesData.invites.map((invite: any) => (
+                        <div key={invite.id} className="flex items-center justify-between p-3 border rounded-lg">
+                          <div className="flex items-center gap-3">
+                            <div className="h-10 w-10 rounded-full bg-muted flex items-center justify-center">
+                              <Mail className="h-5 w-5 text-muted-foreground" />
+                            </div>
+                            <div>
+                              <p className="font-medium">{invite.email}</p>
+                              <p className="text-sm text-muted-foreground">
+                                Invited {new Date(invite.createdAt).toLocaleDateString()}
+                              </p>
+                            </div>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <span className="px-2 py-1 text-xs bg-yellow-100 text-yellow-700 rounded-full capitalize">
+                              {invite.role}
+                            </span>
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              onClick={() => revokeMutation.mutate(invite.id)}
+                              disabled={revokeMutation.isPending}
+                            >
+                              <Trash2 className="h-4 w-4 text-destructive" />
+                            </Button>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="border rounded-lg p-8 text-center text-muted-foreground">
+                      <Mail className="h-12 w-12 mx-auto mb-4 opacity-50" />
+                      <p>No pending invites</p>
+                      <p className="text-sm">Invite team members to collaborate</p>
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+
+              <InviteUserDialog
+                open={showInviteDialog}
+                onOpenChange={setShowInviteDialog}
+              />
+            </div>
           )}
 
           {activeTab === 'notifications' && (
@@ -200,7 +314,7 @@ export default function SettingsPage() {
                 </div>
 
                 <Button>
-                  <Save className="h-4 w-4 mr-2" />
+                  <Save className="h-4 w-4" />
                   Save Preferences
                 </Button>
               </CardContent>
@@ -284,7 +398,7 @@ export default function SettingsPage() {
               </CardHeader>
               <CardContent className="space-y-4">
                 <Button>
-                  <Key className="h-4 w-4 mr-2" />
+                  <Key className="h-4 w-4" />
                   Generate New API Key
                 </Button>
                 <div className="border rounded-lg p-8 text-center text-muted-foreground">
@@ -339,7 +453,7 @@ export default function SettingsPage() {
                 </div>
 
                 <Button>
-                  <Save className="h-4 w-4 mr-2" />
+                  <Save className="h-4 w-4" />
                   Save Preferences
                 </Button>
               </CardContent>

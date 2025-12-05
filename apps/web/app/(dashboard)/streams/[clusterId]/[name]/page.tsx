@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, Suspense } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
@@ -21,18 +21,25 @@ import { api } from '@/lib/api';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
+import { TabsList, useTabs, Tab } from '@/components/ui/tabs';
 import { formatBytes, formatNumber, formatDuration } from '@nats-console/shared';
 
-type Tab = 'overview' | 'messages' | 'consumers' | 'config' | 'metrics';
+const tabs: Tab[] = [
+  { id: 'overview', label: 'Overview', icon: Database },
+  { id: 'messages', label: 'Messages', icon: MessageSquare },
+  { id: 'consumers', label: 'Consumers', icon: Users },
+  { id: 'config', label: 'Configuration', icon: Settings },
+  { id: 'metrics', label: 'Metrics', icon: BarChart3 },
+];
 
-export default function StreamDetailPage() {
+function StreamDetailContent() {
   const params = useParams();
   const router = useRouter();
   const queryClient = useQueryClient();
   const clusterId = params.clusterId as string;
   const streamName = params.name as string;
 
-  const [activeTab, setActiveTab] = useState<Tab>('overview');
+  const { activeTab, setActiveTab } = useTabs(tabs, 'overview');
   const [messageSubject, setMessageSubject] = useState('');
   const [messageData, setMessageData] = useState('');
   const [startSeq, setStartSeq] = useState('1');
@@ -100,14 +107,6 @@ export default function StreamDetailPage() {
     );
   }
 
-  const tabs = [
-    { id: 'overview', label: 'Overview', icon: Database },
-    { id: 'messages', label: 'Messages', icon: MessageSquare },
-    { id: 'consumers', label: 'Consumers', icon: Users },
-    { id: 'config', label: 'Configuration', icon: Settings },
-    { id: 'metrics', label: 'Metrics', icon: BarChart3 },
-  ];
-
   const handlePublish = () => {
     if (messageSubject && messageData) {
       publishMutation.mutate({ subject: messageSubject, data: messageData });
@@ -133,7 +132,7 @@ export default function StreamDetailPage() {
         </div>
         <div className="flex gap-2">
           <Button variant="outline" size="sm">
-            <Edit className="h-4 w-4 mr-2" />
+            <Edit className="h-4 w-4" />
             Edit
           </Button>
           <Button
@@ -142,7 +141,7 @@ export default function StreamDetailPage() {
             onClick={() => purgeMutation.mutate()}
             disabled={purgeMutation.isPending}
           >
-            <RefreshCw className="h-4 w-4 mr-2" />
+            <RefreshCw className="h-4 w-4" />
             Purge
           </Button>
           <Button
@@ -155,34 +154,14 @@ export default function StreamDetailPage() {
             }}
             disabled={deleteMutation.isPending}
           >
-            <Trash2 className="h-4 w-4 mr-2" />
+            <Trash2 className="h-4 w-4" />
             Delete
           </Button>
         </div>
       </div>
 
       {/* Tabs */}
-      <div className="border-b">
-        <nav className="flex gap-4">
-          {tabs.map((tab) => {
-            const Icon = tab.icon;
-            return (
-              <button
-                key={tab.id}
-                onClick={() => setActiveTab(tab.id as Tab)}
-                className={`flex items-center gap-2 px-4 py-2 border-b-2 transition-colors ${
-                  activeTab === tab.id
-                    ? 'border-primary text-primary'
-                    : 'border-transparent hover:text-primary'
-                }`}
-              >
-                <Icon className="h-4 w-4" />
-                {tab.label}
-              </button>
-            );
-          })}
-        </nav>
-      </div>
+      <TabsList tabs={tabs} activeTab={activeTab} onTabChange={setActiveTab} />
 
       {/* Overview Tab */}
       {activeTab === 'overview' && (
@@ -308,7 +287,7 @@ export default function StreamDetailPage() {
                 />
               </div>
               <Button onClick={handlePublish} disabled={publishMutation.isPending || !messageSubject || !messageData}>
-                <Play className="h-4 w-4 mr-2" />
+                <Play className="h-4 w-4" />
                 Publish
               </Button>
             </CardContent>
@@ -372,7 +351,7 @@ export default function StreamDetailPage() {
               <CardDescription>Consumers attached to this stream</CardDescription>
             </div>
             <Button size="sm">
-              <Users className="h-4 w-4 mr-2" />
+              <Users className="h-4 w-4" />
               Add Consumer
             </Button>
           </CardHeader>
@@ -454,5 +433,13 @@ export default function StreamDetailPage() {
         </Card>
       )}
     </div>
+  );
+}
+
+export default function StreamDetailPage() {
+  return (
+    <Suspense fallback={<div className="flex items-center justify-center h-64"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div></div>}>
+      <StreamDetailContent />
+    </Suspense>
   );
 }

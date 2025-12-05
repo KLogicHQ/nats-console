@@ -31,13 +31,20 @@ export async function authenticate(
     const payload = await verifyToken(token);
     request.user = payload;
 
-    // Update session activity
+    // Validate session in Redis and update activity
     const sessionId = token.split('.')[2];
     if (sessionId) {
       const session = await getSession(sessionId);
-      if (session) {
-        await updateSessionActivity(sessionId);
+      if (!session) {
+        // Session not found in Redis - user was logged out or session expired
+        return reply.status(401).send({
+          error: {
+            code: 'SESSION_EXPIRED',
+            message: 'Session has expired. Please log in again.',
+          },
+        });
       }
+      await updateSessionActivity(sessionId);
     }
   } catch (error) {
     return reply.status(401).send({

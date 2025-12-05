@@ -1,24 +1,44 @@
 'use client';
 
-import { useState } from 'react';
-import { useRouter } from 'next/navigation';
+import { useState, useEffect } from 'react';
+import { useRouter, useParams } from 'next/navigation';
 import Link from 'next/link';
-import { useAuthStore } from '@/stores/auth';
+import { useQuery, useMutation } from '@tanstack/react-query';
+import { api } from '@/lib/api';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
+import { Loader2, CheckCircle2, XCircle } from 'lucide-react';
 
-export default function RegisterPage() {
+export default function AcceptInvitePage() {
   const router = useRouter();
-  const { register, isLoading } = useAuthStore();
+  const params = useParams();
+  const token = params.token as string;
+
   const [formData, setFormData] = useState({
-    email: '',
-    password: '',
-    confirmPassword: '',
     firstName: '',
     lastName: '',
+    password: '',
+    confirmPassword: '',
   });
   const [error, setError] = useState('');
+
+  const { data: inviteData, isLoading: isLoadingInvite, error: inviteError } = useQuery({
+    queryKey: ['invite', token],
+    queryFn: () => api.invites.getByToken(token),
+    enabled: !!token,
+  });
+
+  const acceptMutation = useMutation({
+    mutationFn: (data: { firstName: string; lastName: string; password: string }) =>
+      api.invites.accept(token, data),
+    onSuccess: () => {
+      router.push('/login?invited=true');
+    },
+    onError: (err: any) => {
+      setError(err.message || 'Failed to accept invitation');
+    },
+  });
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -29,30 +49,69 @@ export default function RegisterPage() {
       return;
     }
 
-    try {
-      await register({
-        email: formData.email,
-        password: formData.password,
-        firstName: formData.firstName,
-        lastName: formData.lastName,
-      });
-      router.push('/clusters');
-    } catch (err: any) {
-      setError(err.message || 'Registration failed');
+    if (formData.password.length < 8) {
+      setError('Password must be at least 8 characters');
+      return;
     }
+
+    acceptMutation.mutate({
+      firstName: formData.firstName,
+      lastName: formData.lastName,
+      password: formData.password,
+    });
   };
+
+  if (isLoadingInvite) {
+    return (
+      <Card>
+        <CardContent className="flex items-center justify-center py-12">
+          <Loader2 className="h-8 w-8 animate-spin text-primary" />
+        </CardContent>
+      </Card>
+    );
+  }
+
+  if (inviteError || !inviteData?.invite?.valid) {
+    const reason = inviteData?.invite?.reason || 'This invitation is no longer valid';
+    return (
+      <Card>
+        <CardHeader className="text-center">
+          <div className="mx-auto mb-4 h-12 w-12 rounded-full bg-destructive/10 flex items-center justify-center">
+            <XCircle className="h-6 w-6 text-destructive" />
+          </div>
+          <CardTitle className="text-2xl font-bold">Invalid Invitation</CardTitle>
+          <CardDescription>{reason}</CardDescription>
+        </CardHeader>
+        <CardFooter className="flex justify-center">
+          <Link href="/login">
+            <Button variant="outline">Go to Login</Button>
+          </Link>
+        </CardFooter>
+      </Card>
+    );
+  }
+
+  const invite = inviteData.invite;
 
   return (
     <Card>
       <CardHeader className="space-y-1">
-        <CardTitle className="text-2xl font-bold">Create an account</CardTitle>
-        <CardDescription>Enter your details to get started with NATS Console</CardDescription>
+        <CardTitle className="text-2xl font-bold">Join {invite.organization?.name}</CardTitle>
+        <CardDescription>
+          You've been invited by {invite.inviter?.firstName} {invite.inviter?.lastName} to join as a{' '}
+          <span className="font-medium capitalize">{invite.role}</span>
+        </CardDescription>
       </CardHeader>
       <form onSubmit={handleSubmit}>
         <CardContent className="space-y-4">
           {error && (
             <div className="p-3 text-sm text-destructive bg-destructive/10 rounded-md">{error}</div>
           )}
+          <div className="p-3 bg-muted rounded-md">
+            <p className="text-sm text-muted-foreground">
+              Email: <span className="font-medium text-foreground">{invite.email}</span>
+            </p>
+          </div>
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-2">
               <label htmlFor="firstName" className="text-sm font-medium">
@@ -78,19 +137,6 @@ export default function RegisterPage() {
                 required
               />
             </div>
-          </div>
-          <div className="space-y-2">
-            <label htmlFor="email" className="text-sm font-medium">
-              Email
-            </label>
-            <Input
-              id="email"
-              type="email"
-              placeholder="name@example.com"
-              value={formData.email}
-              onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-              required
-            />
           </div>
           <div className="space-y-2">
             <label htmlFor="password" className="text-sm font-medium">
@@ -120,8 +166,8 @@ export default function RegisterPage() {
           </div>
         </CardContent>
         <CardFooter className="flex flex-col space-y-4">
-          <Button type="submit" className="w-full" disabled={isLoading}>
-            {isLoading ? 'Creating account...' : 'Create account'}
+          <Button type="submit" className="w-full" disabled={acceptMutation.isPending}>
+            {acceptMutation.isPending ? 'Joining...' : 'Accept Invitation'}
           </Button>
           <p className="text-sm text-center text-muted-foreground">
             Already have an account?{' '}

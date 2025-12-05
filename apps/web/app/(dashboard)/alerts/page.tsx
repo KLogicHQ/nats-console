@@ -92,7 +92,7 @@ export default function AlertsPage() {
           <p className="text-muted-foreground">Monitor and manage alert rules</p>
         </div>
         <Button disabled={!selectedCluster}>
-          <Plus className="h-4 w-4 mr-2" />
+          <Plus className="h-4 w-4" />
           Create Alert Rule
         </Button>
       </div>
@@ -153,7 +153,7 @@ export default function AlertsPage() {
             </p>
             {filter === 'all' && (
               <Button>
-                <Plus className="h-4 w-4 mr-2" />
+                <Plus className="h-4 w-4" />
                 Create Alert Rule
               </Button>
             )}

@@ -78,23 +78,25 @@ export function CreateClusterDialog({
       return;
     }
 
-    const authConfig: Record<string, any> = {};
-    if (formData.authType === 'userpass') {
-      authConfig.username = formData.username;
-      authConfig.password = formData.password;
-    } else if (formData.authType === 'token') {
-      authConfig.token = formData.token;
-    } else if (formData.authType === 'creds') {
-      authConfig.credsFile = formData.credsFile;
+    // Build credentials object based on auth type
+    let credentials: Record<string, string> | undefined;
+    if (formData.authType === 'userpass' && (formData.username || formData.password)) {
+      credentials = {
+        username: formData.username,
+        password: formData.password,
+      };
+    } else if (formData.authType === 'token' && formData.token) {
+      credentials = { token: formData.token };
+    } else if (formData.authType === 'creds' && formData.credsFile) {
+      credentials = { credsFile: formData.credsFile };
     }
 
     createMutation.mutate({
       name: formData.name,
       description: formData.description || undefined,
-      url: formData.url,
+      serverUrl: formData.url,
       environment: formData.environment,
-      authType: formData.authType,
-      ...authConfig,
+      credentials,
     });
   };
 

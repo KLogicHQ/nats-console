@@ -81,15 +81,15 @@ export function CreateConsumerDialog({
 
     createMutation.mutate({
       name: formData.name,
-      durable_name: formData.durableName || undefined,
-      filter_subject: formData.filterSubject || undefined,
-      deliver_policy: formData.deliverPolicy,
-      ack_policy: formData.ackPolicy,
-      replay_policy: formData.replayPolicy,
-      ack_wait: parseInt(formData.ackWait),
-      max_deliver: parseInt(formData.maxDeliver),
-      max_ack_pending: parseInt(formData.maxAckPending),
-      max_waiting: parseInt(formData.maxWaiting),
+      durableName: formData.durableName || undefined,
+      filterSubject: formData.filterSubject || undefined,
+      deliverPolicy: formData.deliverPolicy,
+      ackPolicy: formData.ackPolicy,
+      replayPolicy: formData.replayPolicy,
+      ackWait: parseInt(formData.ackWait),
+      maxDeliver: parseInt(formData.maxDeliver),
+      maxAckPending: parseInt(formData.maxAckPending),
+      maxWaiting: parseInt(formData.maxWaiting),
     });
   };
 

@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuthStore } from '@/stores/auth';
 import { Sidebar } from '@/components/layout/sidebar';
@@ -11,24 +11,41 @@ export default function DashboardLayout({
   children: React.ReactNode;
 }) {
   const router = useRouter();
-  const { isAuthenticated } = useAuthStore();
+  const { isAuthenticated, _hasHydrated } = useAuthStore();
+  const [isReady, setIsReady] = useState(false);
 
   useEffect(() => {
-    if (!isAuthenticated) {
+    // Mark as ready after mount to prevent hydration mismatch
+    setIsReady(true);
+  }, []);
+
+  useEffect(() => {
+    // Only redirect after hydration is complete
+    if (_hasHydrated && !isAuthenticated) {
       router.push('/login');
     }
-  }, [isAuthenticated, router]);
+  }, [isAuthenticated, _hasHydrated, router]);
 
-  if (!isAuthenticated) {
-    return null;
-  }
-
+  // Always render the same container to prevent hydration mismatch
   return (
     <div className="flex h-screen">
-      <Sidebar />
-      <main className="flex-1 overflow-auto bg-muted/40">
-        <div className="container py-6">{children}</div>
-      </main>
+      {!isReady || !_hasHydrated ? (
+        <div className="flex-1 flex items-center justify-center">
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
+        </div>
+      ) : !isAuthenticated ? (
+        // Still loading while redirect happens
+        <div className="flex-1 flex items-center justify-center">
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
+        </div>
+      ) : (
+        <>
+          <Sidebar />
+          <main className="flex-1 overflow-auto bg-white">
+            <div className="p-6">{children}</div>
+          </main>
+        </>
+      )}
     </div>
   );
 }

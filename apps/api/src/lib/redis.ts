@@ -33,7 +33,12 @@ export interface SessionData {
 }
 
 export async function setSession(sessionId: string, data: SessionData): Promise<void> {
-  await redis.hset(`${SESSION_PREFIX}${sessionId}`, data as Record<string, string>);
+  // Serialize permissions array to JSON string
+  const serializedData = {
+    ...data,
+    permissions: JSON.stringify(data.permissions),
+  };
+  await redis.hset(`${SESSION_PREFIX}${sessionId}`, serializedData as Record<string, string>);
   await redis.expire(`${SESSION_PREFIX}${sessionId}`, SESSION_TTL);
 }
 

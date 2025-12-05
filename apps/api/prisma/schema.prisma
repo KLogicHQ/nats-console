@@ -79,6 +79,7 @@ model User {
   dashboards              Dashboard[]
   savedQueries            SavedQuery[]
   invitedMembers          OrganizationMember[] @relation("InvitedBy")
+  invitesSent             Invite[]
 
   @@map("users")
 }
@@ -101,6 +102,7 @@ model Organization {
   dashboards   Dashboard[]
   savedQueries SavedQuery[]
   alertRules   AlertRule[]
+  invites      Invite[]
 
   @@map("organizations")
 }
@@ -360,4 +362,32 @@ model AlertRule {
   cluster      NatsCluster? @relation(fields: [clusterId], references: [id], onDelete: SetNull)
 
   @@map("alert_rules")
+}
+
+// ==================== Invites ====================
+
+enum InviteStatus {
+  pending
+  accepted
+  expired
+  revoked
+}
+
+model Invite {
+  id          String       @id @default(uuid()) @db.Uuid
+  orgId       String       @map("org_id") @db.Uuid
+  email       String       @db.VarChar(255)
+  role        MemberRole   @default(member)
+  token       String       @unique @db.VarChar(255)
+  status      InviteStatus @default(pending)
+  invitedBy   String       @map("invited_by") @db.Uuid
+  expiresAt   DateTime     @map("expires_at")
+  acceptedAt  DateTime?    @map("accepted_at")
+  createdAt   DateTime     @default(now()) @map("created_at")
+
+  // Relations
+  organization Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  inviter      User         @relation(fields: [invitedBy], references: [id])
+
+  @@map("invites")
 }

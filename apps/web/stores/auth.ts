@@ -17,12 +17,14 @@ interface AuthState {
   orgId: string | null;
   isLoading: boolean;
   isAuthenticated: boolean;
+  _hasHydrated: boolean;
 
   login: (email: string, password: string) => Promise<void>;
   register: (data: { email: string; password: string; firstName: string; lastName: string }) => Promise<void>;
   logout: () => Promise<void>;
   refreshTokens: () => Promise<void>;
   setUser: (user: User) => void;
+  setHasHydrated: (state: boolean) => void;
 }
 
 export const useAuthStore = create<AuthState>()(
@@ -34,6 +36,11 @@ export const useAuthStore = create<AuthState>()(
       orgId: null,
       isLoading: false,
       isAuthenticated: false,
+      _hasHydrated: false,
+
+      setHasHydrated: (state: boolean) => {
+        set({ _hasHydrated: state });
+      },
 
       login: async (email, password) => {
         set({ isLoading: true });
@@ -128,6 +135,14 @@ export const useAuthStore = create<AuthState>()(
         orgId: state.orgId,
         isAuthenticated: state.isAuthenticated,
       }),
+      onRehydrateStorage: () => (state) => {
+        // Called after hydration is complete
+        state?.setHasHydrated(true);
+        // Sync localStorage with hydrated token
+        if (state?.accessToken) {
+          localStorage.setItem('accessToken', state.accessToken);
+        }
+      },
     }
   )
 );

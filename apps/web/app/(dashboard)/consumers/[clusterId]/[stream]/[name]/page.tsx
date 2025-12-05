@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { Suspense } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
@@ -21,11 +21,16 @@ import Link from 'next/link';
 import { api } from '@/lib/api';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { TabsList, useTabs, Tab } from '@/components/ui/tabs';
 import { formatNumber, formatDuration } from '@nats-console/shared';
 
-type Tab = 'overview' | 'config' | 'metrics';
+const tabs: Tab[] = [
+  { id: 'overview', label: 'Overview', icon: Users },
+  { id: 'config', label: 'Configuration', icon: Settings },
+  { id: 'metrics', label: 'Metrics', icon: BarChart3 },
+];
 
-export default function ConsumerDetailPage() {
+function ConsumerDetailContent() {
   const params = useParams();
   const router = useRouter();
   const queryClient = useQueryClient();
@@ -33,7 +38,7 @@ export default function ConsumerDetailPage() {
   const streamName = params.stream as string;
   const consumerName = params.name as string;
 
-  const [activeTab, setActiveTab] = useState<Tab>('overview');
+  const { activeTab, setActiveTab } = useTabs(tabs, 'overview');
 
   const { data: consumerData, isLoading } = useQuery({
     queryKey: ['consumer', clusterId, streamName, consumerName],
@@ -70,12 +75,6 @@ export default function ConsumerDetailPage() {
     );
   }
 
-  const tabs = [
-    { id: 'overview', label: 'Overview', icon: Users },
-    { id: 'config', label: 'Configuration', icon: Settings },
-    { id: 'metrics', label: 'Metrics', icon: BarChart3 },
-  ];
-
   const getHealthStatus = () => {
     const pending = consumer.num_pending || 0;
     if (pending > 10000) return { status: 'critical', label: 'Critical Lag', color: 'text-red-500', bg: 'bg-red-100' };
@@ -109,7 +108,7 @@ export default function ConsumerDetailPage() {
         </div>
         <div className="flex gap-2">
           <Button variant="outline" size="sm">
-            <Edit className="h-4 w-4 mr-2" />
+            <Edit className="h-4 w-4" />
             Edit
           </Button>
           <Button
@@ -122,34 +121,14 @@ export default function ConsumerDetailPage() {
             }}
             disabled={deleteMutation.isPending}
           >
-            <Trash2 className="h-4 w-4 mr-2" />
+            <Trash2 className="h-4 w-4" />
             Delete
           </Button>
         </div>
       </div>
 
       {/* Tabs */}
-      <div className="border-b">
-        <nav className="flex gap-4">
-          {tabs.map((tab) => {
-            const Icon = tab.icon;
-            return (
-              <button
-                key={tab.id}
-                onClick={() => setActiveTab(tab.id as Tab)}
-                className={`flex items-center gap-2 px-4 py-2 border-b-2 transition-colors ${
-                  activeTab === tab.id
-                    ? 'border-primary text-primary'
-                    : 'border-transparent hover:text-primary'
-                }`}
-              >
-                <Icon className="h-4 w-4" />
-                {tab.label}
-              </button>
-            );
-          })}
-        </nav>
-      </div>
+      <TabsList tabs={tabs} activeTab={activeTab} onTabChange={setActiveTab} />
 
       {/* Overview Tab */}
       {activeTab === 'overview' && (
@@ -355,5 +334,13 @@ export default function ConsumerDetailPage() {
         </Card>
       )}
     </div>
+  );
+}
+
+export default function ConsumerDetailPage() {
+  return (
+    <Suspense fallback={<div className="flex items-center justify-center h-64"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div></div>}>
+      <ConsumerDetailContent />
+    </Suspense>
   );
 }

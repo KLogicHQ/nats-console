@@ -51,7 +51,7 @@ export default function ClustersPage() {
           <p className="text-muted-foreground">Manage your NATS JetStream clusters</p>
         </div>
         <Button onClick={() => setShowCreateDialog(true)}>
-          <Plus className="h-4 w-4 mr-2" />
+          <Plus className="h-4 w-4" />
           Add Cluster
         </Button>
         <CreateClusterDialog open={showCreateDialog} onOpenChange={setShowCreateDialog} />
@@ -80,7 +80,7 @@ export default function ClustersPage() {
               Add your first NATS cluster to get started
             </p>
             <Button>
-              <Plus className="h-4 w-4 mr-2" />
+              <Plus className="h-4 w-4" />
               Add Cluster
             </Button>
           </CardContent>

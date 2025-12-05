@@ -1,4 +1,39 @@
+import { useAuthStore } from '@/stores/auth';
+
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001/api/v1';
+
+// Auth pages where 401 should not redirect
+const AUTH_PATHS = ['/login', '/register', '/forgot-password', '/reset-password'];
+
+function isAuthPage(): boolean {
+  if (typeof window === 'undefined') return false;
+  return AUTH_PATHS.some(path => window.location.pathname.startsWith(path));
+}
+
+function getAccessToken(): string | null {
+  // Read directly from Zustand store for immediate access after login
+  const storeToken = useAuthStore.getState().accessToken;
+  if (storeToken) return storeToken;
+
+  // Fallback to localStorage for page refreshes before hydration
+  if (typeof window !== 'undefined') {
+    return localStorage.getItem('accessToken');
+  }
+  return null;
+}
+
+function handleUnauthorized(): void {
+  if (typeof window === 'undefined') return;
+
+  // Don't redirect if already on auth pages
+  if (isAuthPage()) return;
+
+  // Clear auth data from store
+  useAuthStore.getState().logout();
+
+  // Redirect to login
+  window.location.href = '/login';
+}
 
 interface ApiOptions {
   method?: 'GET' | 'POST' | 'PATCH' | 'PUT' | 'DELETE';
@@ -20,8 +55,8 @@ class ApiError extends Error {
 async function request<T>(endpoint: string, options: ApiOptions = {}): Promise<T> {
   const { method = 'GET', body, headers = {} } = options;
 
-  // Get token from localStorage
-  const token = typeof window !== 'undefined' ? localStorage.getItem('accessToken') : null;
+  // Get token from store (preferred) or localStorage
+  const token = getAccessToken();
 
   const response = await fetch(`${API_URL}${endpoint}`, {
     method,
@@ -35,6 +70,12 @@ async function request<T>(endpoint: string, options: ApiOptions = {}): Promise<T
 
   if (!response.ok) {
     const error = await response.json().catch(() => ({ error: { message: 'Request failed' } }));
+
+    // Handle 401 Unauthorized - redirect to login (except on auth pages)
+    if (response.status === 401) {
+      handleUnauthorized();
+    }
+
     throw new ApiError(
       response.status,
       error.error?.code || 'UNKNOWN_ERROR',
@@ -251,6 +292,27 @@ export const dashboards = {
     }),
 };
 
+// Invites API
+export const invites = {
+  list: () => request<{ invites: any[] }>('/invites'),
+
+  create: (data: { email: string; role: 'admin' | 'member' | 'viewer' }) =>
+    request<{ invite: any }>('/invites', {
+      method: 'POST',
+      body: data,
+    }),
+
+  getByToken: (token: string) => request<{ invite: any }>(`/invites/${token}`),
+
+  accept: (token: string, data: { firstName: string; lastName: string; password: string }) =>
+    request<{ user: any; organization: any; isNewUser: boolean }>(`/invites/${token}/accept`, {
+      method: 'POST',
+      body: data,
+    }),
+
+  revoke: (id: string) => request(`/invites/${id}`, { method: 'DELETE' }),
+};
+
 export const api = {
   auth,
   clusters,
@@ -259,4 +321,5 @@ export const api = {
   analytics,
   alerts,
   dashboards,
+  invites,
 };

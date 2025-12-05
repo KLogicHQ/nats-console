@@ -44,7 +44,7 @@ export default function StreamsPage() {
           <p className="text-muted-foreground">Manage JetStream streams</p>
         </div>
         <Button disabled={!selectedCluster} onClick={() => setShowCreateDialog(true)}>
-          <Plus className="h-4 w-4 mr-2" />
+          <Plus className="h-4 w-4" />
           Create Stream
         </Button>
         {selectedCluster && (
@@ -106,7 +106,7 @@ export default function StreamsPage() {
             </p>
             {!search && (
               <Button>
-                <Plus className="h-4 w-4 mr-2" />
+                <Plus className="h-4 w-4" />
                 Create Stream
               </Button>
             )}

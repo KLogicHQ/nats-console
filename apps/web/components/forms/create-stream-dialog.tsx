@@ -89,14 +89,13 @@ export function CreateStreamDialog({
     createMutation.mutate({
       name: formData.name,
       subjects,
-      description: formData.description || undefined,
       storage: formData.storage,
       retention: formData.retention,
-      max_msgs: parseInt(formData.maxMsgs),
-      max_bytes: parseInt(formData.maxBytes),
-      max_age: parseInt(formData.maxAge),
-      max_msg_size: parseInt(formData.maxMsgSize),
-      num_replicas: parseInt(formData.replicas),
+      maxMsgs: parseInt(formData.maxMsgs),
+      maxBytes: parseInt(formData.maxBytes),
+      maxAge: parseInt(formData.maxAge),
+      maxMsgSize: parseInt(formData.maxMsgSize),
+      replicas: parseInt(formData.replicas),
       discard: formData.discard,
     });
   };

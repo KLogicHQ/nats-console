@@ -15,9 +15,10 @@ import {
 import { cn } from '@/lib/utils';
 import { useAuthStore } from '@/stores/auth';
 import { Button } from '@/components/ui/button';
+import { Logo } from '@/components/logo';
 
 const navigation = [
-  { name: 'Overview', href: '/', icon: LayoutDashboard },
+  { name: 'Overview', href: '/overview', icon: LayoutDashboard },
   { name: 'Clusters', href: '/clusters', icon: Server },
   { name: 'Streams', href: '/streams', icon: Database },
   { name: 'Consumers', href: '/consumers', icon: Users },
@@ -31,33 +32,28 @@ export function Sidebar() {
   const { logout, user } = useAuthStore();
 
   return (
-    <div className="flex h-full w-64 flex-col border-r bg-sidebar">
+    <div className="flex h-full w-52 flex-col border-r bg-sidebar">
       {/* Logo */}
-      <div className="flex h-16 items-center border-b px-6">
-        <Link href="/" className="flex items-center gap-2">
-          <div className="h-8 w-8 rounded-lg bg-primary flex items-center justify-center">
-            <span className="text-primary-foreground font-bold text-sm">NC</span>
-          </div>
-          <span className="font-semibold text-lg">NATS Console</span>
-        </Link>
+      <div className="flex h-14 items-center border-b px-4">
+        <Logo href="/clusters" size="sm" />
       </div>
 
       {/* Navigation */}
-      <nav className="flex-1 space-y-1 p-4">
+      <nav className="flex-1 space-y-1 p-3">
         {navigation.map((item) => {
-          const isActive = item.href === '/' ? pathname === '/' : pathname.startsWith(item.href);
+          const isActive = pathname === item.href || (item.href !== '/overview' && pathname.startsWith(item.href));
           return (
             <Link
               key={item.name}
               href={item.href}
               className={cn(
-                'flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors',
+                'flex items-center gap-3 rounded-md px-3 py-2 text-sm font-medium transition-colors',
                 isActive
-                  ? 'bg-sidebar-accent text-sidebar-accent-foreground'
-                  : 'text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground'
+                  ? 'bg-primary text-primary-foreground'
+                  : 'text-muted-foreground hover:bg-muted hover:text-foreground'
               )}
             >
-              <item.icon className="h-5 w-5" />
+              <item.icon className="h-4 w-4" />
               {item.name}
             </Link>
           );
@@ -65,10 +61,10 @@ export function Sidebar() {
       </nav>
 
       {/* User section */}
-      <div className="border-t p-4">
-        <div className="flex items-center gap-3 mb-3">
-          <div className="h-9 w-9 rounded-full bg-primary/10 flex items-center justify-center">
-            <span className="text-sm font-medium">
+      <div className="border-t p-3">
+        <div className="flex items-center gap-2 mb-2">
+          <div className="h-8 w-8 rounded-full bg-primary/10 flex items-center justify-center">
+            <span className="text-xs font-medium">
               {user?.firstName?.[0]}
               {user?.lastName?.[0]}
             </span>
@@ -80,8 +76,8 @@ export function Sidebar() {
             <p className="text-xs text-muted-foreground truncate">{user?.email}</p>
           </div>
         </div>
-        <Button variant="ghost" className="w-full justify-start gap-2" onClick={() => logout()}>
-          <LogOut className="h-4 w-4" />
+        <Button variant="ghost" size="sm" className="w-full justify-start gap-2 h-8" onClick={() => logout()}>
+          <LogOut className="h-3.5 w-3.5" />
           Sign out
         </Button>
       </div>
