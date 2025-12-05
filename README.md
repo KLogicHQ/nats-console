@@ -107,25 +107,6 @@ make setup && make dev
 
 ---
 
-## Project Structure
-
-```
-nats-console/
-├── apps/
-│   ├── api/          # Fastify backend API
-│   ├── web/          # Next.js frontend dashboard
-│   └── workers/      # Background workers (metrics, alerts)
-├── packages/
-│   └── shared/       # Shared types, schemas, utilities
-├── examples/         # Example NATS producer/consumer apps
-├── docker-compose.yml      # Development infrastructure
-├── docker-compose.prod.yml # Production deployment
-├── Makefile
-└── turbo.json
-```
-
----
-
 ## Makefile Commands
 
 ### Development
@@ -231,42 +212,6 @@ pnpm run consumer
 # Run high-volume load test
 pnpm run load-test
 ```
-
----
-
-## API Reference
-
-Base URL: `http://localhost:3001/api/v1`
-
-### Authentication
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| POST | `/auth/login` | Login |
-| POST | `/auth/register` | Register |
-| POST | `/auth/refresh` | Refresh token |
-| GET | `/auth/me` | Current user |
-
-### Clusters
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| GET | `/clusters` | List clusters |
-| POST | `/clusters` | Create cluster |
-| GET | `/clusters/:id` | Get cluster |
-| GET | `/clusters/:id/health` | Health check |
-
-### Streams
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| GET | `/clusters/:id/streams` | List streams |
-| POST | `/clusters/:id/streams` | Create stream |
-| GET | `/clusters/:id/streams/:name/messages` | Browse messages |
-| POST | `/clusters/:id/streams/:name/messages` | Publish message |
-
-### Consumers
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| GET | `/clusters/:id/streams/:stream/consumers` | List consumers |
-| POST | `/clusters/:id/streams/:stream/consumers` | Create consumer |
 
 ---
 

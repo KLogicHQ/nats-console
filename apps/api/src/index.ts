@@ -40,8 +40,10 @@ const app = Fastify({
 
 // Register plugins
 await app.register(cors, {
-  origin: config.CORS_ORIGIN.split(','),
+  origin: config.NODE_ENV === 'development' ? true : config.CORS_ORIGIN.split(','),
   credentials: true,
+  methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization'],
 });
 
 await app.register(helmet, {

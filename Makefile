@@ -1,4 +1,4 @@
-.PHONY: help install dev build start stop logs clean \
+.PHONY: help install dev kill build start stop logs clean \
         db-up db-down db-shell-postgres db-shell-redis db-shell-clickhouse db-shell-nats \
         prisma-generate prisma-migrate prisma-studio \
         api-dev web-dev workers-dev \
@@ -27,7 +27,26 @@ install: ## Install all dependencies
 # ==================== Development ====================
 
 dev: db-up ## Start all services in development mode
+	@echo ""
+	@echo "$(CYAN)Starting NATS Console...$(RESET)"
+	@echo ""
+	@echo "$(GREEN)Services:$(RESET)"
+	@echo "  $(CYAN)Frontend$(RESET)  → http://localhost:3000"
+	@echo "  $(CYAN)Backend$(RESET)   → http://localhost:3001"
+	@echo "  $(CYAN)Workers$(RESET)   → http://localhost:3002/health"
+	@echo ""
 	pnpm dev
+
+kill: ## Kill all dev servers (ports 3000, 3001, 3002)
+	@echo "$(YELLOW)Killing dev servers...$(RESET)"
+	@-kill -9 $$(lsof -ti:3000) 2>/dev/null || true
+	@-kill -9 $$(lsof -ti:3001) 2>/dev/null || true
+	@-kill -9 $$(lsof -ti:3002) 2>/dev/null || true
+	@-pkill -9 -f "tsx" 2>/dev/null || true
+	@-pkill -9 -f "next-server" 2>/dev/null || true
+	@-pkill -9 -f "turbo" 2>/dev/null || true
+	@sleep 1
+	@echo "$(GREEN)Done$(RESET)"
 
 api-dev: ## Start API in development mode
 	pnpm --filter @nats-console/api dev

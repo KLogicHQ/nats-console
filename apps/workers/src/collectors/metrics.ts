@@ -79,6 +79,10 @@ export class MetricsCollector {
     logger.info('Metrics collector stopped');
   }
 
+  isRunning(): boolean {
+    return this.streamMetricsInterval !== null || this.clusterMetricsInterval !== null;
+  }
+
   private async connectToClusters(): Promise<void> {
     // Get all clusters with their connections
     const clusters = await this.prisma.natsCluster.findMany({

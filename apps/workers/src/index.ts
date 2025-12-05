@@ -1,3 +1,4 @@
+import { createServer } from 'node:http';
 import pino from 'pino';
 import cron from 'node-cron';
 import { MetricsCollector } from './collectors/metrics';
@@ -22,10 +23,29 @@ const logger = pino({
 const metricsCollector = new MetricsCollector();
 const alertProcessor = new AlertProcessor();
 
+// Health check server
+const healthServer = createServer((req, res) => {
+  if (req.url === '/health') {
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({
+      status: 'ok',
+      timestamp: new Date().toISOString(),
+      workers: {
+        metricsCollector: metricsCollector.isRunning(),
+        alertProcessor: alertProcessor.isRunning(),
+      },
+    }));
+  } else {
+    res.writeHead(404);
+    res.end('Not Found');
+  }
+});
+
 // Graceful shutdown
 async function shutdown(signal: string): Promise<void> {
   logger.info(`Received ${signal}, shutting down...`);
 
+  healthServer.close();
   await metricsCollector.stop();
   await alertProcessor.stop();
 
@@ -57,6 +77,11 @@ async function start(): Promise<void> {
     cron.schedule('0 2 * * *', async () => {
       logger.info('Running cleanup job...');
       // TODO: Implement cleanup (expired sessions, old data archival)
+    });
+
+    // Start health server
+    healthServer.listen(config.PORT, () => {
+      logger.info(`Health server listening on http://localhost:${config.PORT}/health`);
     });
 
     logger.info('All workers started successfully');

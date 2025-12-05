@@ -74,6 +74,10 @@ export class AlertProcessor {
     logger.info('Alert processor stopped');
   }
 
+  isRunning(): boolean {
+    return this.processInterval !== null;
+  }
+
   private async processAlerts(): Promise<void> {
     try {
       // Get all enabled alert rules
