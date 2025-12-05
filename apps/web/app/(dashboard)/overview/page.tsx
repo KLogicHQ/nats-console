@@ -1,6 +1,6 @@
 'use client';
 
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   Server,
   Database,
@@ -9,27 +9,47 @@ import {
   TrendingUp,
   AlertTriangle,
   CheckCircle,
+  RefreshCw,
 } from 'lucide-react';
 import Link from 'next/link';
 import { api } from '@/lib/api';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
 import { formatBytes, formatNumber } from '@nats-console/shared';
 
 export default function OverviewPage() {
-  const { data: clustersData, isLoading: clustersLoading } = useQuery({
+  const queryClient = useQueryClient();
+
+  const { data: clustersData, isLoading: clustersLoading, refetch: refetchClusters } = useQuery({
     queryKey: ['clusters'],
     queryFn: () => api.clusters.list(),
+  });
+
+  const { data: incidentsData, refetch: refetchIncidents } = useQuery({
+    queryKey: ['incidents-open'],
+    queryFn: () => api.alerts.listIncidents({ status: 'open' }),
   });
 
   const clusters = clustersData?.clusters || [];
   const connectedClusters = clusters.filter((c: any) => c.status === 'connected').length;
   const totalClusters = clusters.length;
+  const openIncidents = incidentsData?.total || 0;
+
+  const handleRefresh = () => {
+    refetchClusters();
+    refetchIncidents();
+  };
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-3xl font-bold">Overview</h1>
-        <p className="text-muted-foreground">Monitor your NATS JetStream infrastructure</p>
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-3xl font-bold">Overview</h1>
+          <p className="text-muted-foreground">Monitor your NATS JetStream infrastructure</p>
+        </div>
+        <Button variant="outline" size="icon" onClick={handleRefresh}>
+          <RefreshCw className="h-4 w-4" />
+        </Button>
       </div>
 
       {/* Stats Cards */}
@@ -76,12 +96,12 @@ export default function OverviewPage() {
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">Active Alerts</CardTitle>
-            <AlertTriangle className="h-4 w-4 text-muted-foreground" />
+            <AlertTriangle className={`h-4 w-4 ${openIncidents > 0 ? 'text-red-500' : 'text-muted-foreground'}`} />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">0</div>
+            <div className={`text-2xl font-bold ${openIncidents > 0 ? 'text-red-500' : ''}`}>{openIncidents}</div>
             <p className="text-xs text-muted-foreground">
-              No active alerts
+              {openIncidents === 0 ? 'No active alerts' : openIncidents === 1 ? '1 open incident' : `${openIncidents} open incidents`}
             </p>
           </CardContent>
         </Card>

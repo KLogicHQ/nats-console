@@ -104,7 +104,7 @@ export const auth = {
       body: data,
     }),
 
-  logout: () => request<{ success: boolean }>('/auth/logout', { method: 'POST' }),
+  logout: () => request<{ success: boolean }>('/auth/logout', { method: 'POST', body: {} }),
 
   refresh: (refreshToken: string) =>
     request<{ tokens: any }>('/auth/refresh', {
@@ -256,7 +256,10 @@ export const alerts = {
   list: (clusterId: string) =>
     request<{ alerts: any[] }>(`/clusters/${clusterId}/alerts`),
 
+  // Alert Rules
   listRules: () => request<{ rules: any[] }>('/alerts/rules'),
+
+  getRule: (id: string) => request<{ rule: any }>(`/alerts/rules/${id}`),
 
   createRule: (data: any) =>
     request<{ rule: any }>('/alerts/rules', {
@@ -272,6 +275,64 @@ export const alerts = {
 
   deleteRule: (id: string) => request(`/alerts/rules/${id}`, { method: 'DELETE' }),
 
+  // Notification Channels
+  listChannels: () => request<{ channels: any[] }>('/alerts/channels'),
+
+  getChannel: (id: string) => request<{ channel: any }>(`/alerts/channels/${id}`),
+
+  createChannel: (data: any) =>
+    request<{ channel: any }>('/alerts/channels', {
+      method: 'POST',
+      body: data,
+    }),
+
+  updateChannel: (id: string, data: any) =>
+    request<{ channel: any }>(`/alerts/channels/${id}`, {
+      method: 'PATCH',
+      body: data,
+    }),
+
+  deleteChannel: (id: string) => request(`/alerts/channels/${id}`, { method: 'DELETE' }),
+
+  testChannel: (id: string) =>
+    request<{ success: boolean; message: string }>(`/alerts/channels/${id}/test`, {
+      method: 'POST',
+      body: {},
+    }),
+
+  // Incidents
+  listIncidents: (params?: Record<string, string>) => {
+    const query = params ? `?${new URLSearchParams(params)}` : '';
+    return request<{ incidents: any[]; total: number }>(`/alerts/incidents${query}`);
+  },
+
+  getIncident: (id: string) => request<{ incident: any }>(`/alerts/incidents/${id}`),
+
+  updateIncident: (id: string, data: { status: string }) =>
+    request<{ incident: any }>(`/alerts/incidents/${id}`, {
+      method: 'PATCH',
+      body: data,
+    }),
+
+  acknowledgeIncident: (id: string) =>
+    request<{ incident: any }>(`/alerts/incidents/${id}/acknowledge`, {
+      method: 'POST',
+      body: {},
+    }),
+
+  resolveIncident: (id: string) =>
+    request<{ incident: any }>(`/alerts/incidents/${id}/resolve`, {
+      method: 'POST',
+      body: {},
+    }),
+
+  closeIncident: (id: string) =>
+    request<{ incident: any }>(`/alerts/incidents/${id}/close`, {
+      method: 'POST',
+      body: {},
+    }),
+
+  // Events
   listEvents: (params?: Record<string, string>) => {
     const query = params ? `?${new URLSearchParams(params)}` : '';
     return request<{ events: any[] }>(`/alerts/events${query}`);
@@ -301,6 +362,7 @@ export const dashboards = {
   clone: (id: string) =>
     request<{ dashboard: any }>(`/dashboards/${id}/clone`, {
       method: 'POST',
+      body: {},
     }),
 };
 

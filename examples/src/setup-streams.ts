@@ -130,7 +130,7 @@ async function main() {
 
   // List all streams
   console.log('Streams:');
-  for await (const si of jsm.streams()) {
+  for await (const si of jsm.streams.list()) {
     console.log(`  - ${si.config.name}: ${si.state.messages} messages, ${(si.state.bytes / 1024).toFixed(2)} KB`);
   }
 
