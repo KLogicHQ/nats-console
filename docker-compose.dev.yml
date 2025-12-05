@@ -1,0 +1,123 @@
+# =============================================================================
+# NATS Console - Development Docker Compose
+# =============================================================================
+# This runs only the infrastructure services (databases, NATS).
+# Use this when you want to run the application services locally with hot reload.
+#
+# Usage:
+#   # Start infrastructure
+#   docker-compose -f docker-compose.dev.yml up -d
+#
+#   # Run app locally with hot reload
+#   pnpm install
+#   make prisma-generate
+#   make prisma-migrate
+#   make dev
+#
+# Access:
+#   - Web UI: http://localhost:3000 (local)
+#   - API: http://localhost:3001 (local)
+#   - PostgreSQL: localhost:5432
+#   - Redis: localhost:6379
+#   - ClickHouse: localhost:8123
+#   - NATS: localhost:4222
+# =============================================================================
+
+version: '3.8'
+
+services:
+  # =============================================================================
+  # PostgreSQL - Primary Database
+  # =============================================================================
+  postgres:
+    image: postgres:16-alpine
+    container_name: nats-console-postgres-dev
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: nats_console
+      POSTGRES_PASSWORD: nats_console_dev
+      POSTGRES_DB: nats_console
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data_dev:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U nats_console -d nats_console"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # =============================================================================
+  # Redis - Cache and Sessions
+  # =============================================================================
+  redis:
+    image: redis:7-alpine
+    container_name: nats-console-redis-dev
+    restart: unless-stopped
+    command: redis-server --appendonly yes
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data_dev:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # =============================================================================
+  # ClickHouse - Analytics Database
+  # =============================================================================
+  clickhouse:
+    image: clickhouse/clickhouse-server:latest
+    container_name: nats-console-clickhouse-dev
+    restart: unless-stopped
+    environment:
+      CLICKHOUSE_DB: nats_console
+      CLICKHOUSE_USER: nats_console
+      CLICKHOUSE_PASSWORD: nats_console_dev
+      CLICKHOUSE_DEFAULT_ACCESS_MANAGEMENT: 1
+    ports:
+      - "8123:8123"
+      - "9000:9000"
+    volumes:
+      - clickhouse_data_dev:/var/lib/clickhouse
+      - ./infrastructure/clickhouse/init:/docker-entrypoint-initdb.d
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:8123/ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # =============================================================================
+  # NATS - Message Broker
+  # =============================================================================
+  nats:
+    image: nats:2.10-alpine
+    container_name: nats-console-nats-dev
+    restart: unless-stopped
+    command:
+      - "--jetstream"
+      - "--store_dir=/data"
+      - "--http_port=8222"
+      - "-m=8222"
+    ports:
+      - "4222:4222"
+      - "8222:8222"
+    volumes:
+      - nats_data_dev:/data
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:8222/healthz"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  postgres_data_dev:
+  redis_data_dev:
+  clickhouse_data_dev:
+  nats_data_dev:
+
+networks:
+  default:
+    name: nats-console-dev-network

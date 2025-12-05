@@ -2,7 +2,8 @@ import type { FastifyPluginAsync } from 'fastify';
 import { z } from 'zod';
 import { randomBytes } from 'crypto';
 import { prisma } from '../../lib/prisma';
-import { authenticate, optionalAuthenticate } from '../../common/middleware/auth';
+import { authenticate } from '../../common/middleware/auth';
+import { config } from '../../config/index';
 import { NotFoundError, ConflictError, ForbiddenError } from '../../../../shared/src/index';
 
 const CreateInviteSchema = z.object({
@@ -108,7 +109,21 @@ export const inviteRoutes: FastifyPluginAsync = async (fastify) => {
       },
     });
 
-    // TODO: Send email with invite link
+    const inviteLink = `${process.env.FRONTEND_URL || 'http://localhost:3000'}/invite/${token}`;
+
+    // In dev mode, print the URL to console
+    if (config.NODE_ENV === 'development') {
+      console.log('\n========================================');
+      console.log('📨 TEAM INVITE EMAIL (DEV MODE)');
+      console.log('========================================');
+      console.log(`To: ${body.email}`);
+      console.log(`Organization: ${invite.organization.name}`);
+      console.log(`Role: ${body.role}`);
+      console.log(`Invite URL: ${inviteLink}`);
+      console.log('========================================\n');
+    }
+
+    // TODO: In production, send email with invite link
 
     return reply.status(201).send({
       invite: {
@@ -116,7 +131,7 @@ export const inviteRoutes: FastifyPluginAsync = async (fastify) => {
         email: invite.email,
         role: invite.role,
         status: invite.status,
-        inviteLink: `${process.env.FRONTEND_URL || 'http://localhost:3000'}/invite/${token}`,
+        inviteLink,
         organization: invite.organization,
         inviter: invite.inviter,
         expiresAt: invite.expiresAt,

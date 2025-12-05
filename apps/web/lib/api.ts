@@ -58,13 +58,19 @@ async function request<T>(endpoint: string, options: ApiOptions = {}): Promise<T
   // Get token from store (preferred) or localStorage
   const token = getAccessToken();
 
+  // Only set Content-Type for requests with a body
+  const requestHeaders: Record<string, string> = {
+    ...(token && { Authorization: `Bearer ${token}` }),
+    ...headers,
+  };
+
+  if (body) {
+    requestHeaders['Content-Type'] = 'application/json';
+  }
+
   const response = await fetch(`${API_URL}${endpoint}`, {
     method,
-    headers: {
-      'Content-Type': 'application/json',
-      ...(token && { Authorization: `Bearer ${token}` }),
-      ...headers,
-    },
+    headers: requestHeaders,
     body: body ? JSON.stringify(body) : undefined,
   });
 
@@ -387,6 +393,34 @@ export const invites = {
   revoke: (id: string) => request(`/invites/${id}`, { method: 'DELETE' }),
 };
 
+// Settings API
+export const settings = {
+  getPreferences: () => request<{ settings: any }>('/settings/preferences'),
+
+  updatePreferences: (data: any) =>
+    request<{ settings: any }>('/settings/preferences', {
+      method: 'PATCH',
+      body: data,
+    }),
+
+  listApiKeys: () => request<{ apiKeys: any[] }>('/settings/api-keys'),
+
+  createApiKey: (data: { name: string; expiresIn?: string }) =>
+    request<{ apiKey: any }>('/settings/api-keys', {
+      method: 'POST',
+      body: data,
+    }),
+
+  deleteApiKey: (id: string) => request(`/settings/api-keys/${id}`, { method: 'DELETE' }),
+};
+
+// MFA API (via auth endpoints)
+export const mfa = {
+  enable: () => request<{ secret: string; qrCode: string }>('/auth/mfa/enable', { method: 'POST', body: {} }),
+  verify: (code: string) => request<{ valid: boolean }>('/auth/mfa/verify', { method: 'POST', body: { code } }),
+  disable: () => request<{ success: boolean }>('/auth/mfa/disable', { method: 'DELETE' }),
+};
+
 export const api = {
   auth,
   clusters,
@@ -396,4 +430,6 @@ export const api = {
   alerts,
   dashboards,
   invites,
+  settings,
+  mfa,
 };

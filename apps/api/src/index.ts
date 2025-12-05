@@ -22,6 +22,7 @@ import { analyticsRoutes } from './modules/analytics/analytics.routes';
 import { alertRoutes } from './modules/alerts/alerts.routes';
 import { dashboardRoutes } from './modules/dashboards/dashboards.routes';
 import { inviteRoutes } from './modules/invites/invites.routes';
+import { settingsRoutes } from './modules/settings/settings.routes';
 
 const app = Fastify({
   logger: {
@@ -84,6 +85,7 @@ app.register(
     await api.register(alertRoutes, { prefix: '/alerts' });
     await api.register(dashboardRoutes, { prefix: '/dashboards' });
     await api.register(inviteRoutes, { prefix: '/invites' });
+    await api.register(settingsRoutes, { prefix: '/settings' });
   },
   { prefix: '/api/v1' }
 );

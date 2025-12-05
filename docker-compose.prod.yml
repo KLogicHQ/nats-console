@@ -1,7 +1,30 @@
+# =============================================================================
+# NATS Console - Production Docker Compose
+# =============================================================================
+# Production deployment with separate, scalable services.
+#
+# Usage:
+#   # With Docker named volume
+#   docker-compose -f docker-compose.prod.yml --env-file .env.prod up -d
+#
+#   # With local data folder
+#   mkdir -p ./nats-console-data
+#   docker-compose -f docker-compose.prod.yml --env-file .env.prod up -d
+#
+# Data Structure (in single volume or ./nats-console-data):
+#   /data (or nats-console-data/)
+#   ├── postgres/    - PostgreSQL data
+#   ├── redis/       - Redis data
+#   ├── clickhouse/  - ClickHouse data
+#   └── nats/        - NATS JetStream data
+# =============================================================================
+
 version: '3.8'
 
 services:
-  # ==================== Application Services ====================
+  # =============================================================================
+  # Application Services
+  # =============================================================================
 
   api:
     build:
@@ -14,11 +37,11 @@ services:
     environment:
       - NODE_ENV=production
       - PORT=3001
-      - DATABASE_URL=${DATABASE_URL}
-      - REDIS_URL=${REDIS_URL}
-      - CLICKHOUSE_URL=${CLICKHOUSE_URL}
+      - DATABASE_URL=${DATABASE_URL:-postgresql://nats_console:nats_console@postgres:5432/nats_console}
+      - REDIS_URL=${REDIS_URL:-redis://redis:6379}
+      - CLICKHOUSE_URL=${CLICKHOUSE_URL:-http://clickhouse:8123}
       - CLICKHOUSE_DATABASE=${CLICKHOUSE_DATABASE:-nats_console}
-      - NATS_URL=${NATS_URL}
+      - NATS_URL=${NATS_URL:-nats://nats:4222}
       - JWT_SECRET=${JWT_SECRET}
       - JWT_EXPIRES_IN=${JWT_EXPIRES_IN:-15m}
       - JWT_REFRESH_EXPIRES_IN=${JWT_REFRESH_EXPIRES_IN:-7d}
@@ -49,8 +72,8 @@ services:
       - "3000:3000"
     environment:
       - NODE_ENV=production
-      - NEXT_PUBLIC_API_URL=${API_URL:-http://api:3001/api/v1}
-      - NEXT_PUBLIC_WS_URL=${WS_URL:-ws://api:3001/ws}
+      - NEXT_PUBLIC_API_URL=${API_URL:-http://localhost:3001/api/v1}
+      - NEXT_PUBLIC_WS_URL=${WS_URL:-ws://localhost:3001/ws}
     depends_on:
       - api
     healthcheck:
@@ -70,11 +93,11 @@ services:
     restart: unless-stopped
     environment:
       - NODE_ENV=production
-      - DATABASE_URL=${DATABASE_URL}
-      - REDIS_URL=${REDIS_URL}
-      - CLICKHOUSE_URL=${CLICKHOUSE_URL}
+      - DATABASE_URL=${DATABASE_URL:-postgresql://nats_console:nats_console@postgres:5432/nats_console}
+      - REDIS_URL=${REDIS_URL:-redis://redis:6379}
+      - CLICKHOUSE_URL=${CLICKHOUSE_URL:-http://clickhouse:8123}
       - CLICKHOUSE_DATABASE=${CLICKHOUSE_DATABASE:-nats_console}
-      - NATS_URL=${NATS_URL}
+      - NATS_URL=${NATS_URL:-nats://nats:4222}
       - LOG_LEVEL=${LOG_LEVEL:-info}
     depends_on:
       - api
@@ -84,17 +107,21 @@ services:
     networks:
       - nats-console
 
-  # ==================== Database Services ====================
+  # =============================================================================
+  # Database Services
+  # =============================================================================
 
   postgres:
     image: postgres:16-alpine
     restart: unless-stopped
     volumes:
-      - postgres_data:/var/lib/postgresql/data
+      # Single data folder - postgres subdirectory
+      - ${DATA_DIR:-nats_console_data}:/data
     environment:
       - POSTGRES_USER=${POSTGRES_USER:-nats_console}
       - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-nats_console}
       - POSTGRES_DB=${POSTGRES_DB:-nats_console}
+      - PGDATA=/data/postgres
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-nats_console} -d ${POSTGRES_DB:-nats_console}"]
       interval: 10s
@@ -106,9 +133,10 @@ services:
   redis:
     image: redis:7-alpine
     restart: unless-stopped
-    command: redis-server --appendonly yes --maxmemory 256mb --maxmemory-policy allkeys-lru
+    command: redis-server --appendonly yes --maxmemory 256mb --maxmemory-policy allkeys-lru --dir /data/redis
     volumes:
-      - redis_data:/data
+      # Single data folder - redis subdirectory
+      - ${DATA_DIR:-nats_console_data}:/data
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 10s
@@ -121,12 +149,14 @@ services:
     image: clickhouse/clickhouse-server:latest
     restart: unless-stopped
     volumes:
-      - clickhouse_data:/var/lib/clickhouse
-      - ./docker/clickhouse/init:/docker-entrypoint-initdb.d
+      # Single data folder - clickhouse subdirectory
+      - ${DATA_DIR:-nats_console_data}:/data
+      - ./infrastructure/clickhouse/init:/docker-entrypoint-initdb.d
     environment:
       - CLICKHOUSE_DB=${CLICKHOUSE_DATABASE:-nats_console}
       - CLICKHOUSE_USER=${CLICKHOUSE_USER:-default}
       - CLICKHOUSE_PASSWORD=${CLICKHOUSE_PASSWORD:-}
+      - CLICKHOUSE_DATA_DIR=/data/clickhouse
     healthcheck:
       test: ["CMD", "wget", "--spider", "-q", "http://localhost:8123/ping"]
       interval: 10s
@@ -138,12 +168,13 @@ services:
   nats:
     image: nats:2.10-alpine
     restart: unless-stopped
-    command: ["-js", "-m", "8222", "--store_dir", "/data"]
+    command: ["-js", "-m", "8222", "--store_dir", "/data/nats"]
     ports:
       - "4222:4222"
       - "8222:8222"
     volumes:
-      - nats_data:/data
+      # Single data folder - nats subdirectory
+      - ${DATA_DIR:-nats_console_data}:/data
     healthcheck:
       test: ["CMD", "wget", "--spider", "-q", "http://localhost:8222/healthz"]
       interval: 10s
@@ -152,7 +183,9 @@ services:
     networks:
       - nats-console
 
-  # ==================== Reverse Proxy (Optional) ====================
+  # =============================================================================
+  # Reverse Proxy (Optional)
+  # =============================================================================
 
   nginx:
     image: nginx:alpine
@@ -171,11 +204,13 @@ services:
     profiles:
       - with-nginx
 
+# =============================================================================
+# Volumes
+# =============================================================================
+# Single volume for all data, with subdirectories for each service
 volumes:
-  postgres_data:
-  redis_data:
-  clickhouse_data:
-  nats_data:
+  nats_console_data:
+    name: nats-console-data
 
 networks:
   nats-console:

@@ -302,8 +302,21 @@ export async function requestPasswordReset(email: string): Promise<void> {
   // Store in Redis with 1 hour TTL
   await redis.set(`password_reset:${user.id}`, resetToken, 'EX', 3600);
 
-  // TODO: Send email with reset link
-  console.log(`Password reset token for ${email}: ${resetToken}`);
+  // Build reset URL
+  const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:3000';
+  const resetUrl = `${frontendUrl}/reset-password?token=${resetToken}`;
+
+  // In dev mode, print the URL to console
+  if (config.NODE_ENV === 'development') {
+    console.log('\n========================================');
+    console.log('📧 PASSWORD RESET EMAIL (DEV MODE)');
+    console.log('========================================');
+    console.log(`To: ${email}`);
+    console.log(`Reset URL: ${resetUrl}`);
+    console.log('========================================\n');
+  }
+
+  // TODO: In production, send email with reset link
 }
 
 export async function resetPassword(token: string, newPassword: string): Promise<void> {

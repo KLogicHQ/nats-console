@@ -1,19 +1,82 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { Suspense, useState, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { Save, User, Bell, Shield, Key, Palette, Users, UserPlus, Trash2, Mail, Loader2, CheckCircle2 } from 'lucide-react';
+import {
+  Save,
+  User,
+  Bell,
+  Shield,
+  Key,
+  Palette,
+  Users,
+  UserPlus,
+  Trash2,
+  Mail,
+  Loader2,
+  CheckCircle2,
+  Copy,
+  Eye,
+  EyeOff,
+  Plus,
+  Clock,
+} from 'lucide-react';
+import { useSearchParams, useRouter, usePathname } from 'next/navigation';
 import { useAuthStore } from '@/stores/auth';
 import { api } from '@/lib/api';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { InviteUserDialog } from '@/components/forms/invite-user-dialog';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
 
-export default function SettingsPage() {
+const tabs = [
+  { id: 'profile', label: 'Profile', icon: User },
+  { id: 'team', label: 'Team', icon: Users },
+  { id: 'notifications', label: 'Notifications', icon: Bell },
+  { id: 'security', label: 'Security', icon: Shield },
+  { id: 'api-keys', label: 'API Keys', icon: Key },
+  { id: 'appearance', label: 'Appearance', icon: Palette },
+];
+
+function SettingsPageContent() {
   const { user, setUser } = useAuthStore();
-  const [activeTab, setActiveTab] = useState('profile');
   const queryClient = useQueryClient();
+  const searchParams = useSearchParams();
+  const router = useRouter();
+  const pathname = usePathname();
+
+  // Tab persistence via URL
+  const activeTab = searchParams.get('tab') || 'profile';
+  const setActiveTab = (tab: string) => {
+    const params = new URLSearchParams(searchParams.toString());
+    params.set('tab', tab);
+    router.push(`${pathname}?${params.toString()}`, { scroll: false });
+  };
 
   const [profileForm, setProfileForm] = useState({
     firstName: '',
@@ -37,7 +100,18 @@ export default function SettingsPage() {
     alertDigest: 'daily',
   });
 
+  const [appearanceSettings, setAppearanceSettings] = useState({
+    theme: 'system',
+    dateFormat: 'relative',
+  });
+
   const [showInviteDialog, setShowInviteDialog] = useState(false);
+  const [showCreateApiKeyDialog, setShowCreateApiKeyDialog] = useState(false);
+  const [newApiKeyName, setNewApiKeyName] = useState('');
+  const [newApiKeyExpiry, setNewApiKeyExpiry] = useState('never');
+  const [createdApiKey, setCreatedApiKey] = useState<string | null>(null);
+  const [showApiKey, setShowApiKey] = useState(false);
+  const [deleteApiKeyId, setDeleteApiKeyId] = useState<string | null>(null);
 
   // Initialize form with user data
   useEffect(() => {
@@ -54,6 +128,12 @@ export default function SettingsPage() {
   const { data: invitesData } = useQuery({
     queryKey: ['invites'],
     queryFn: () => api.invites.list(),
+  });
+
+  // Fetch API keys
+  const { data: apiKeysData, isLoading: apiKeysLoading } = useQuery({
+    queryKey: ['api-keys'],
+    queryFn: () => api.settings.listApiKeys(),
   });
 
   // Profile update mutation
@@ -79,6 +159,41 @@ export default function SettingsPage() {
     onError: (err: any) => {
       setPasswordError(err.message || 'Failed to change password');
       setPasswordSuccess(false);
+    },
+  });
+
+  // Notification preferences mutation
+  const notificationMutation = useMutation({
+    mutationFn: (data: typeof notificationSettings) => api.settings.updatePreferences(data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['settings'] });
+    },
+  });
+
+  // Appearance preferences mutation
+  const appearanceMutation = useMutation({
+    mutationFn: (data: typeof appearanceSettings) => api.settings.updatePreferences(data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['settings'] });
+    },
+  });
+
+  // API key mutations
+  const createApiKeyMutation = useMutation({
+    mutationFn: (data: { name: string; expiresIn?: string }) => api.settings.createApiKey(data),
+    onSuccess: (data) => {
+      setCreatedApiKey(data.apiKey.key);
+      setNewApiKeyName('');
+      setNewApiKeyExpiry('never');
+      queryClient.invalidateQueries({ queryKey: ['api-keys'] });
+    },
+  });
+
+  const deleteApiKeyMutation = useMutation({
+    mutationFn: (id: string) => api.settings.deleteApiKey(id),
+    onSuccess: () => {
+      setDeleteApiKeyId(null);
+      queryClient.invalidateQueries({ queryKey: ['api-keys'] });
     },
   });
 
@@ -114,14 +229,32 @@ export default function SettingsPage() {
     });
   };
 
-  const tabs = [
-    { id: 'profile', label: 'Profile', icon: User },
-    { id: 'team', label: 'Team', icon: Users },
-    { id: 'notifications', label: 'Notifications', icon: Bell },
-    { id: 'security', label: 'Security', icon: Shield },
-    { id: 'api-keys', label: 'API Keys', icon: Key },
-    { id: 'appearance', label: 'Appearance', icon: Palette },
-  ];
+  const handleNotificationSave = () => {
+    notificationMutation.mutate(notificationSettings);
+  };
+
+  const handleAppearanceSave = () => {
+    appearanceMutation.mutate(appearanceSettings);
+  };
+
+  const handleCreateApiKey = () => {
+    if (!newApiKeyName.trim()) return;
+    createApiKeyMutation.mutate({
+      name: newApiKeyName,
+      expiresIn: newApiKeyExpiry !== 'never' ? newApiKeyExpiry : undefined,
+    });
+  };
+
+  const copyApiKey = () => {
+    if (createdApiKey) {
+      navigator.clipboard.writeText(createdApiKey);
+    }
+  };
+
+  const formatDate = (date: string | null) => {
+    if (!date) return 'Never';
+    return new Date(date).toLocaleDateString();
+  };
 
   return (
     <div className="space-y-6">
@@ -313,6 +446,12 @@ export default function SettingsPage() {
                 <CardDescription>Configure how you receive alerts and updates</CardDescription>
               </CardHeader>
               <CardContent className="space-y-6">
+                {notificationMutation.isSuccess && (
+                  <div className="p-3 text-sm text-green-600 bg-green-50 rounded-md flex items-center gap-2">
+                    <CheckCircle2 className="h-4 w-4" />
+                    Preferences saved successfully
+                  </div>
+                )}
                 <div className="space-y-4">
                   <h4 className="text-sm font-medium">Alert Channels</h4>
                   <div className="space-y-3">
@@ -378,25 +517,33 @@ export default function SettingsPage() {
 
                 <div className="space-y-2">
                   <label className="text-sm font-medium">Alert Digest</label>
-                  <select
-                    className="w-full h-10 rounded-md border border-input bg-background px-3 py-2 text-sm"
+                  <Select
                     value={notificationSettings.alertDigest}
-                    onChange={(e) =>
+                    onValueChange={(v) =>
                       setNotificationSettings({
                         ...notificationSettings,
-                        alertDigest: e.target.value,
+                        alertDigest: v,
                       })
                     }
                   >
-                    <option value="realtime">Real-time</option>
-                    <option value="hourly">Hourly digest</option>
-                    <option value="daily">Daily digest</option>
-                    <option value="weekly">Weekly digest</option>
-                  </select>
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="realtime">Real-time</SelectItem>
+                      <SelectItem value="hourly">Hourly digest</SelectItem>
+                      <SelectItem value="daily">Daily digest</SelectItem>
+                      <SelectItem value="weekly">Weekly digest</SelectItem>
+                    </SelectContent>
+                  </Select>
                 </div>
 
-                <Button>
-                  <Save className="h-4 w-4" />
+                <Button onClick={handleNotificationSave} disabled={notificationMutation.isPending}>
+                  {notificationMutation.isPending ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : (
+                    <Save className="h-4 w-4" />
+                  )}
                   Save Preferences
                 </Button>
               </CardContent>
@@ -479,11 +626,21 @@ export default function SettingsPage() {
                     <div>
                       <p className="font-medium">2FA Status</p>
                       <p className="text-sm text-muted-foreground">
-                        Two-factor authentication is not enabled
+                        {user?.mfaEnabled
+                          ? 'Two-factor authentication is enabled'
+                          : 'Two-factor authentication is not enabled'}
                       </p>
                     </div>
-                    <Button variant="outline">Enable 2FA</Button>
+                    <Button
+                      variant={user?.mfaEnabled ? 'destructive' : 'outline'}
+                      disabled
+                    >
+                      {user?.mfaEnabled ? 'Disable 2FA' : 'Enable 2FA'}
+                    </Button>
                   </div>
+                  <p className="text-sm text-muted-foreground mt-4">
+                    2FA setup coming soon. This will allow you to use an authenticator app for additional security.
+                  </p>
                 </CardContent>
               </Card>
 
@@ -517,19 +674,70 @@ export default function SettingsPage() {
           {activeTab === 'api-keys' && (
             <Card>
               <CardHeader>
-                <CardTitle>API Keys</CardTitle>
-                <CardDescription>Manage your API keys for programmatic access</CardDescription>
+                <div className="flex items-center justify-between">
+                  <div>
+                    <CardTitle>API Keys</CardTitle>
+                    <CardDescription>Manage your API keys for programmatic access</CardDescription>
+                  </div>
+                  <Button onClick={() => setShowCreateApiKeyDialog(true)}>
+                    <Plus className="h-4 w-4" />
+                    Generate New API Key
+                  </Button>
+                </div>
               </CardHeader>
               <CardContent className="space-y-4">
-                <Button>
-                  <Key className="h-4 w-4" />
-                  Generate New API Key
-                </Button>
-                <div className="border rounded-lg p-8 text-center text-muted-foreground">
-                  <Key className="h-12 w-12 mx-auto mb-4 opacity-50" />
-                  <p>No API keys yet</p>
-                  <p className="text-sm">Generate your first API key to get started</p>
-                </div>
+                {apiKeysLoading && (
+                  <div className="flex items-center justify-center h-32">
+                    <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+                  </div>
+                )}
+
+                {!apiKeysLoading && (!apiKeysData?.apiKeys || apiKeysData.apiKeys.length === 0) && (
+                  <div className="border rounded-lg p-8 text-center text-muted-foreground">
+                    <Key className="h-12 w-12 mx-auto mb-4 opacity-50" />
+                    <p>No API keys yet</p>
+                    <p className="text-sm">Generate your first API key to get started</p>
+                  </div>
+                )}
+
+                {apiKeysData?.apiKeys && apiKeysData.apiKeys.length > 0 && (
+                  <div className="space-y-3">
+                    {apiKeysData.apiKeys.map((key: any) => (
+                      <div key={key.id} className="flex items-center justify-between p-4 border rounded-lg">
+                        <div className="flex items-center gap-4">
+                          <Key className="h-5 w-5 text-muted-foreground" />
+                          <div>
+                            <p className="font-medium">{key.name}</p>
+                            <p className="text-sm text-muted-foreground font-mono">
+                              nats_{key.prefix}...
+                            </p>
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-4">
+                          <div className="text-right text-sm text-muted-foreground">
+                            <p>Created {formatDate(key.createdAt)}</p>
+                            {key.expiresAt && (
+                              <p className="flex items-center gap-1">
+                                <Clock className="h-3 w-3" />
+                                Expires {formatDate(key.expiresAt)}
+                              </p>
+                            )}
+                            {key.lastUsedAt && (
+                              <p>Last used {formatDate(key.lastUsedAt)}</p>
+                            )}
+                          </div>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            onClick={() => setDeleteApiKeyId(key.id)}
+                          >
+                            <Trash2 className="h-4 w-4 text-destructive" />
+                          </Button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
               </CardContent>
             </Card>
           )}
@@ -541,43 +749,59 @@ export default function SettingsPage() {
                 <CardDescription>Customize the look and feel</CardDescription>
               </CardHeader>
               <CardContent className="space-y-6">
+                {appearanceMutation.isSuccess && (
+                  <div className="p-3 text-sm text-green-600 bg-green-50 rounded-md flex items-center gap-2">
+                    <CheckCircle2 className="h-4 w-4" />
+                    Preferences saved successfully
+                  </div>
+                )}
                 <div className="space-y-2">
                   <label className="text-sm font-medium">Theme</label>
                   <div className="flex gap-3">
-                    <button className="flex-1 p-4 border rounded-lg hover:border-primary transition-colors">
-                      <div className="w-full h-12 bg-white border rounded mb-2"></div>
-                      <p className="text-sm font-medium">Light</p>
-                    </button>
-                    <button className="flex-1 p-4 border rounded-lg hover:border-primary transition-colors">
-                      <div className="w-full h-12 bg-gray-900 rounded mb-2"></div>
-                      <p className="text-sm font-medium">Dark</p>
-                    </button>
-                    <button className="flex-1 p-4 border rounded-lg hover:border-primary transition-colors border-primary">
-                      <div className="w-full h-12 bg-gradient-to-r from-white to-gray-900 rounded mb-2"></div>
-                      <p className="text-sm font-medium">System</p>
-                    </button>
+                    {[
+                      { id: 'light', label: 'Light', color: 'bg-white' },
+                      { id: 'dark', label: 'Dark', color: 'bg-gray-900' },
+                      { id: 'system', label: 'System', color: 'bg-gradient-to-r from-white to-gray-900' },
+                    ].map((theme) => (
+                      <button
+                        key={theme.id}
+                        onClick={() => setAppearanceSettings({ ...appearanceSettings, theme: theme.id })}
+                        className={`flex-1 p-4 border rounded-lg hover:border-primary transition-colors ${
+                          appearanceSettings.theme === theme.id ? 'border-primary' : ''
+                        }`}
+                      >
+                        <div className={`w-full h-12 ${theme.color} border rounded mb-2`}></div>
+                        <p className="text-sm font-medium">{theme.label}</p>
+                      </button>
+                    ))}
                   </div>
                 </div>
 
                 <div className="space-y-2">
-                  <label className="text-sm font-medium">Sidebar Position</label>
-                  <select className="w-full h-10 rounded-md border border-input bg-background px-3 py-2 text-sm">
-                    <option value="left">Left</option>
-                    <option value="right">Right</option>
-                  </select>
-                </div>
-
-                <div className="space-y-2">
                   <label className="text-sm font-medium">Date Format</label>
-                  <select className="w-full h-10 rounded-md border border-input bg-background px-3 py-2 text-sm">
-                    <option value="relative">Relative (2 hours ago)</option>
-                    <option value="absolute">Absolute (Dec 4, 2025 10:30 AM)</option>
-                    <option value="iso">ISO 8601 (2025-12-04T10:30:00Z)</option>
-                  </select>
+                  <Select
+                    value={appearanceSettings.dateFormat}
+                    onValueChange={(v) =>
+                      setAppearanceSettings({ ...appearanceSettings, dateFormat: v })
+                    }
+                  >
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="relative">Relative (2 hours ago)</SelectItem>
+                      <SelectItem value="absolute">Absolute (Dec 4, 2025 10:30 AM)</SelectItem>
+                      <SelectItem value="iso">ISO 8601 (2025-12-04T10:30:00Z)</SelectItem>
+                    </SelectContent>
+                  </Select>
                 </div>
 
-                <Button>
-                  <Save className="h-4 w-4" />
+                <Button onClick={handleAppearanceSave} disabled={appearanceMutation.isPending}>
+                  {appearanceMutation.isPending ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : (
+                    <Save className="h-4 w-4" />
+                  )}
                   Save Preferences
                 </Button>
               </CardContent>
@@ -585,6 +809,138 @@ export default function SettingsPage() {
           )}
         </div>
       </div>
+
+      {/* Create API Key Dialog */}
+      <Dialog open={showCreateApiKeyDialog} onOpenChange={(open) => {
+        if (!open) {
+          setShowCreateApiKeyDialog(false);
+          setCreatedApiKey(null);
+          setNewApiKeyName('');
+          setNewApiKeyExpiry('never');
+        }
+      }}>
+        <DialogContent size="lg" onClose={() => {
+          setShowCreateApiKeyDialog(false);
+          setCreatedApiKey(null);
+        }}>
+          <DialogHeader>
+            <DialogTitle>
+              {createdApiKey ? 'API Key Created' : 'Generate New API Key'}
+            </DialogTitle>
+            <DialogDescription>
+              {createdApiKey
+                ? 'Copy your API key now. You won\'t be able to see it again!'
+                : 'Create a new API key for programmatic access'}
+            </DialogDescription>
+          </DialogHeader>
+
+          {createdApiKey ? (
+            <div className="space-y-4 py-4">
+              <div className="p-4 bg-yellow-50 border border-yellow-200 rounded-lg">
+                <p className="text-sm text-yellow-800 font-medium mb-2">
+                  Make sure to copy your API key now. You won't be able to see it again!
+                </p>
+              </div>
+              <div className="flex items-center gap-2">
+                <Input
+                  type={showApiKey ? 'text' : 'password'}
+                  value={createdApiKey}
+                  readOnly
+                  className="font-mono"
+                />
+                <Button variant="outline" size="icon" onClick={() => setShowApiKey(!showApiKey)}>
+                  {showApiKey ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                </Button>
+                <Button variant="outline" size="icon" onClick={copyApiKey}>
+                  <Copy className="h-4 w-4" />
+                </Button>
+              </div>
+            </div>
+          ) : (
+            <div className="space-y-4 py-4">
+              <div className="space-y-2">
+                <label className="text-sm font-medium">Key Name</label>
+                <Input
+                  placeholder="e.g., Production API Key"
+                  value={newApiKeyName}
+                  onChange={(e) => setNewApiKeyName(e.target.value)}
+                />
+              </div>
+              <div className="space-y-2">
+                <label className="text-sm font-medium">Expiration</label>
+                <Select value={newApiKeyExpiry} onValueChange={setNewApiKeyExpiry}>
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="never">Never expires</SelectItem>
+                    <SelectItem value="30d">30 days</SelectItem>
+                    <SelectItem value="90d">90 days</SelectItem>
+                    <SelectItem value="1y">1 year</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+          )}
+
+          <DialogFooter>
+            {createdApiKey ? (
+              <Button onClick={() => {
+                setShowCreateApiKeyDialog(false);
+                setCreatedApiKey(null);
+              }}>
+                Done
+              </Button>
+            ) : (
+              <>
+                <Button variant="outline" onClick={() => setShowCreateApiKeyDialog(false)}>
+                  Cancel
+                </Button>
+                <Button
+                  onClick={handleCreateApiKey}
+                  disabled={!newApiKeyName.trim() || createApiKeyMutation.isPending}
+                >
+                  {createApiKeyMutation.isPending ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : (
+                    <Key className="h-4 w-4" />
+                  )}
+                  Generate Key
+                </Button>
+              </>
+            )}
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Delete API Key Dialog */}
+      <AlertDialog open={!!deleteApiKeyId} onOpenChange={(open) => !open && setDeleteApiKeyId(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete API Key</AlertDialogTitle>
+            <AlertDialogDescription>
+              Are you sure you want to delete this API key? Any applications using this key will no longer be able to authenticate.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => deleteApiKeyId && deleteApiKeyMutation.mutate(deleteApiKeyId)}
+              className="bg-red-600 hover:bg-red-700"
+            >
+              {deleteApiKeyMutation.isPending ? 'Deleting...' : 'Delete'}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
+  );
+}
+
+export default function SettingsPage() {
+  return (
+    <Suspense fallback={<div className="flex items-center justify-center h-64"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div></div>}>
+      <SettingsPageContent />
+    </Suspense>
   );
 }

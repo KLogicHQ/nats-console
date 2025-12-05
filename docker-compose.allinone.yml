@@ -1,0 +1,74 @@
+# =============================================================================
+# NATS Console - All-in-One Docker Compose
+# =============================================================================
+# This runs the single container with all services embedded.
+# Perfect for demos, quick testing, and local development.
+#
+# Usage:
+#   docker-compose -f docker-compose.allinone.yml up -d
+#
+# With local data folder:
+#   mkdir -p ./nats-console-data
+#   docker-compose -f docker-compose.allinone.yml up -d
+#
+# Access:
+#   - Web UI: http://localhost:3000
+#   - API: http://localhost:3001
+#   - NATS: nats://localhost:4222
+#   - NATS Monitor: http://localhost:8222
+#
+# Data Structure (in /data or ./nats-console-data):
+#   /data
+#   ├── postgres/    - PostgreSQL data
+#   ├── redis/       - Redis data
+#   ├── clickhouse/  - ClickHouse data
+#   ├── nats/        - NATS JetStream data
+#   └── logs/        - Application logs
+# =============================================================================
+
+version: '3.8'
+
+services:
+  nats-console:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: nats-console/allinone:latest
+    container_name: nats-console-allinone
+    restart: unless-stopped
+    ports:
+      # Application
+      - "3000:3000"   # Web UI
+      - "3001:3001"   # API
+      # Databases (optional external access)
+      - "5432:5432"   # PostgreSQL
+      - "6379:6379"   # Redis
+      - "8123:8123"   # ClickHouse HTTP
+      - "9000:9000"   # ClickHouse Native
+      # NATS
+      - "4222:4222"   # NATS Client
+      - "8222:8222"   # NATS Monitoring
+    environment:
+      - JWT_SECRET=${JWT_SECRET:-change-me-in-production-use-secure-random-string}
+      - JWT_EXPIRES_IN=${JWT_EXPIRES_IN:-15m}
+      - JWT_REFRESH_EXPIRES_IN=${JWT_REFRESH_EXPIRES_IN:-7d}
+    volumes:
+      # Single data folder containing all databases
+      # Option 1: Docker named volume
+      - nats_console_data:/data
+      # Option 2: Local folder (uncomment below, comment above)
+      # - ./nats-console-data:/data
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:3000 && curl -f http://localhost:3001/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 120s
+
+volumes:
+  nats_console_data:
+    name: nats-console-data
+
+networks:
+  default:
+    name: nats-console-network

@@ -15,6 +15,15 @@ import {
   Edit,
   Play,
   AlertTriangle,
+  Copy,
+  Check,
+  ChevronDown,
+  ChevronRight,
+  ChevronLeft,
+  ChevronsLeft,
+  ChevronsRight,
+  Maximize2,
+  Minimize2,
 } from 'lucide-react';
 import Link from 'next/link';
 import { api } from '@/lib/api';
@@ -52,8 +61,63 @@ function StreamDetailContent() {
   const { activeTab, setActiveTab } = useTabs(tabs, 'overview');
   const [messageSubject, setMessageSubject] = useState('');
   const [messageData, setMessageData] = useState('');
-  const [startSeq, setStartSeq] = useState('1');
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
+  const [copiedMessageId, setCopiedMessageId] = useState<number | null>(null);
+  const [expandedMessages, setExpandedMessages] = useState<Set<number>>(new Set());
+
+  // Pagination state
+  const [currentPage, setCurrentPage] = useState(1);
+  const [pageSize, setPageSize] = useState(20);
+
+  // Helper to format message data - detect JSON and pretty print
+  const formatMessageData = (data: unknown): { formatted: string; isJson: boolean } => {
+    if (typeof data === 'object' && data !== null) {
+      return { formatted: JSON.stringify(data, null, 2), isJson: true };
+    }
+    if (typeof data === 'string') {
+      try {
+        const parsed = JSON.parse(data);
+        return { formatted: JSON.stringify(parsed, null, 2), isJson: true };
+      } catch {
+        return { formatted: data, isJson: false };
+      }
+    }
+    return { formatted: String(data), isJson: false };
+  };
+
+  // Copy message to clipboard
+  const copyMessage = async (msg: any, seq: number) => {
+    const { formatted } = formatMessageData(msg.data);
+    await navigator.clipboard.writeText(formatted);
+    setCopiedMessageId(seq);
+    setTimeout(() => setCopiedMessageId(null), 2000);
+  };
+
+  // Toggle message expansion
+  const toggleMessageExpand = (seq: number) => {
+    setExpandedMessages(prev => {
+      const next = new Set(prev);
+      if (next.has(seq)) {
+        next.delete(seq);
+      } else {
+        next.add(seq);
+      }
+      return next;
+    });
+  };
+
+  // Expand all messages on current page
+  const expandAllMessages = () => {
+    if (messagesData?.messages) {
+      const allSeqs = new Set(messagesData.messages.map((msg: any) => msg.seq));
+      setExpandedMessages(allSeqs);
+    }
+  };
+
+  // Collapse all messages
+  const collapseAllMessages = () => {
+    setExpandedMessages(new Set());
+  };
 
   const { data: streamData, isLoading } = useQuery({
     queryKey: ['stream', clusterId, streamName],
@@ -65,10 +129,14 @@ function StreamDetailContent() {
     queryFn: () => api.consumers.list(clusterId, streamName),
   });
 
-  const { data: messagesData, refetch: refetchMessages } = useQuery({
-    queryKey: ['messages', clusterId, streamName, startSeq],
-    queryFn: () => api.streams.messages(clusterId, streamName, { start_seq: startSeq, limit: '50' }),
-    enabled: activeTab === 'messages',
+  const { data: messagesData, refetch: refetchMessages, isFetching: isLoadingMessages } = useQuery({
+    queryKey: ['messages', clusterId, streamName, currentPage, pageSize],
+    queryFn: () => {
+      const firstSeq = streamData?.stream?.state?.first_seq || 1;
+      const startSeq = String(firstSeq + (currentPage - 1) * pageSize);
+      return api.streams.messages(clusterId, streamName, { start_seq: startSeq, limit: String(pageSize) });
+    },
+    enabled: activeTab === 'messages' && !!streamData?.stream,
   });
 
   const publishMutation = useMutation({
@@ -117,6 +185,10 @@ function StreamDetailContent() {
       </div>
     );
   }
+
+  // Calculate total pages based on stream state
+  const totalMessages = stream?.state?.messages || 0;
+  const totalPages = Math.ceil(totalMessages / pageSize);
 
   const handlePublish = () => {
     if (messageSubject && messageData) {
@@ -326,44 +398,196 @@ function StreamDetailContent() {
             <CardHeader className="flex flex-row items-center justify-between">
               <div>
                 <CardTitle>Message Browser</CardTitle>
-                <CardDescription>Browse messages in this stream</CardDescription>
+                <CardDescription>
+                  {totalMessages > 0 ? `${formatNumber(totalMessages)} messages total` : 'Browse messages in this stream'}
+                </CardDescription>
               </div>
               <div className="flex items-center gap-2">
-                <Input
-                  className="w-32"
-                  type="number"
-                  placeholder="Start seq"
-                  value={startSeq}
-                  onChange={(e) => setStartSeq(e.target.value)}
-                />
-                <Button variant="outline" size="sm" onClick={() => refetchMessages()}>
-                  <RefreshCw className="h-4 w-4" />
+                <select
+                  className="h-9 px-3 border rounded-md bg-background text-sm"
+                  value={pageSize}
+                  onChange={(e) => {
+                    setPageSize(Number(e.target.value));
+                    setCurrentPage(1);
+                  }}
+                >
+                  <option value={10}>10 / page</option>
+                  <option value={20}>20 / page</option>
+                  <option value={50}>50 / page</option>
+                  <option value={100}>100 / page</option>
+                </select>
+                <Button variant="outline" size="sm" onClick={() => refetchMessages()} disabled={isLoadingMessages}>
+                  <RefreshCw className={`h-4 w-4 ${isLoadingMessages ? 'animate-spin' : ''}`} />
                 </Button>
               </div>
             </CardHeader>
             <CardContent>
-              {messagesData?.messages?.length === 0 ? (
+              {isLoadingMessages && !messagesData?.messages?.length ? (
+                <div className="flex items-center justify-center py-8">
+                  <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-primary"></div>
+                </div>
+              ) : messagesData?.messages?.length === 0 ? (
                 <div className="text-center py-8 text-muted-foreground">
                   <MessageSquare className="h-12 w-12 mx-auto mb-4 opacity-50" />
                   <p>No messages found</p>
                 </div>
               ) : (
-                <div className="space-y-2">
-                  {messagesData?.messages?.map((msg: any, idx: number) => (
-                    <div key={idx} className="p-3 border rounded-lg">
-                      <div className="flex justify-between text-sm mb-2">
-                        <span className="font-medium">Seq: {msg.seq}</span>
-                        <span className="text-muted-foreground">{msg.subject}</span>
-                        <span className="text-muted-foreground">
-                          {new Date(msg.time).toLocaleString()}
-                        </span>
+                <>
+                  <div className="space-y-2">
+                    {messagesData?.messages?.map((msg: any, idx: number) => {
+                      const { formatted, isJson } = formatMessageData(msg.data);
+                      const isExpanded = expandedMessages.has(msg.seq);
+                      const lineCount = formatted.split('\n').length;
+                      const isLongContent = lineCount > 5 || formatted.length > 300;
+
+                      return (
+                        <div key={idx} className="p-3 border rounded-lg">
+                          <div className="flex justify-between items-center text-sm mb-2">
+                            <div className="flex items-center gap-2">
+                              {isJson && isLongContent && (
+                                <button
+                                  onClick={() => toggleMessageExpand(msg.seq)}
+                                  className="p-0.5 hover:bg-muted rounded"
+                                >
+                                  {isExpanded ? (
+                                    <ChevronDown className="h-4 w-4" />
+                                  ) : (
+                                    <ChevronRight className="h-4 w-4" />
+                                  )}
+                                </button>
+                              )}
+                              <span className="font-medium">Seq: {msg.seq}</span>
+                            </div>
+                            <span className="text-muted-foreground truncate max-w-[200px]">{msg.subject}</span>
+                            <div className="flex items-center gap-2">
+                              <span className="text-muted-foreground text-xs">
+                                {new Date(msg.time).toLocaleString()}
+                              </span>
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                className="h-6 w-6"
+                                onClick={() => copyMessage(msg, msg.seq)}
+                              >
+                                {copiedMessageId === msg.seq ? (
+                                  <Check className="h-3 w-3 text-green-500" />
+                                ) : (
+                                  <Copy className="h-3 w-3" />
+                                )}
+                              </Button>
+                            </div>
+                          </div>
+                          <div className="relative">
+                            {isJson && (
+                              <span className="absolute top-1 right-1 text-[10px] px-1.5 py-0.5 bg-blue-100 text-blue-700 dark:bg-blue-900 dark:text-blue-300 rounded z-10">
+                                JSON
+                              </span>
+                            )}
+                            <pre
+                              className={`text-xs bg-muted p-2 rounded overflow-x-auto ${
+                                isLongContent && !isExpanded ? 'max-h-24 overflow-y-hidden' : ''
+                              }`}
+                            >
+                              {formatted}
+                            </pre>
+                            {isLongContent && !isExpanded && (
+                              <div
+                                className="absolute bottom-0 left-0 right-0 h-8 bg-gradient-to-t from-muted to-transparent cursor-pointer flex items-end justify-center pb-1"
+                                onClick={() => toggleMessageExpand(msg.seq)}
+                              >
+                                <span className="text-[10px] text-muted-foreground">Click to expand</span>
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+
+                  {/* Pagination and Controls */}
+                  <div className="flex items-center justify-between mt-4 pt-4 border-t">
+                    <div className="flex items-center gap-4">
+                      <div className="text-sm text-muted-foreground">
+                        {totalPages > 1 ? `Page ${currentPage} of ${formatNumber(totalPages)}` : `${formatNumber(messagesData?.messages?.length || 0)} messages`}
                       </div>
-                      <pre className="text-xs bg-muted p-2 rounded overflow-x-auto">
-                        {typeof msg.data === 'string' ? msg.data : JSON.stringify(msg.data, null, 2)}
-                      </pre>
+                      <div className="flex items-center gap-1 border-l pl-4">
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="h-7 text-xs"
+                          onClick={expandAllMessages}
+                          disabled={!messagesData?.messages?.length}
+                        >
+                          <Maximize2 className="h-3 w-3 mr-1" />
+                          Expand All
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="h-7 text-xs"
+                          onClick={collapseAllMessages}
+                          disabled={expandedMessages.size === 0}
+                        >
+                          <Minimize2 className="h-3 w-3 mr-1" />
+                          Collapse All
+                        </Button>
+                      </div>
                     </div>
-                  ))}
-                </div>
+                    {totalPages > 1 && (
+                      <div className="flex items-center gap-1">
+                        <Button
+                          variant="outline"
+                          size="icon"
+                          className="h-8 w-8"
+                          onClick={() => setCurrentPage(1)}
+                          disabled={currentPage === 1}
+                        >
+                          <ChevronsLeft className="h-4 w-4" />
+                        </Button>
+                        <Button
+                          variant="outline"
+                          size="icon"
+                          className="h-8 w-8"
+                          onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+                          disabled={currentPage === 1}
+                        >
+                          <ChevronLeft className="h-4 w-4" />
+                        </Button>
+                        <Input
+                          type="number"
+                          min={1}
+                          max={totalPages}
+                          value={currentPage}
+                          onChange={(e) => {
+                            const page = parseInt(e.target.value);
+                            if (page >= 1 && page <= totalPages) {
+                              setCurrentPage(page);
+                            }
+                          }}
+                          className="w-16 h-8 text-center"
+                        />
+                        <Button
+                          variant="outline"
+                          size="icon"
+                          className="h-8 w-8"
+                          onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
+                          disabled={currentPage === totalPages}
+                        >
+                          <ChevronRight className="h-4 w-4" />
+                        </Button>
+                        <Button
+                          variant="outline"
+                          size="icon"
+                          className="h-8 w-8"
+                          onClick={() => setCurrentPage(totalPages)}
+                          disabled={currentPage === totalPages}
+                        >
+                          <ChevronsRight className="h-4 w-4" />
+                        </Button>
+                      </div>
+                    )}
+                  </div>
+                </>
               )}
             </CardContent>
           </Card>

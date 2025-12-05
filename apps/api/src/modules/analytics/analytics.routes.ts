@@ -116,4 +116,22 @@ export const analyticsRoutes: FastifyPluginAsync = async (fastify) => {
       };
     }
   );
+
+  // GET /analytics/overview - Overview metrics (alias for frontend compatibility)
+  fastify.get<{ Querystring: { clusterId?: string; timeRange?: string } }>(
+    '/overview',
+    async (request) => {
+      // TODO: Implement real metrics from ClickHouse
+      return {
+        totalMessages: 0,
+        totalBytes: 0,
+        avgThroughput: 0,
+        avgLatency: 0,
+        messagesTrend: 0,
+        bytesTrend: 0,
+        throughputTrend: 0,
+        latencyTrend: 0,
+      };
+    }
+  );
 };
