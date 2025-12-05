@@ -3,7 +3,7 @@ import { config } from '../config/index';
 import type { StreamMetrics, ConsumerMetrics, ClusterMetrics, AuditLog } from '../../../shared/src/index';
 
 // Format timestamp for ClickHouse DateTime64(3)
-function formatTimestamp(date: Date): string {
+export function formatTimestamp(date: Date): string {
   return date.toISOString().replace('T', ' ').replace('Z', '');
 }
 
@@ -86,8 +86,8 @@ export async function queryStreamMetrics(
     query_params: {
       clusterId,
       streamName,
-      from: from.toISOString(),
-      to: to.toISOString(),
+      from: formatTimestamp(from),
+      to: formatTimestamp(to),
     },
     format: 'JSONEachRow',
   });
@@ -169,8 +169,8 @@ export async function queryConsumerMetrics(
       clusterId,
       streamName,
       consumerName,
-      from: from.toISOString(),
-      to: to.toISOString(),
+      from: formatTimestamp(from),
+      to: formatTimestamp(to),
     },
     format: 'JSONEachRow',
   });
@@ -266,11 +266,11 @@ export async function queryAuditLogs(
 
   if (from) {
     conditions.push('timestamp >= {from:DateTime64(3)}');
-    params.from = from.toISOString();
+    params.from = formatTimestamp(from);
   }
   if (to) {
     conditions.push('timestamp <= {to:DateTime64(3)}');
-    params.to = to.toISOString();
+    params.to = formatTimestamp(to);
   }
   if (action) {
     conditions.push('action = {action:String}');

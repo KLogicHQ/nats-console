@@ -209,3 +209,25 @@ export async function publishAlert(data: any): Promise<void> {
 }
 
 export { METRICS_CHANNEL, ALERTS_CHANNEL };
+
+// Generic cache functions
+const CACHE_PREFIX = 'cache:';
+
+export async function getCache<T>(key: string): Promise<T | null> {
+  const data = await redis.get(`${CACHE_PREFIX}${key}`);
+  if (!data) return null;
+  try {
+    return JSON.parse(data) as T;
+  } catch {
+    return null;
+  }
+}
+
+export async function setCache<T>(key: string, value: T | null, ttl: number): Promise<void> {
+  const fullKey = `${CACHE_PREFIX}${key}`;
+  if (value === null || ttl <= 0) {
+    await redis.del(fullKey);
+  } else {
+    await redis.set(fullKey, JSON.stringify(value), 'EX', ttl);
+  }
+}

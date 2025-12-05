@@ -30,9 +30,11 @@ import {
   Filter,
   X,
   Loader2,
+  FileCode,
 } from 'lucide-react';
 import Link from 'next/link';
 import { api } from '@/lib/api';
+import { SchemaViewer } from '@/components/schema-viewer';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -69,6 +71,7 @@ import { CreateStreamDialog } from '@/components/forms/create-stream-dialog';
 const tabs: Tab[] = [
   { id: 'overview', label: 'Overview', icon: Database },
   { id: 'messages', label: 'Messages', icon: MessageSquare },
+  { id: 'schema', label: 'Schema', icon: FileCode },
   { id: 'consumers', label: 'Consumers', icon: Users },
   { id: 'config', label: 'Configuration', icon: Settings },
   { id: 'metrics', label: 'Metrics', icon: BarChart3 },
@@ -255,6 +258,13 @@ function StreamDetailContent() {
     queryKey: ['stream-metrics', clusterId, streamName, metricsTimeRange],
     queryFn: () => api.analytics.streamThroughput(streamName, getTimeRangeParams()),
     enabled: activeTab === 'metrics',
+  });
+
+  // Schema data
+  const { data: schemaData, isLoading: isLoadingSchema, error: schemaError } = useQuery({
+    queryKey: ['stream-schema', clusterId, streamName],
+    queryFn: () => api.streams.getSchema(clusterId, streamName),
+    enabled: activeTab === 'schema',
   });
 
   // Transform metrics data for charts
@@ -947,6 +957,25 @@ function StreamDetailContent() {
         </div>
       )}
 
+      {/* Schema Tab */}
+      {activeTab === 'schema' && (
+        <Card>
+          <CardHeader>
+            <CardTitle>Message Schema</CardTitle>
+            <CardDescription>
+              Inferred schema from sampled messages. This shows the detected structure of message payloads.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <SchemaViewer
+              schema={schemaData?.schema ?? null}
+              loading={isLoadingSchema}
+              error={schemaError as Error | null}
+            />
+          </CardContent>
+        </Card>
+      )}
+
       {/* Consumers Tab */}
       {activeTab === 'consumers' && (
         <Card>
@@ -980,8 +1009,12 @@ function StreamDetailContent() {
                   </thead>
                   <tbody>
                     {consumersData?.consumers?.map((consumer: any) => (
-                      <tr key={consumer.name} className="border-t hover:bg-muted/30">
-                        <td className="p-3 font-medium">{consumer.name}</td>
+                      <tr
+                        key={consumer.name}
+                        className="border-t hover:bg-muted/30 cursor-pointer"
+                        onClick={() => router.push(`/consumers/${clusterId}/${streamName}/${consumer.name}`)}
+                      >
+                        <td className="p-3 font-medium text-primary hover:underline">{consumer.name}</td>
                         <td className="p-3">
                           <span className={`px-2 py-1 text-xs rounded-full ${
                             consumer.config?.durable_name
@@ -1034,6 +1067,42 @@ function StreamDetailContent() {
               <option value="24h">Last 24 hours</option>
               <option value="7d">Last 7 days</option>
             </select>
+          </div>
+
+          {/* Quick Stats */}
+          <div className="grid gap-4 md:grid-cols-4">
+            <Card>
+              <CardHeader className="pb-2">
+                <CardTitle className="text-sm font-medium">Current Messages</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="text-2xl font-bold">{formatNumber(stream.state?.messages || 0)}</div>
+              </CardContent>
+            </Card>
+            <Card>
+              <CardHeader className="pb-2">
+                <CardTitle className="text-sm font-medium">Current Size</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="text-2xl font-bold">{formatBytes(stream.state?.bytes || 0)}</div>
+              </CardContent>
+            </Card>
+            <Card>
+              <CardHeader className="pb-2">
+                <CardTitle className="text-sm font-medium">First Sequence</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="text-2xl font-bold">{formatNumber(stream.state?.first_seq || 0)}</div>
+              </CardContent>
+            </Card>
+            <Card>
+              <CardHeader className="pb-2">
+                <CardTitle className="text-sm font-medium">Last Sequence</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="text-2xl font-bold">{formatNumber(stream.state?.last_seq || 0)}</div>
+              </CardContent>
+            </Card>
           </div>
 
           {/* Message Throughput Chart */}
@@ -1097,42 +1166,6 @@ function StreamDetailContent() {
               )}
             </CardContent>
           </Card>
-
-          {/* Quick Stats */}
-          <div className="grid gap-4 md:grid-cols-4">
-            <Card>
-              <CardHeader className="pb-2">
-                <CardTitle className="text-sm font-medium">Current Messages</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="text-2xl font-bold">{formatNumber(stream.state?.messages || 0)}</div>
-              </CardContent>
-            </Card>
-            <Card>
-              <CardHeader className="pb-2">
-                <CardTitle className="text-sm font-medium">Current Size</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="text-2xl font-bold">{formatBytes(stream.state?.bytes || 0)}</div>
-              </CardContent>
-            </Card>
-            <Card>
-              <CardHeader className="pb-2">
-                <CardTitle className="text-sm font-medium">First Sequence</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="text-2xl font-bold">{formatNumber(stream.state?.first_seq || 0)}</div>
-              </CardContent>
-            </Card>
-            <Card>
-              <CardHeader className="pb-2">
-                <CardTitle className="text-sm font-medium">Last Sequence</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="text-2xl font-bold">{formatNumber(stream.state?.last_seq || 0)}</div>
-              </CardContent>
-            </Card>
-          </div>
         </div>
       )}
     </div>

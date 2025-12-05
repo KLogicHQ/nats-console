@@ -11,6 +11,17 @@ interface User {
   mfaEnabled?: boolean;
 }
 
+interface MfaPending {
+  mfaToken: string;
+  userId: string;
+}
+
+interface LoginResult {
+  success: boolean;
+  mfaRequired?: boolean;
+  mfaPending?: MfaPending;
+}
+
 interface AuthState {
   user: User | null;
   accessToken: string | null;
@@ -19,8 +30,11 @@ interface AuthState {
   isLoading: boolean;
   isAuthenticated: boolean;
   _hasHydrated: boolean;
+  mfaPending: MfaPending | null;
 
-  login: (email: string, password: string) => Promise<void>;
+  login: (email: string, password: string) => Promise<LoginResult>;
+  loginWithMfa: (code: string) => Promise<void>;
+  clearMfaPending: () => void;
   register: (data: { email: string; password: string; firstName: string; lastName: string }) => Promise<void>;
   logout: () => Promise<void>;
   refreshTokens: () => Promise<void>;
@@ -38,6 +52,7 @@ export const useAuthStore = create<AuthState>()(
       isLoading: false,
       isAuthenticated: false,
       _hasHydrated: false,
+      mfaPending: null,
 
       setHasHydrated: (state: boolean) => {
         set({ _hasHydrated: state });
@@ -46,7 +61,22 @@ export const useAuthStore = create<AuthState>()(
       login: async (email, password) => {
         set({ isLoading: true });
         try {
-          const { user, tokens, orgId } = await api.auth.login(email, password);
+          const result = await api.auth.login(email, password);
+
+          // Check if MFA is required
+          if (result.mfaRequired) {
+            set({
+              isLoading: false,
+              mfaPending: {
+                mfaToken: result.mfaToken,
+                userId: result.userId,
+              },
+            });
+            return { success: false, mfaRequired: true, mfaPending: { mfaToken: result.mfaToken, userId: result.userId } };
+          }
+
+          // No MFA required, complete login
+          const { user, tokens, orgId } = result;
 
           // Store token in localStorage for API client
           localStorage.setItem('accessToken', tokens.accessToken);
@@ -58,11 +88,46 @@ export const useAuthStore = create<AuthState>()(
             orgId,
             isAuthenticated: true,
             isLoading: false,
+            mfaPending: null,
+          });
+
+          return { success: true };
+        } catch (error) {
+          set({ isLoading: false });
+          throw error;
+        }
+      },
+
+      loginWithMfa: async (code: string) => {
+        const { mfaPending } = get();
+        if (!mfaPending) {
+          throw new Error('No MFA pending');
+        }
+
+        set({ isLoading: true });
+        try {
+          const { user, tokens, orgId } = await api.auth.loginWithMfa(mfaPending.mfaToken, code);
+
+          // Store token in localStorage for API client
+          localStorage.setItem('accessToken', tokens.accessToken);
+
+          set({
+            user,
+            accessToken: tokens.accessToken,
+            refreshToken: tokens.refreshToken,
+            orgId,
+            isAuthenticated: true,
+            isLoading: false,
+            mfaPending: null,
           });
         } catch (error) {
           set({ isLoading: false });
           throw error;
         }
+      },
+
+      clearMfaPending: () => {
+        set({ mfaPending: null });
       },
 
       register: async (data) => {

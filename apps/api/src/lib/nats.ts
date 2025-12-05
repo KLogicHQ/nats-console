@@ -59,6 +59,10 @@ export function getInternalJetStream(): JetStreamClient {
   return internalJs;
 }
 
+export function getInternalNatsConnection(): NatsConnection | null {
+  return internalNc;
+}
+
 export function getInternalJetStreamManager(): JetStreamManager {
   if (!internalJsm) {
     throw new Error('Internal NATS not connected');
@@ -439,6 +443,40 @@ export async function checkClusterHealth(clusterId: string): Promise<{
     };
   } catch {
     return { connected: false };
+  }
+}
+
+// ==================== JetStream Account Info ====================
+
+export async function getJetStreamAccountInfo(clusterId: string): Promise<{
+  streams: number;
+  consumers: number;
+  messages: number;
+  bytes: number;
+  limits?: {
+    maxMemory: number;
+    maxStorage: number;
+    maxStreams: number;
+    maxConsumers: number;
+  };
+} | null> {
+  try {
+    const jsm = getClusterJetStreamManager(clusterId);
+    const info = await jsm.getAccountInfo();
+    return {
+      streams: info.streams || 0,
+      consumers: info.consumers || 0,
+      messages: info.api?.total || 0,
+      bytes: info.memory + info.storage,
+      limits: {
+        maxMemory: info.limits.max_memory,
+        maxStorage: info.limits.max_storage,
+        maxStreams: info.limits.max_streams,
+        maxConsumers: info.limits.max_consumers,
+      },
+    };
+  } catch {
+    return null;
   }
 }
 

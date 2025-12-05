@@ -14,11 +14,17 @@ import {
   MoreHorizontal,
   Clock,
   User,
+  Globe,
+  Lock,
+  Users,
 } from 'lucide-react';
 import { api } from '@/lib/api';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
+import { Switch } from '@/components/ui/switch';
+import { Label } from '@/components/ui/label';
+import { Badge } from '@/components/ui/badge';
 import {
   Dialog,
   DialogContent,
@@ -45,12 +51,19 @@ import {
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
 
+interface ShareDashboard {
+  id: string;
+  name: string;
+  isShared: boolean;
+}
+
 export default function DashboardsPage() {
   const queryClient = useQueryClient();
   const [showCreateDialog, setShowCreateDialog] = useState(false);
   const [newDashboardName, setNewDashboardName] = useState('');
   const [newDashboardDescription, setNewDashboardDescription] = useState('');
   const [deleteDashboardId, setDeleteDashboardId] = useState<string | null>(null);
+  const [shareDashboard, setShareDashboard] = useState<ShareDashboard | null>(null);
 
   const { data: dashboardsData, isLoading } = useQuery({
     queryKey: ['dashboards'],
@@ -85,6 +98,15 @@ export default function DashboardsPage() {
       });
     },
     onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['dashboards'] });
+    },
+  });
+
+  const shareMutation = useMutation({
+    mutationFn: ({ id, isShared }: { id: string; isShared: boolean }) =>
+      api.dashboards.update(id, { isShared }),
+    onSuccess: () => {
+      setShareDashboard(null);
       queryClient.invalidateQueries({ queryKey: ['dashboards'] });
     },
   });
@@ -166,10 +188,17 @@ export default function DashboardsPage() {
                       <Clock className="h-4 w-4" />
                       <span>Updated {formatDate(dashboard.updatedAt)}</span>
                     </div>
-                    <div className="flex items-center gap-1">
-                      <User className="h-4 w-4" />
-                      <span>{dashboard.isShared ? 'Shared' : 'Private'}</span>
-                    </div>
+                    {dashboard.isShared ? (
+                      <Badge variant="secondary" className="gap-1">
+                        <Globe className="h-3 w-3" />
+                        Shared
+                      </Badge>
+                    ) : (
+                      <Badge variant="outline" className="gap-1">
+                        <Lock className="h-3 w-3" />
+                        Private
+                      </Badge>
+                    )}
                   </div>
                 </CardContent>
               </Link>
@@ -200,7 +229,16 @@ export default function DashboardsPage() {
                       <Copy className="h-4 w-4 mr-2" />
                       Duplicate
                     </DropdownMenuItem>
-                    <DropdownMenuItem>
+                    <DropdownMenuItem
+                      onClick={(e) => {
+                        e.preventDefault();
+                        setShareDashboard({
+                          id: dashboard.id,
+                          name: dashboard.name,
+                          isShared: dashboard.isShared,
+                        });
+                      }}
+                    >
                       <Share2 className="h-4 w-4 mr-2" />
                       Share
                     </DropdownMenuItem>
@@ -294,6 +332,90 @@ export default function DashboardsPage() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      {/* Share Dashboard Dialog */}
+      <Dialog open={!!shareDashboard} onOpenChange={() => setShareDashboard(null)}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Share Dashboard</DialogTitle>
+            <DialogDescription>
+              Control who can view &quot;{shareDashboard?.name}&quot; in your organization
+            </DialogDescription>
+          </DialogHeader>
+          <div className="py-6">
+            <div className="flex items-center justify-between p-4 rounded-lg border bg-muted/50">
+              <div className="flex items-center gap-3">
+                <div className="p-2 rounded-full bg-background">
+                  {shareDashboard?.isShared ? (
+                    <Globe className="h-5 w-5 text-primary" />
+                  ) : (
+                    <Lock className="h-5 w-5 text-muted-foreground" />
+                  )}
+                </div>
+                <div>
+                  <Label htmlFor="share-toggle" className="text-base font-medium">
+                    Share with organization
+                  </Label>
+                  <p className="text-sm text-muted-foreground">
+                    {shareDashboard?.isShared
+                      ? 'Everyone in your organization can view this dashboard'
+                      : 'Only you can view this dashboard'}
+                  </p>
+                </div>
+              </div>
+              <Switch
+                id="share-toggle"
+                checked={shareDashboard?.isShared ?? false}
+                onCheckedChange={(checked) => {
+                  if (shareDashboard) {
+                    setShareDashboard({ ...shareDashboard, isShared: checked });
+                  }
+                }}
+              />
+            </div>
+
+            {shareDashboard?.isShared && (
+              <div className="mt-4 p-4 rounded-lg border border-primary/20 bg-primary/5">
+                <div className="flex items-start gap-3">
+                  <Users className="h-5 w-5 text-primary mt-0.5" />
+                  <div>
+                    <p className="text-sm font-medium">Organization Access</p>
+                    <p className="text-sm text-muted-foreground mt-1">
+                      All team members will be able to view this dashboard. They cannot modify
+                      or delete it unless they have admin permissions.
+                    </p>
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShareDashboard(null)}>
+              Cancel
+            </Button>
+            <Button
+              onClick={() => {
+                if (shareDashboard) {
+                  shareMutation.mutate({
+                    id: shareDashboard.id,
+                    isShared: shareDashboard.isShared,
+                  });
+                }
+              }}
+              disabled={shareMutation.isPending}
+            >
+              {shareMutation.isPending ? (
+                <Loader2 className="h-4 w-4 animate-spin mr-2" />
+              ) : shareDashboard?.isShared ? (
+                <Globe className="h-4 w-4 mr-2" />
+              ) : (
+                <Lock className="h-4 w-4 mr-2" />
+              )}
+              Save Changes
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

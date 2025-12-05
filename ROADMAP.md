@@ -129,8 +129,8 @@ Phases 1-5 are complete. The application now includes full CRUD operations, deta
 ### Custom Dashboards
 - [x] Dashboard builder
 - [x] Widget library
-- [ ] Saved queries
-- [ ] Dashboard sharing
+- [x] Saved queries
+- [x] Dashboard sharing
 - [ ] Export to PDF
 
 ---
@@ -210,8 +210,8 @@ Phases 1-5 are complete. The application now includes full CRUD operations, deta
 - [ ] CI/CD pipeline
 - [ ] Automated releases
 - [ ] Docker multi-stage builds
-- [ ] Health check endpoints
-- [ ] Graceful shutdown
+- [x] Health check endpoints
+- [x] Graceful shutdown
 
 ---
 

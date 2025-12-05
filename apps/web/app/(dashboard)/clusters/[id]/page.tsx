@@ -296,30 +296,34 @@ function ClusterDetailContent() {
                   <div className="flex justify-between">
                     <span className="text-muted-foreground">Server ID</span>
                     <span className="font-mono text-sm truncate max-w-[200px]">
-                      {healthData?.server_id || '-'}
+                      {healthData?.serverInfo?.serverId || '-'}
                     </span>
                   </div>
                   <div className="flex justify-between">
                     <span className="text-muted-foreground">Server Name</span>
-                    <span>{healthData?.server_name || '-'}</span>
+                    <span>{healthData?.serverInfo?.serverName || '-'}</span>
                   </div>
                   <div className="flex justify-between">
-                    <span className="text-muted-foreground">Go Version</span>
-                    <span>{healthData?.go || '-'}</span>
+                    <span className="text-muted-foreground">Version</span>
+                    <span>{healthData?.serverInfo?.version || cluster.version || '-'}</span>
                   </div>
                 </div>
                 <div className="space-y-3">
                   <div className="flex justify-between">
-                    <span className="text-muted-foreground">Uptime</span>
-                    <span>{healthData?.uptime || '-'}</span>
+                    <span className="text-muted-foreground">JetStream</span>
+                    <span className={healthData?.serverInfo?.jetstream ? 'text-green-500' : 'text-red-500'}>
+                      {healthData?.serverInfo?.jetstream ? 'Enabled' : 'Disabled'}
+                    </span>
                   </div>
                   <div className="flex justify-between">
-                    <span className="text-muted-foreground">Connections</span>
-                    <span>{formatNumber(healthData?.connections || 0)}</span>
+                    <span className="text-muted-foreground">RTT</span>
+                    <span>{healthData?.rtt ? `${healthData.rtt}ms` : '-'}</span>
                   </div>
                   <div className="flex justify-between">
-                    <span className="text-muted-foreground">Memory</span>
-                    <span>{formatBytes(healthData?.mem || 0)}</span>
+                    <span className="text-muted-foreground">Status</span>
+                    <span className={cluster.status === 'connected' ? 'text-green-500' : 'text-red-500'}>
+                      {cluster.status}
+                    </span>
                   </div>
                 </div>
               </div>
@@ -431,14 +435,13 @@ function ClusterDetailContent() {
           <div className="grid gap-4 md:grid-cols-3">
             <Card>
               <CardHeader>
-                <CardTitle className="text-sm font-medium">Memory Usage</CardTitle>
+                <CardTitle className="text-sm font-medium">Streams</CardTitle>
               </CardHeader>
               <CardContent className="flex justify-center">
                 <GaugeChart
-                  value={healthData?.mem ? Math.round(healthData.mem / (1024 * 1024)) : 0}
-                  max={1024}
-                  title={formatBytes(healthData?.mem || 0)}
-                  unit=" MB"
+                  value={jetstream?.streams || 0}
+                  max={Math.max(100, (jetstream?.streams || 0) * 2)}
+                  title={`${jetstream?.streams || 0} streams`}
                   color="#2563eb"
                   height={150}
                 />
@@ -446,13 +449,13 @@ function ClusterDetailContent() {
             </Card>
             <Card>
               <CardHeader>
-                <CardTitle className="text-sm font-medium">Connections</CardTitle>
+                <CardTitle className="text-sm font-medium">Consumers</CardTitle>
               </CardHeader>
               <CardContent className="flex justify-center">
                 <GaugeChart
-                  value={healthData?.connections || 0}
-                  max={100}
-                  title={`${healthData?.connections || 0} active`}
+                  value={jetstream?.consumers || 0}
+                  max={Math.max(100, (jetstream?.consumers || 0) * 2)}
+                  title={`${jetstream?.consumers || 0} consumers`}
                   color="#16a34a"
                   height={150}
                 />
@@ -465,7 +468,7 @@ function ClusterDetailContent() {
               <CardContent className="flex justify-center">
                 <GaugeChart
                   value={jetstream?.bytes ? Math.round(jetstream.bytes / (1024 * 1024)) : 0}
-                  max={1024}
+                  max={Math.max(1024, jetstream?.bytes ? Math.round(jetstream.bytes / (1024 * 1024)) * 2 : 1024)}
                   title={formatBytes(jetstream?.bytes || 0)}
                   unit=" MB"
                   color="#f59e0b"
@@ -506,33 +509,37 @@ function ClusterDetailContent() {
           {/* Server Info */}
           <Card>
             <CardHeader>
-              <CardTitle>Server Performance</CardTitle>
+              <CardTitle>Server Information</CardTitle>
               <CardDescription>Server runtime statistics</CardDescription>
             </CardHeader>
             <CardContent>
               <div className="grid gap-4 md:grid-cols-2">
                 <div className="space-y-3">
                   <div className="flex justify-between">
-                    <span className="text-muted-foreground">Uptime</span>
-                    <span className="font-medium">{healthData?.uptime || '-'}</span>
+                    <span className="text-muted-foreground">Server ID</span>
+                    <span className="font-medium font-mono text-sm truncate max-w-[200px]">
+                      {healthData?.serverInfo?.serverId || '-'}
+                    </span>
                   </div>
                   <div className="flex justify-between">
-                    <span className="text-muted-foreground">Memory</span>
-                    <span className="font-medium">{formatBytes(healthData?.mem || 0)}</span>
+                    <span className="text-muted-foreground">Server Name</span>
+                    <span className="font-medium">{healthData?.serverInfo?.serverName || '-'}</span>
                   </div>
                   <div className="flex justify-between">
-                    <span className="text-muted-foreground">Connections</span>
-                    <span className="font-medium">{formatNumber(healthData?.connections || 0)}</span>
+                    <span className="text-muted-foreground">RTT</span>
+                    <span className="font-medium">{healthData?.rtt ? `${healthData.rtt}ms` : '-'}</span>
                   </div>
                 </div>
                 <div className="space-y-3">
                   <div className="flex justify-between">
                     <span className="text-muted-foreground">Server Version</span>
-                    <span className="font-medium">{cluster.version || '-'}</span>
+                    <span className="font-medium">{healthData?.serverInfo?.version || cluster.version || '-'}</span>
                   </div>
                   <div className="flex justify-between">
-                    <span className="text-muted-foreground">Go Version</span>
-                    <span className="font-medium">{healthData?.go || '-'}</span>
+                    <span className="text-muted-foreground">JetStream</span>
+                    <span className={`font-medium ${healthData?.serverInfo?.jetstream ? 'text-green-500' : 'text-red-500'}`}>
+                      {healthData?.serverInfo?.jetstream ? 'Enabled' : 'Disabled'}
+                    </span>
                   </div>
                   <div className="flex justify-between">
                     <span className="text-muted-foreground">Status</span>

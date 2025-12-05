@@ -65,6 +65,7 @@ model User {
   emailVerified Boolean   @default(false) @map("email_verified")
   mfaEnabled    Boolean   @default(false) @map("mfa_enabled")
   mfaSecret     String?   @map("mfa_secret") @db.VarChar(255)
+  settings      Json      @default("{}") @db.JsonB // User preferences (theme, notifications, etc)
   lastLoginAt   DateTime? @map("last_login_at")
   createdAt     DateTime  @default(now()) @map("created_at")
   updatedAt     DateTime  @updatedAt @map("updated_at")

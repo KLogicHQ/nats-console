@@ -142,19 +142,8 @@ export const analyticsRoutes: FastifyPluginAsync = async (fastify) => {
       const from = new Date(Date.now() - hours * 60 * 60 * 1000);
       const to = new Date();
 
-      // Get all streams for the cluster
-      const { prisma } = await import('../../lib/prisma');
-      const streams = await prisma.stream.findMany({
-        where: { clusterId },
-        select: { name: true },
-      });
-
-      if (streams.length === 0) {
-        return { data: [], interval };
-      }
-
-      // Query aggregated throughput for all streams
-      const { getClickHouseClient } = await import('../../lib/clickhouse');
+      // Query aggregated throughput for all streams in the cluster
+      const { getClickHouseClient, formatTimestamp } = await import('../../lib/clickhouse');
       const ch = getClickHouseClient();
 
       const intervalSeconds = interval === '5m' ? 300 : interval === '15m' ? 900 : interval === '1h' ? 3600 : 21600;
@@ -174,8 +163,8 @@ export const analyticsRoutes: FastifyPluginAsync = async (fastify) => {
           `,
           query_params: {
             clusterId,
-            from: from.toISOString(),
-            to: to.toISOString(),
+            from: formatTimestamp(from),
+            to: formatTimestamp(to),
           },
           format: 'JSONEachRow',
         });
@@ -269,7 +258,7 @@ export const analyticsRoutes: FastifyPluginAsync = async (fastify) => {
       const from = new Date(Date.now() - hours * 60 * 60 * 1000);
       const to = new Date();
 
-      const { getClickHouseClient } = await import('../../lib/clickhouse');
+      const { getClickHouseClient, formatTimestamp } = await import('../../lib/clickhouse');
       const ch = getClickHouseClient();
 
       try {
@@ -288,8 +277,8 @@ export const analyticsRoutes: FastifyPluginAsync = async (fastify) => {
           `,
           query_params: {
             clusterId,
-            from: from.toISOString(),
-            to: to.toISOString(),
+            from: formatTimestamp(from),
+            to: formatTimestamp(to),
           },
           format: 'JSONEachRow',
         });

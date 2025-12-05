@@ -33,6 +33,9 @@ coverage
 # Turbo
 .turbo
 
+# TypeScript build info
+*.tsbuildinfo
+
 # Prisma
 apps/api/prisma/*.db
 apps/api/prisma/*.db-journal

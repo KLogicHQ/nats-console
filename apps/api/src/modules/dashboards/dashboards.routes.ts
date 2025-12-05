@@ -78,15 +78,17 @@ export const dashboardRoutes: FastifyPluginAsync = async (fastify) => {
       throw new NotFoundError('Dashboard', request.params.id);
     }
 
+    // Only include fields that were provided in the request
+    const updateData: Record<string, unknown> = {};
+    if (body.name !== undefined) updateData.name = body.name;
+    if (body.description !== undefined) updateData.description = body.description;
+    if (body.layout !== undefined) updateData.layout = body.layout;
+    if (body.widgets !== undefined) updateData.widgets = body.widgets;
+    if (body.isShared !== undefined) updateData.isShared = body.isShared;
+
     const updated = await prisma.dashboard.update({
       where: { id: request.params.id },
-      data: {
-        name: body.name,
-        description: body.description,
-        layout: body.layout as any,
-        widgets: body.widgets as any,
-        isShared: body.isShared,
-      },
+      data: updateData,
     });
 
     return { dashboard: updated };

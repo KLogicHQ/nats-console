@@ -3,7 +3,7 @@
         prisma-generate prisma-migrate prisma-studio \
         api-dev web-dev workers-dev \
         lint format test \
-        examples-setup examples-producer examples-consumer examples-all
+        examples-setup examples-producer examples-consumer examples-load-test examples-all
 
 # Colors
 CYAN := \033[36m
@@ -219,6 +219,9 @@ examples-producer: ## Run example message producer
 
 examples-consumer: ## Run example message consumer
 	cd examples && pnpm run consumer
+
+examples-load-test: ## Run load test to generate high message volume
+	cd examples && pnpm run load-test
 
 examples-all: examples-setup ## Setup streams and run producer
 	@echo "$(GREEN)Streams created. Starting producer...$(RESET)"

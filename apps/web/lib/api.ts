@@ -96,12 +96,33 @@ async function request<T>(endpoint: string, options: ApiOptions = {}): Promise<T
   return response.json();
 }
 
-// Auth API
+// Auth API - Login can return either full auth result or MFA requirement
+export interface LoginSuccessResult {
+  user: any;
+  tokens: any;
+  orgId: string;
+  mfaRequired?: false;
+}
+
+export interface LoginMfaRequiredResult {
+  mfaRequired: true;
+  mfaToken: string;
+  userId: string;
+}
+
+export type LoginResult = LoginSuccessResult | LoginMfaRequiredResult;
+
 export const auth = {
   login: (email: string, password: string) =>
-    request<{ user: any; tokens: any; orgId: string }>('/auth/login', {
+    request<LoginResult>('/auth/login', {
       method: 'POST',
       body: { email, password },
+    }),
+
+  loginWithMfa: (mfaToken: string, code: string) =>
+    request<LoginSuccessResult>('/auth/login/mfa', {
+      method: 'POST',
+      body: { mfaToken, code },
     }),
 
   register: (data: { email: string; password: string; firstName: string; lastName: string }) =>
@@ -219,7 +240,38 @@ export const streams = {
       `/clusters/${clusterId}/streams/${name}/messages/replay`,
       { method: 'POST', body: data }
     ),
+
+  getSchema: (clusterId: string, name: string, options?: { subject?: string; sampleSize?: number }) => {
+    const params = new URLSearchParams();
+    if (options?.subject) params.set('subject', options.subject);
+    if (options?.sampleSize) params.set('sample_size', String(options.sampleSize));
+    const query = params.toString() ? `?${params}` : '';
+    return request<{ schema: InferredSchema }>(`/clusters/${clusterId}/streams/${name}/schema${query}`);
+  },
 };
+
+// Schema types
+export interface SchemaField {
+  name: string;
+  type: string;
+  required: boolean;
+  nullable: boolean;
+  children?: SchemaField[];
+  examples?: unknown[];
+  minLength?: number;
+  maxLength?: number;
+  minimum?: number;
+  maximum?: number;
+  enum?: unknown[];
+}
+
+export interface InferredSchema {
+  type: 'object' | 'array' | 'primitive';
+  fields: SchemaField[];
+  sampleCount: number;
+  parseErrors: number;
+  format?: string;
+}
 
 // Consumers API
 export const consumers = {
@@ -424,6 +476,39 @@ export const dashboards = {
     }),
 };
 
+// Saved Queries API
+export const savedQueries = {
+  list: () => request<{ savedQueries: any[] }>('/saved-queries'),
+
+  get: (id: string) => request<{ savedQuery: any }>(`/saved-queries/${id}`),
+
+  create: (data: { name: string; query: string; description?: string; isShared?: boolean }) =>
+    request<{ savedQuery: any }>('/saved-queries', {
+      method: 'POST',
+      body: data,
+    }),
+
+  update: (id: string, data: { name?: string; query?: string; description?: string; isShared?: boolean }) =>
+    request<{ savedQuery: any }>(`/saved-queries/${id}`, {
+      method: 'PATCH',
+      body: data,
+    }),
+
+  delete: (id: string) => request(`/saved-queries/${id}`, { method: 'DELETE' }),
+
+  clone: (id: string) =>
+    request<{ savedQuery: any }>(`/saved-queries/${id}/clone`, {
+      method: 'POST',
+      body: {},
+    }),
+
+  execute: (id: string) =>
+    request<{ savedQuery: any; queryConfig: any; results: any[] }>(`/saved-queries/${id}/execute`, {
+      method: 'POST',
+      body: {},
+    }),
+};
+
 // Invites API
 export const invites = {
   list: () => request<{ invites: any[] }>('/invites'),
@@ -523,7 +608,30 @@ export const settings = {
     }>('/settings/compliance/report'),
 
   // GDPR (all users)
-  exportUserData: () => `/settings/gdpr/export`,
+  exportUserData: async () => {
+    const token = getAccessToken();
+    const response = await fetch(`${API_URL}/settings/gdpr/export`, {
+      method: 'GET',
+      headers: {
+        'Authorization': `Bearer ${token}`,
+      },
+    });
+
+    if (!response.ok) {
+      throw new Error('Failed to export data');
+    }
+
+    const data = await response.json();
+    const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `user-data-export-${new Date().toISOString().split('T')[0]}.json`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+  },
 
   deleteAccount: () =>
     request<{ message: string }>('/settings/gdpr/delete-account', { method: 'DELETE' }),
@@ -536,6 +644,86 @@ export const mfa = {
   disable: () => request<{ success: boolean }>('/auth/mfa/disable', { method: 'DELETE' }),
 };
 
+// DLQ API
+export interface DlqStream {
+  clusterId: string;
+  clusterName: string;
+  streamName: string;
+  messageCount: number;
+  bytesTotal: number;
+  firstSeq?: number;
+  lastSeq?: number;
+  subjects: string[];
+  sourceStream?: string;
+}
+
+export interface DlqMessage {
+  subject: string;
+  sequence: number;
+  time: string;
+  data: string;
+  headers?: Record<string, string>;
+  originalSubject?: string;
+  deliveryCount?: number;
+  failureReason?: string;
+}
+
+export const dlq = {
+  listStreams: () => request<{ dlqStreams: DlqStream[] }>('/dlq/streams'),
+
+  getStream: (clusterId: string, streamName: string) =>
+    request<{ stream: any }>(`/dlq/${clusterId}/${streamName}`),
+
+  getMessages: (clusterId: string, streamName: string, params?: { startSeq?: number; limit?: number; subject?: string }) => {
+    const queryParams = new URLSearchParams();
+    if (params?.startSeq) queryParams.set('startSeq', String(params.startSeq));
+    if (params?.limit) queryParams.set('limit', String(params.limit));
+    if (params?.subject) queryParams.set('subject', params.subject);
+    const query = queryParams.toString() ? `?${queryParams}` : '';
+    return request<{ messages: DlqMessage[] }>(`/dlq/${clusterId}/${streamName}/messages${query}`);
+  },
+
+  replayMessage: (clusterId: string, streamName: string, seq: number, targetSubject?: string) =>
+    request<{ replayed: boolean; targetSubject: string; newSequence: number; stream: string }>(
+      `/dlq/${clusterId}/${streamName}/messages/${seq}/replay`,
+      { method: 'POST', body: { targetSubject } }
+    ),
+
+  replayBatch: (
+    clusterId: string,
+    streamName: string,
+    sequences: number[],
+    options?: { targetSubject?: string; preserveHeaders?: boolean }
+  ) =>
+    request<{
+      total: number;
+      succeeded: number;
+      failed: number;
+      results: Array<{ sequence: number; success: boolean; newSequence?: number; error?: string }>;
+    }>(`/dlq/${clusterId}/${streamName}/replay-batch`, {
+      method: 'POST',
+      body: { sequences, ...options },
+    }),
+
+  deleteMessage: (clusterId: string, streamName: string, seq: number) =>
+    request(`/dlq/${clusterId}/${streamName}/messages/${seq}`, { method: 'DELETE' }),
+
+  purge: (clusterId: string, streamName: string, subject?: string) => {
+    const query = subject ? `?subject=${encodeURIComponent(subject)}` : '';
+    return request<{ purged: number }>(`/dlq/${clusterId}/${streamName}/purge${query}`, { method: 'DELETE' });
+  },
+
+  createDlqStream: (data: {
+    clusterId: string;
+    sourceStreamName: string;
+    retention?: 'limits' | 'interest' | 'workqueue';
+    maxAge?: number;
+    maxMsgs?: number;
+    maxBytes?: number;
+  }) =>
+    request<{ stream: any }>('/dlq/create', { method: 'POST', body: data }),
+};
+
 export const api = {
   auth,
   clusters,
@@ -544,7 +732,9 @@ export const api = {
   analytics,
   alerts,
   dashboards,
+  savedQueries,
   invites,
   settings,
   mfa,
+  dlq,
 };

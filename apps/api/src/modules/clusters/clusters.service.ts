@@ -5,6 +5,7 @@ import {
   checkClusterHealth,
   isClusterConnected,
   listStreams,
+  getJetStreamAccountInfo,
 } from '../../lib/nats';
 import { setClusterStatus, getClusterStatus } from '../../lib/redis';
 import { NotFoundError, ConflictError } from '../../../../shared/src/index';
@@ -325,18 +326,41 @@ export async function getClusterInfo(orgId: string, clusterId: string): Promise<
   health: Awaited<ReturnType<typeof checkHealth>>;
   streams: number;
   consumers: number;
+  jetstream: {
+    streams: number;
+    consumers: number;
+    messages: number;
+    bytes: number;
+  } | null;
 }> {
   const cluster = await getCluster(orgId, clusterId);
   const health = await checkHealth(orgId, clusterId);
 
   let streamCount = 0;
   let consumerCount = 0;
+  let jetstream: {
+    streams: number;
+    consumers: number;
+    messages: number;
+    bytes: number;
+  } | null = null;
 
   if (health.connected) {
     try {
       const streams = await listStreams(clusterId);
       streamCount = streams.length;
       consumerCount = streams.reduce((acc, s) => acc + (s.state?.consumer_count || 0), 0);
+
+      // Get JetStream account info
+      const jsInfo = await getJetStreamAccountInfo(clusterId);
+      if (jsInfo) {
+        jetstream = {
+          streams: jsInfo.streams,
+          consumers: jsInfo.consumers,
+          messages: jsInfo.messages,
+          bytes: jsInfo.bytes,
+        };
+      }
     } catch {
       // Ignore errors
     }
@@ -347,6 +371,7 @@ export async function getClusterInfo(orgId: string, clusterId: string): Promise<
     health,
     streams: streamCount,
     consumers: consumerCount,
+    jetstream,
   };
 }
 

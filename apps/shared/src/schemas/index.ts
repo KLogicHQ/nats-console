@@ -52,6 +52,11 @@ export const MfaVerifySchema = z.object({
   code: z.string().length(6, 'MFA code must be 6 digits'),
 });
 
+export const MfaLoginSchema = z.object({
+  mfaToken: z.string().min(1, 'MFA token is required'),
+  code: z.string().length(6, 'MFA code must be 6 digits'),
+});
+
 export const UpdateProfileSchema = z.object({
   firstName: z.string().min(1).max(100).optional(),
   lastName: z.string().min(1).max(100).optional(),
@@ -279,6 +284,17 @@ export const CreateDashboardSchema = z.object({
 
 export const UpdateDashboardSchema = CreateDashboardSchema.partial();
 
+// ==================== Saved Query Schemas ====================
+
+export const CreateSavedQuerySchema = z.object({
+  name: z.string().min(1, 'Name is required').max(100, 'Name must be at most 100 characters'),
+  query: z.string().min(1, 'Query is required'),
+  description: z.string().max(500, 'Description must be at most 500 characters').optional(),
+  isShared: z.boolean().default(false),
+});
+
+export const UpdateSavedQuerySchema = CreateSavedQuerySchema.partial();
+
 // ==================== Alert Schemas ====================
 
 export const AlertConditionSchema = z.object({
@@ -369,6 +385,7 @@ export type RefreshTokenInput = z.infer<typeof RefreshTokenSchema>;
 export type ForgotPasswordInput = z.infer<typeof ForgotPasswordSchema>;
 export type ResetPasswordInput = z.infer<typeof ResetPasswordSchema>;
 export type MfaVerifyInput = z.infer<typeof MfaVerifySchema>;
+export type MfaLoginInput = z.infer<typeof MfaLoginSchema>;
 export type UpdateProfileInput = z.infer<typeof UpdateProfileSchema>;
 export type ChangePasswordInput = z.infer<typeof ChangePasswordSchema>;
 export type UpdateUserInput = z.infer<typeof UpdateUserSchema>;
@@ -389,6 +406,8 @@ export type CreateConsumerInput = z.infer<typeof CreateConsumerSchema>;
 export type UpdateConsumerInput = z.infer<typeof UpdateConsumerSchema>;
 export type CreateDashboardInput = z.infer<typeof CreateDashboardSchema>;
 export type UpdateDashboardInput = z.infer<typeof UpdateDashboardSchema>;
+export type CreateSavedQueryInput = z.infer<typeof CreateSavedQuerySchema>;
+export type UpdateSavedQueryInput = z.infer<typeof UpdateSavedQuerySchema>;
 export type CreateNotificationChannelInput = z.infer<typeof CreateNotificationChannelSchema>;
 export type UpdateNotificationChannelInput = z.infer<typeof UpdateNotificationChannelSchema>;
 export type CreateAlertRuleInput = z.infer<typeof CreateAlertRuleSchema>;

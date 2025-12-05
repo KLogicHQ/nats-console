@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { Plus, Server, MoreVertical, CheckCircle, XCircle, AlertCircle, RefreshCw } from 'lucide-react';
+import { Plus, Server, CheckCircle, XCircle, AlertCircle, RefreshCw } from 'lucide-react';
 import Link from 'next/link';
 import { api } from '@/lib/api';
 import { Button } from '@/components/ui/button';
@@ -105,9 +105,6 @@ export default function ClustersPage() {
                       <CardDescription>{cluster.description || 'No description'}</CardDescription>
                     </div>
                   </div>
-                  <Button variant="ghost" size="icon" onClick={(e) => e.preventDefault()}>
-                    <MoreVertical className="h-4 w-4" />
-                  </Button>
                 </CardHeader>
                 <CardContent>
                   <div className="flex items-center justify-between text-sm">
@@ -122,6 +119,7 @@ export default function ClustersPage() {
           ))}
         </div>
       )}
+
     </div>
   );
 }

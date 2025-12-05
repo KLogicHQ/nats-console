@@ -22,9 +22,11 @@ import { teamRoutes } from './modules/teams/teams.routes';
 import { analyticsRoutes } from './modules/analytics/analytics.routes';
 import { alertRoutes } from './modules/alerts/alerts.routes';
 import { dashboardRoutes } from './modules/dashboards/dashboards.routes';
+import { savedQueryRoutes } from './modules/saved-queries/saved-queries.routes';
 import { inviteRoutes } from './modules/invites/invites.routes';
 import { settingsRoutes } from './modules/settings/settings.routes';
 import { auditRoutes } from './modules/audit/audit.routes';
+import { dlqRoutes } from './modules/dlq/dlq.routes';
 import { auditPlugin } from './common/middleware/audit';
 import { ipAllowlistMiddleware } from './common/middleware/ip-allowlist';
 
@@ -72,9 +74,100 @@ await app.register(websocket, {
   },
 });
 
-// Health check endpoint
-app.get('/health', async () => {
-  return { status: 'ok', timestamp: new Date().toISOString() };
+// Health check endpoints
+interface HealthCheckResult {
+  status: 'healthy' | 'unhealthy' | 'degraded';
+  timestamp: string;
+  version: string;
+  uptime: number;
+  checks?: Record<string, { status: 'up' | 'down'; latency?: number; message?: string }>;
+}
+
+const startTime = Date.now();
+
+// Check individual service health
+async function checkPostgres(): Promise<{ status: 'up' | 'down'; latency: number; message?: string }> {
+  const start = Date.now();
+  try {
+    const { prisma } = await import('./lib/prisma');
+    await prisma.$queryRaw`SELECT 1`;
+    return { status: 'up', latency: Date.now() - start };
+  } catch (err) {
+    return { status: 'down', latency: Date.now() - start, message: (err as Error).message };
+  }
+}
+
+async function checkRedis(): Promise<{ status: 'up' | 'down'; latency: number; message?: string }> {
+  const start = Date.now();
+  try {
+    const result = await redis.ping();
+    return { status: result === 'PONG' ? 'up' : 'down', latency: Date.now() - start };
+  } catch (err) {
+    return { status: 'down', latency: Date.now() - start, message: (err as Error).message };
+  }
+}
+
+async function checkClickHouse(): Promise<{ status: 'up' | 'down'; latency: number; message?: string }> {
+  const start = Date.now();
+  try {
+    const { getClickHouseClient } = await import('./lib/clickhouse');
+    const client = getClickHouseClient();
+    await client.query({ query: 'SELECT 1', format: 'JSONEachRow' });
+    return { status: 'up', latency: Date.now() - start };
+  } catch (err) {
+    return { status: 'down', latency: Date.now() - start, message: (err as Error).message };
+  }
+}
+
+async function checkNats(): Promise<{ status: 'up' | 'down'; latency: number; message?: string }> {
+  const start = Date.now();
+  try {
+    const { getInternalNatsConnection } = await import('./lib/nats');
+    const nc = getInternalNatsConnection();
+    if (nc && !nc.isClosed()) {
+      return { status: 'up', latency: Date.now() - start };
+    }
+    return { status: 'down', latency: Date.now() - start, message: 'NATS connection not available' };
+  } catch (err) {
+    return { status: 'down', latency: Date.now() - start, message: (err as Error).message };
+  }
+}
+
+// Basic health check - returns ok if server is responding
+app.get('/health', async (): Promise<HealthCheckResult> => {
+  return {
+    status: 'healthy',
+    timestamp: new Date().toISOString(),
+    version: process.env.npm_package_version || '0.5.0',
+    uptime: Math.floor((Date.now() - startTime) / 1000),
+  };
+});
+
+// Liveness probe - just confirms the server is alive
+app.get('/health/live', async () => {
+  return { status: 'alive', timestamp: new Date().toISOString() };
+});
+
+// Readiness probe - checks all dependencies
+app.get('/health/ready', async (): Promise<HealthCheckResult> => {
+  const [postgres, redisCheck, clickhouse, nats] = await Promise.all([
+    checkPostgres(),
+    checkRedis(),
+    checkClickHouse(),
+    checkNats(),
+  ]);
+
+  const checks = { postgres, redis: redisCheck, clickhouse, nats };
+  const allHealthy = Object.values(checks).every((c) => c.status === 'up');
+  const anyHealthy = Object.values(checks).some((c) => c.status === 'up');
+
+  return {
+    status: allHealthy ? 'healthy' : anyHealthy ? 'degraded' : 'unhealthy',
+    timestamp: new Date().toISOString(),
+    version: process.env.npm_package_version || '0.5.0',
+    uptime: Math.floor((Date.now() - startTime) / 1000),
+    checks,
+  };
 });
 
 // API version prefix
@@ -97,9 +190,11 @@ app.register(
     await api.register(analyticsRoutes, { prefix: '/analytics' });
     await api.register(alertRoutes, { prefix: '/alerts' });
     await api.register(dashboardRoutes, { prefix: '/dashboards' });
+    await api.register(savedQueryRoutes, { prefix: '/saved-queries' });
     await api.register(inviteRoutes, { prefix: '/invites' });
     await api.register(settingsRoutes, { prefix: '/settings' });
     await api.register(auditRoutes, { prefix: '/audit' });
+    await api.register(dlqRoutes, { prefix: '/dlq' });
   },
   { prefix: '/api/v1' }
 );
@@ -120,23 +215,67 @@ app.setErrorHandler((error, request, reply) => {
   });
 });
 
-// Graceful shutdown
+// Graceful shutdown with timeout
+const SHUTDOWN_TIMEOUT = 30000; // 30 seconds
+let isShuttingDown = false;
+
 const shutdown = async (signal: string) => {
+  // Prevent multiple shutdown attempts
+  if (isShuttingDown) {
+    app.log.warn('Shutdown already in progress...');
+    return;
+  }
+  isShuttingDown = true;
+
   app.log.info(`Received ${signal}, shutting down gracefully...`);
 
-  await app.close();
-  await disconnectAllClusters();
-  await disconnectInternalNats();
-  await closeClickHouseClient();
-  await redis.quit();
-  await disconnectDatabase();
+  // Set a force shutdown timeout
+  const forceShutdownTimer = setTimeout(() => {
+    app.log.error('Graceful shutdown timed out, forcing exit...');
+    process.exit(1);
+  }, SHUTDOWN_TIMEOUT);
 
-  app.log.info('Shutdown complete');
-  process.exit(0);
+  try {
+    // Close HTTP server first (stops accepting new requests)
+    app.log.info('Closing HTTP server...');
+    await app.close();
+
+    // Disconnect from external services
+    app.log.info('Disconnecting NATS clusters...');
+    await disconnectAllClusters();
+
+    app.log.info('Disconnecting internal NATS...');
+    await disconnectInternalNats();
+
+    app.log.info('Closing ClickHouse connection...');
+    await closeClickHouseClient();
+
+    app.log.info('Closing Redis connection...');
+    await redis.quit();
+
+    app.log.info('Disconnecting PostgreSQL...');
+    await disconnectDatabase();
+
+    clearTimeout(forceShutdownTimer);
+    app.log.info('Shutdown complete');
+    process.exit(0);
+  } catch (err) {
+    app.log.error('Error during shutdown:', err);
+    clearTimeout(forceShutdownTimer);
+    process.exit(1);
+  }
 };
 
 process.on('SIGTERM', () => shutdown('SIGTERM'));
 process.on('SIGINT', () => shutdown('SIGINT'));
+process.on('uncaughtException', (err) => {
+  app.log.error('Uncaught exception:', err);
+  shutdown('uncaughtException');
+});
+process.on('unhandledRejection', (reason) => {
+  app.log.error('Unhandled rejection:', reason);
+  shutdown('unhandledRejection');
+});
 
 // Start server
 async function start() {

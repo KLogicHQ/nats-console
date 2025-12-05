@@ -312,3 +312,258 @@ export async function deleteMessage(
 
   await natsDeleteMessage(clusterId, streamName, sequence);
 }
+
+// ==================== Schema Inference ====================
+
+export interface SchemaField {
+  name: string;
+  type: string;
+  required: boolean;
+  nullable: boolean;
+  children?: SchemaField[];
+  examples?: unknown[];
+  minLength?: number;
+  maxLength?: number;
+  minimum?: number;
+  maximum?: number;
+  enum?: unknown[];
+}
+
+export interface InferredSchema {
+  type: 'object' | 'array' | 'primitive';
+  fields: SchemaField[];
+  sampleCount: number;
+  parseErrors: number;
+  format?: string;
+}
+
+function inferType(value: unknown): string {
+  if (value === null) return 'null';
+  if (Array.isArray(value)) return 'array';
+  if (typeof value === 'object') return 'object';
+  if (typeof value === 'number') {
+    return Number.isInteger(value) ? 'integer' : 'number';
+  }
+  if (typeof value === 'boolean') return 'boolean';
+  if (typeof value === 'string') {
+    // Try to detect common formats
+    if (/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}/.test(value)) return 'string:datetime';
+    if (/^\d{4}-\d{2}-\d{2}$/.test(value)) return 'string:date';
+    if (/^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i.test(value)) return 'string:uuid';
+    if (/^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/.test(value)) return 'string:email';
+    if (/^https?:\/\//.test(value)) return 'string:uri';
+    return 'string';
+  }
+  return 'unknown';
+}
+
+function mergeTypes(types: Set<string>): string {
+  if (types.size === 0) return 'unknown';
+  if (types.size === 1) return types.values().next().value;
+
+  // Handle nullable types
+  const typesArr = Array.from(types);
+  if (types.has('null') && types.size === 2) {
+    const nonNull = typesArr.find(t => t !== 'null')!;
+    return nonNull + '|null';
+  }
+
+  // Handle numeric types
+  if (types.has('integer') && types.has('number')) {
+    types.delete('integer');
+  }
+
+  return Array.from(types).join(' | ');
+}
+
+function analyzeField(
+  name: string,
+  values: unknown[],
+  seenCount: number,
+  totalSamples: number
+): SchemaField {
+  const types = new Set<string>();
+  const examples: unknown[] = [];
+  let children: SchemaField[] | undefined;
+  const stringLengths: number[] = [];
+  const numbers: number[] = [];
+  const uniqueValues = new Set<string>();
+
+  for (const value of values) {
+    const type = inferType(value);
+    types.add(type.split(':')[0] === 'string' ? type : type);
+
+    if (examples.length < 3 && value !== null) {
+      const strVal = JSON.stringify(value);
+      if (!uniqueValues.has(strVal)) {
+        uniqueValues.add(strVal);
+        examples.push(value);
+      }
+    }
+
+    if (typeof value === 'string') {
+      stringLengths.push(value.length);
+    }
+
+    if (typeof value === 'number') {
+      numbers.push(value);
+    }
+  }
+
+  // Analyze nested objects
+  const objectValues = values.filter(v => typeof v === 'object' && v !== null && !Array.isArray(v));
+  if (objectValues.length > 0) {
+    const allKeys = new Map<string, unknown[]>();
+    const keyCounts = new Map<string, number>();
+
+    for (const obj of objectValues as Record<string, unknown>[]) {
+      for (const [key, val] of Object.entries(obj)) {
+        if (!allKeys.has(key)) {
+          allKeys.set(key, []);
+          keyCounts.set(key, 0);
+        }
+        allKeys.get(key)!.push(val);
+        keyCounts.set(key, keyCounts.get(key)! + 1);
+      }
+    }
+
+    children = Array.from(allKeys.entries()).map(([key, vals]) =>
+      analyzeField(key, vals, keyCounts.get(key)!, objectValues.length)
+    );
+  }
+
+  // Analyze arrays
+  const arrayValues = values.filter(v => Array.isArray(v));
+  if (arrayValues.length > 0 && !children) {
+    const allItems = (arrayValues as unknown[][]).flat();
+    if (allItems.length > 0) {
+      children = [analyzeField('[]', allItems, allItems.length, arrayValues.length)];
+    }
+  }
+
+  // Detect enums (if limited unique values)
+  const enumValues = uniqueValues.size <= 10 && uniqueValues.size < values.length / 2
+    ? Array.from(uniqueValues).map(v => JSON.parse(v))
+    : undefined;
+
+  const field: SchemaField = {
+    name,
+    type: mergeTypes(types),
+    required: seenCount === totalSamples,
+    nullable: types.has('null'),
+    examples,
+  };
+
+  if (children) field.children = children;
+  if (enumValues) field.enum = enumValues;
+  if (stringLengths.length > 0) {
+    field.minLength = Math.min(...stringLengths);
+    field.maxLength = Math.max(...stringLengths);
+  }
+  if (numbers.length > 0) {
+    field.minimum = Math.min(...numbers);
+    field.maximum = Math.max(...numbers);
+  }
+
+  return field;
+}
+
+export async function inferMessageSchema(
+  orgId: string,
+  clusterId: string,
+  streamName: string,
+  options?: { subject?: string; sampleSize?: number }
+): Promise<InferredSchema> {
+  const sampleSize = options?.sampleSize ?? 100;
+
+  // Verify cluster belongs to org
+  const cluster = await prisma.natsCluster.findFirst({
+    where: { id: clusterId, orgId },
+  });
+
+  if (!cluster) {
+    throw new NotFoundError('Cluster', clusterId);
+  }
+
+  // Get messages for sampling
+  const messages = await natsGetMessages(clusterId, streamName, {
+    limit: sampleSize,
+    subject: options?.subject,
+  });
+
+  if (messages.length === 0) {
+    return {
+      type: 'object',
+      fields: [],
+      sampleCount: 0,
+      parseErrors: 0,
+    };
+  }
+
+  // Parse messages and collect data
+  const parsedValues: unknown[] = [];
+  let parseErrors = 0;
+  let format: string | undefined;
+
+  for (const msg of messages) {
+    try {
+      const data = new TextDecoder().decode(msg.data);
+
+      // Try to detect format
+      if (!format) {
+        if (data.startsWith('{') || data.startsWith('[')) {
+          format = 'json';
+        } else if (data.includes(',') && data.includes('\n')) {
+          format = 'csv';
+        } else {
+          format = 'text';
+        }
+      }
+
+      if (format === 'json') {
+        const parsed = JSON.parse(data);
+        parsedValues.push(parsed);
+      } else {
+        parsedValues.push(data);
+      }
+    } catch {
+      parseErrors++;
+    }
+  }
+
+  if (parsedValues.length === 0) {
+    return {
+      type: 'primitive',
+      fields: [],
+      sampleCount: messages.length,
+      parseErrors,
+      format: 'binary',
+    };
+  }
+
+  // Determine root type
+  const firstValue = parsedValues[0];
+  let rootType: 'object' | 'array' | 'primitive';
+  let fields: SchemaField[];
+
+  if (typeof firstValue === 'object' && firstValue !== null && !Array.isArray(firstValue)) {
+    rootType = 'object';
+    const rootField = analyzeField('root', parsedValues, parsedValues.length, parsedValues.length);
+    fields = rootField.children || [];
+  } else if (Array.isArray(firstValue)) {
+    rootType = 'array';
+    const rootField = analyzeField('root', parsedValues, parsedValues.length, parsedValues.length);
+    fields = rootField.children || [];
+  } else {
+    rootType = 'primitive';
+    fields = [analyzeField('value', parsedValues, parsedValues.length, parsedValues.length)];
+  }
+
+  return {
+    type: rootType,
+    fields,
+    sampleCount: parsedValues.length,
+    parseErrors,
+    format,
+  };
+}

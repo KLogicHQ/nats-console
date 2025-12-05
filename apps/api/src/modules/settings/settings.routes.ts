@@ -48,8 +48,12 @@ export const settingsRoutes: FastifyPluginAsync = async (fastify) => {
 
   // GET /settings/preferences - Get user preferences
   fastify.get('/preferences', async (request) => {
-    // Try to get existing settings from Redis or create defaults
-    const settings = {
+    const user = await prisma.user.findUnique({
+      where: { id: request.user!.sub },
+      select: { settings: true },
+    });
+
+    const defaults = {
       emailAlerts: true,
       webhookAlerts: false,
       slackAlerts: false,
@@ -58,8 +62,9 @@ export const settingsRoutes: FastifyPluginAsync = async (fastify) => {
       dateFormat: 'relative',
     };
 
-    // In a real implementation, you'd store this in the database or Redis
-    // For now, return defaults
+    const userSettings = (user?.settings as Record<string, unknown>) || {};
+    const settings = { ...defaults, ...userSettings };
+
     return { settings };
   });
 
@@ -67,18 +72,40 @@ export const settingsRoutes: FastifyPluginAsync = async (fastify) => {
   fastify.patch('/preferences', async (request) => {
     const body = UserSettingsSchema.parse(request.body);
 
-    // In a real implementation, save to database/Redis
-    // For now, just return the updated settings
-    const settings = {
-      emailAlerts: body.emailAlerts ?? true,
-      webhookAlerts: body.webhookAlerts ?? false,
-      slackAlerts: body.slackAlerts ?? false,
-      alertDigest: body.alertDigest ?? 'daily',
-      theme: body.theme ?? 'system',
-      dateFormat: body.dateFormat ?? 'relative',
+    // Get current user settings
+    const user = await prisma.user.findUnique({
+      where: { id: request.user!.sub },
+      select: { settings: true },
+    });
+
+    const currentSettings = (user?.settings as Record<string, unknown>) || {};
+
+    // Merge with new settings (only update provided fields)
+    const newSettings = { ...currentSettings };
+    if (body.emailAlerts !== undefined) newSettings.emailAlerts = body.emailAlerts;
+    if (body.webhookAlerts !== undefined) newSettings.webhookAlerts = body.webhookAlerts;
+    if (body.slackAlerts !== undefined) newSettings.slackAlerts = body.slackAlerts;
+    if (body.alertDigest !== undefined) newSettings.alertDigest = body.alertDigest;
+    if (body.theme !== undefined) newSettings.theme = body.theme;
+    if (body.dateFormat !== undefined) newSettings.dateFormat = body.dateFormat;
+
+    // Save to database
+    await prisma.user.update({
+      where: { id: request.user!.sub },
+      data: { settings: newSettings },
+    });
+
+    // Return merged settings with defaults
+    const defaults = {
+      emailAlerts: true,
+      webhookAlerts: false,
+      slackAlerts: false,
+      alertDigest: 'daily',
+      theme: 'system',
+      dateFormat: 'relative',
     };
 
-    return { settings };
+    return { settings: { ...defaults, ...newSettings } };
   });
 
   // ==================== API Keys ====================

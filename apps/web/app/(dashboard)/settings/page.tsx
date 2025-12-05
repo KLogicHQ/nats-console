@@ -155,6 +155,28 @@ function SettingsPageContent() {
     }
   }, [user]);
 
+  // Fetch user preferences
+  const { data: preferencesData } = useQuery({
+    queryKey: ['user-preferences'],
+    queryFn: () => api.settings.getPreferences(),
+  });
+
+  // Initialize preferences from server data
+  useEffect(() => {
+    if (preferencesData?.settings) {
+      setNotificationSettings({
+        emailAlerts: preferencesData.settings.emailAlerts ?? true,
+        webhookAlerts: preferencesData.settings.webhookAlerts ?? false,
+        slackAlerts: preferencesData.settings.slackAlerts ?? false,
+        alertDigest: preferencesData.settings.alertDigest ?? 'daily',
+      });
+      setAppearanceSettings({
+        theme: preferencesData.settings.theme ?? 'system',
+        dateFormat: preferencesData.settings.dateFormat ?? 'relative',
+      });
+    }
+  }, [preferencesData]);
+
   // Fetch pending invites
   const { data: invitesData } = useQuery({
     queryKey: ['invites'],
@@ -231,7 +253,10 @@ function SettingsPageContent() {
   const notificationMutation = useMutation({
     mutationFn: (data: typeof notificationSettings) => api.settings.updatePreferences(data),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['settings'] });
+      queryClient.invalidateQueries({ queryKey: ['user-preferences'] });
+    },
+    onError: (err: any) => {
+      console.error('Failed to save notification preferences:', err);
     },
   });
 
@@ -239,7 +264,10 @@ function SettingsPageContent() {
   const appearanceMutation = useMutation({
     mutationFn: (data: typeof appearanceSettings) => api.settings.updatePreferences(data),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['settings'] });
+      queryClient.invalidateQueries({ queryKey: ['user-preferences'] });
+    },
+    onError: (err: any) => {
+      console.error('Failed to save appearance preferences:', err);
     },
   });
 
@@ -593,6 +621,11 @@ function SettingsPageContent() {
                   <div className="p-3 text-sm text-green-600 bg-green-50 rounded-md flex items-center gap-2">
                     <CheckCircle2 className="h-4 w-4" />
                     Preferences saved successfully
+                  </div>
+                )}
+                {notificationMutation.isError && (
+                  <div className="p-3 text-sm text-destructive bg-destructive/10 rounded-md">
+                    Failed to save preferences: {(notificationMutation.error as any)?.message || 'Unknown error'}
                   </div>
                 )}
                 <div className="space-y-4">
@@ -1006,6 +1039,11 @@ function SettingsPageContent() {
                   <div className="p-3 text-sm text-green-600 bg-green-50 rounded-md flex items-center gap-2">
                     <CheckCircle2 className="h-4 w-4" />
                     Preferences saved successfully
+                  </div>
+                )}
+                {appearanceMutation.isError && (
+                  <div className="p-3 text-sm text-destructive bg-destructive/10 rounded-md">
+                    Failed to save preferences: {(appearanceMutation.error as any)?.message || 'Unknown error'}
                   </div>
                 )}
                 <div className="space-y-2">
@@ -1471,15 +1509,18 @@ function SettingsPageContent() {
                     Export includes your profile information, organization memberships, dashboards,
                     saved queries, and API keys.
                   </p>
-                  <Button variant="outline" asChild>
-                    <a
-                      href={`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001/api/v1'}${api.settings.exportUserData()}`}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                    >
-                      <Download className="h-4 w-4" />
-                      Export My Data
-                    </a>
+                  <Button
+                    variant="outline"
+                    onClick={async () => {
+                      try {
+                        await api.settings.exportUserData();
+                      } catch (error) {
+                        console.error('Failed to export data:', error);
+                      }
+                    }}
+                  >
+                    <Download className="h-4 w-4" />
+                    Export My Data
                   </Button>
                 </CardContent>
               </Card>

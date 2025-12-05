@@ -6,6 +6,7 @@ import {
   ForgotPasswordSchema,
   ResetPasswordSchema,
   MfaVerifySchema,
+  MfaLoginSchema,
   UpdateProfileSchema,
   ChangePasswordSchema,
 } from '../../../../shared/src/index';
@@ -42,6 +43,31 @@ export const authRoutes: FastifyPluginAsync = async (fastify) => {
       request.headers['user-agent']
     );
 
+    // Check if MFA is required
+    if ('mfaRequired' in result && result.mfaRequired) {
+      return {
+        mfaRequired: true,
+        mfaToken: result.mfaToken,
+        userId: result.userId,
+      };
+    }
+
+    // Normal login - return user info
+    return {
+      user: result.user,
+      tokens: result.tokens,
+      orgId: result.orgId,
+    };
+  });
+
+  // POST /auth/login/mfa - Complete MFA login
+  fastify.post('/login/mfa', async (request, reply) => {
+    const body = MfaLoginSchema.parse(request.body);
+    const result = await authService.loginWithMfa(
+      body.mfaToken,
+      body.code,
+      request.ip
+    );
     return {
       user: result.user,
       tokens: result.tokens,

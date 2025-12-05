@@ -19,6 +19,7 @@ import {
   List,
   PieChart,
   X,
+  CheckCircle2,
 } from 'lucide-react';
 import Link from 'next/link';
 import { api } from '@/lib/api';
@@ -97,6 +98,8 @@ export default function DashboardBuilderPage() {
     }
   }, [dashboardData]);
 
+  const [saveSuccess, setSaveSuccess] = useState(false);
+
   const saveMutation = useMutation({
     mutationFn: () =>
       api.dashboards.update(dashboardId, {
@@ -106,6 +109,8 @@ export default function DashboardBuilderPage() {
       }),
     onSuccess: () => {
       setHasUnsavedChanges(false);
+      setSaveSuccess(true);
+      setTimeout(() => setSaveSuccess(false), 2000);
       queryClient.invalidateQueries({ queryKey: ['dashboard', dashboardId] });
       queryClient.invalidateQueries({ queryKey: ['dashboards'] });
     },
@@ -198,13 +203,17 @@ export default function DashboardBuilderPage() {
           <Button
             onClick={() => saveMutation.mutate()}
             disabled={!hasUnsavedChanges || saveMutation.isPending}
+            variant={saveSuccess ? 'default' : 'default'}
+            className={saveSuccess ? 'bg-green-600 hover:bg-green-600' : ''}
           >
             {saveMutation.isPending ? (
               <Loader2 className="h-4 w-4 animate-spin" />
+            ) : saveSuccess ? (
+              <CheckCircle2 className="h-4 w-4" />
             ) : (
               <Save className="h-4 w-4" />
             )}
-            {hasUnsavedChanges ? 'Save Changes' : 'Saved'}
+            {saveMutation.isPending ? 'Saving...' : saveSuccess ? 'Saved!' : hasUnsavedChanges ? 'Save Changes' : 'Saved'}
           </Button>
         </div>
       </div>
@@ -375,20 +384,21 @@ export default function DashboardBuilderPage() {
               <div className="space-y-2">
                 <label className="text-sm font-medium">Title</label>
                 <Input
-                  value={showWidgetConfig.title}
-                  onChange={(e) =>
+                  value={widgets.find((w) => w.id === showWidgetConfig.id)?.title || ''}
+                  onChange={(e) => {
                     setWidgets(
                       widgets.map((w) =>
                         w.id === showWidgetConfig.id ? { ...w, title: e.target.value } : w
                       )
-                    )
-                  }
+                    );
+                    setHasUnsavedChanges(true);
+                  }}
                 />
               </div>
               <div className="space-y-2">
                 <label className="text-sm font-medium">Cluster</label>
                 <Select
-                  value={(showWidgetConfig.config.clusterId as string) || ''}
+                  value={(widgets.find((w) => w.id === showWidgetConfig.id)?.config.clusterId as string) || ''}
                   onValueChange={(v) =>
                     updateWidgetConfig(showWidgetConfig.id, { clusterId: v })
                   }
@@ -408,7 +418,7 @@ export default function DashboardBuilderPage() {
               <div className="space-y-2">
                 <label className="text-sm font-medium">Metric</label>
                 <Select
-                  value={(showWidgetConfig.config.metric as string) || ''}
+                  value={(widgets.find((w) => w.id === showWidgetConfig.id)?.config.metric as string) || ''}
                   onValueChange={(v) =>
                     updateWidgetConfig(showWidgetConfig.id, { metric: v })
                   }

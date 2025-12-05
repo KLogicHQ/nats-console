@@ -1,5 +1,6 @@
 'use client';
 
+import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import {
@@ -12,6 +13,8 @@ import {
   Settings,
   LogOut,
   PanelTop,
+  FileSearch,
+  AlertTriangle,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useAuthStore } from '@/stores/auth';
@@ -23,8 +26,10 @@ const navigation = [
   { name: 'Clusters', href: '/clusters', icon: Server },
   { name: 'Streams', href: '/streams', icon: Database },
   { name: 'Consumers', href: '/consumers', icon: Users },
+  { name: 'Dead Letter Queues', href: '/dlq', icon: AlertTriangle },
   { name: 'Analytics', href: '/analytics', icon: BarChart3 },
   { name: 'Dashboards', href: '/dashboards', icon: PanelTop },
+  { name: 'Saved Queries', href: '/saved-queries', icon: FileSearch },
   { name: 'Alerts', href: '/alerts', icon: Bell },
   { name: 'Settings', href: '/settings', icon: Settings },
 ];
@@ -32,6 +37,17 @@ const navigation = [
 export function Sidebar() {
   const pathname = usePathname();
   const { logout, user } = useAuthStore();
+
+  // Optimistic navigation state for instant feedback
+  const [optimisticPath, setOptimisticPath] = useState<string | null>(null);
+
+  // Sync optimistic state with actual pathname when navigation completes
+  useEffect(() => {
+    setOptimisticPath(null);
+  }, [pathname]);
+
+  // Use optimistic path if set, otherwise use actual pathname
+  const activePath = optimisticPath || pathname;
 
   return (
     <div className="flex h-full w-52 flex-col border-r bg-sidebar">
@@ -43,11 +59,12 @@ export function Sidebar() {
       {/* Navigation */}
       <nav className="flex-1 space-y-1 p-3">
         {navigation.map((item) => {
-          const isActive = pathname === item.href || (item.href !== '/overview' && pathname.startsWith(item.href));
+          const isActive = activePath === item.href || (item.href !== '/overview' && activePath.startsWith(item.href));
           return (
             <Link
               key={item.name}
               href={item.href}
+              onClick={() => setOptimisticPath(item.href)}
               className={cn(
                 'flex items-center gap-3 rounded-md px-3 py-2 text-sm font-medium transition-colors',
                 isActive

@@ -264,4 +264,24 @@ export const streamRoutes: FastifyPluginAsync = async (fastify) => {
       errors: errors.length > 0 ? errors : undefined,
     };
   });
+
+  // GET /clusters/:cid/streams/:name/schema - Infer message schema
+  fastify.get<{
+    Params: { cid: string; name: string };
+    Querystring: { subject?: string; sample_size?: string };
+  }>('/:cid/streams/:name/schema', async (request) => {
+    const { subject, sample_size } = request.query;
+
+    const schema = await streamService.inferMessageSchema(
+      request.user!.orgId,
+      request.params.cid,
+      request.params.name,
+      {
+        subject,
+        sampleSize: sample_size ? parseInt(sample_size) : undefined,
+      }
+    );
+
+    return { schema };
+  });
 };

@@ -2,21 +2,77 @@
 
 A modern, enterprise-grade web console for managing NATS JetStream clusters. Built with Next.js, Node.js, and TypeScript, featuring real-time monitoring and a developer-friendly experience.
 
-**Maintained by [KLogic](https://klogic.io)**
+**Open Source** | **Maintained by [KLogic](https://klogic.io)**
 
+![Open Source](https://img.shields.io/badge/Open%20Source-MIT-green)
 ![NATS Console](https://img.shields.io/badge/NATS-JetStream-blue)
 ![TypeScript](https://img.shields.io/badge/TypeScript-5.0-blue)
 ![Next.js](https://img.shields.io/badge/Next.js-15-black)
 ![Fastify](https://img.shields.io/badge/Fastify-5-black)
 
+> **Free and Open Source Software (FOSS)** - Use, modify, and distribute freely under the MIT License. Contributions welcome!
+
 ## Features
 
-- **Multi-cluster Management** - Connect and manage multiple NATS JetStream clusters
-- **Stream Management** - Create, configure, and monitor streams with message browser
-- **Consumer Management** - Manage consumers with real-time lag visualization
-- **Real-time Metrics** - Live dashboards with ClickHouse-backed analytics
-- **Alerting** - Configurable alerts for lag, throughput, and errors
-- **Team Collaboration** - Multi-tenant with organizations and teams
+### Cluster Management
+- **Multi-cluster Support** - Connect and manage multiple NATS JetStream clusters from a single dashboard
+- **Connection Testing** - Verify cluster connectivity before saving
+- **Health Monitoring** - Real-time cluster health status with server info
+- **Secure Connections** - Support for TLS, credentials, and token authentication
+
+### Stream Management
+- **Stream CRUD** - Create, update, delete, and configure streams
+- **Message Browser** - Browse messages with pagination, JSON formatting, expand/collapse
+- **Message Publishing** - Publish messages directly from the UI
+- **Message Export** - Export messages to JSON or CSV format
+- **Message Replay** - Replay messages to different subjects
+- **Stream Purge** - Purge stream messages with confirmation
+- **Metrics Charts** - Message throughput and data throughput visualization
+
+### Consumer Management
+- **Consumer CRUD** - Create, update, and delete consumers
+- **Lag Visualization** - Real-time lag monitoring with progress bars
+- **Pause/Resume** - Pause and resume consumers
+- **Metrics Charts** - Consumer lag, pending, and ack rate visualization
+- **Delivery Policies** - Configure various delivery policies
+
+### Real-time Monitoring
+- **WebSocket Updates** - Live metrics streaming via WebSocket
+- **Interactive Charts** - ECharts-based visualization
+- **Historical Trends** - ClickHouse-backed time-series analytics
+- **Gauge Charts** - Memory, connections, and storage usage
+
+### Alert System
+- **Alert Rules** - Create rules for lag, throughput, storage, and connection health
+- **Notification Channels** - Email, Slack, Webhook, PagerDuty, Microsoft Teams, Google Chat
+- **Incident Management** - Create, acknowledge, resolve, and close incidents
+- **Alert History** - View historical alerts and events
+
+### Custom Dashboards
+- **Dashboard Builder** - Drag-and-drop widget placement
+- **Widget Library** - Line charts, bar charts, gauges, stat cards, tables, pie charts
+- **Dashboard Sharing** - Share dashboards with team members
+
+### Multi-tenancy & Security
+- **Organizations** - Multi-tenant organization management
+- **Teams** - Team-based access control within organizations
+- **Role-Based Access Control (RBAC)** - Fine-grained permissions
+- **Two-Factor Authentication (2FA)** - TOTP-based authentication
+- **API Key Management** - Generate and manage API keys with expiration
+- **IP Allowlisting** - Restrict access by IP address or CIDR range
+- **Audit Logging** - Track all user actions with ClickHouse storage
+
+### Enterprise Features
+- **Data Retention Policies** - Configure retention for metrics, audit logs, and events
+- **Audit Trail Export** - Export audit logs to JSON or CSV
+- **Compliance Reports** - Security metrics and recommendations
+- **GDPR Compliance** - Data export (Article 20) and account deletion (Article 17)
+
+### Developer Experience
+- **Modern UI** - Clean, responsive design with shadcn/ui components
+- **Dark Mode** - System, light, and dark theme support
+- **REST API** - Full-featured REST API for integrations
+- **WebSocket API** - Real-time event streaming
 
 ## Tech Stack
 
@@ -459,14 +515,32 @@ docker-compose up -d --build
 
 ## Contributing
 
-1. Fork the repository
-2. Create feature branch: `git checkout -b feature/my-feature`
-3. Commit changes: `git commit -am 'Add feature'`
-4. Push to branch: `git push origin feature/my-feature`
-5. Open a Pull Request
+We welcome contributions from the community! This project is open source and thrives on community involvement.
+
+### How to Contribute
+
+1. **Fork** the repository
+2. **Create** a feature branch: `git checkout -b feature/my-feature`
+3. **Commit** changes: `git commit -am 'Add feature'`
+4. **Push** to branch: `git push origin feature/my-feature`
+5. **Open** a Pull Request
+
+### Ways to Contribute
+
+- **Bug Reports** - Found a bug? Open an issue with details
+- **Feature Requests** - Have an idea? We'd love to hear it
+- **Documentation** - Help improve docs and examples
+- **Code** - Submit PRs for bug fixes or new features
+- **Testing** - Help test and report issues
+
+### Development Setup
+
+See [Local Development Mode](#4-local-development-mode) for setting up your development environment.
 
 ---
 
 ## License
 
 MIT License - see [LICENSE](./LICENSE) for details.
+
+This is free and open source software. You are free to use, modify, and distribute it under the terms of the MIT License.

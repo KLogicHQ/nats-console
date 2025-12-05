@@ -228,12 +228,25 @@ export async function register(data: {
 
 // ==================== User Login ====================
 
+export interface LoginResult {
+  user: User;
+  tokens: AuthTokens;
+  orgId: string;
+  mfaRequired?: false;
+}
+
+export interface LoginMfaRequired {
+  mfaRequired: true;
+  mfaToken: string;
+  userId: string;
+}
+
 export async function login(
   email: string,
   password: string,
   ipAddress?: string,
   userAgent?: string
-): Promise<{ user: User; tokens: AuthTokens; orgId: string }> {
+): Promise<LoginResult | LoginMfaRequired> {
   const user = await prisma.user.findUnique({
     where: { email: email.toLowerCase() },
     include: {
@@ -264,6 +277,103 @@ export async function login(
     throw new UnauthorizedError('User has no organization membership');
   }
 
+  // Check if MFA is enabled
+  if (user.mfaEnabled && user.mfaSecret) {
+    // Generate a temporary MFA token
+    const mfaToken = await new SignJWT({ sub: user.id, type: 'mfa_pending', orgId: membership.orgId, role: membership.role })
+      .setProtectedHeader({ alg: 'HS256' })
+      .setIssuedAt()
+      .setExpirationTime('5m') // MFA token valid for 5 minutes
+      .sign(JWT_SECRET);
+
+    // Store pending MFA in Redis
+    await redis.set(`mfa_pending:${user.id}`, mfaToken, 'EX', 300);
+
+    return {
+      mfaRequired: true,
+      mfaToken,
+      userId: user.id,
+    };
+  }
+
+  // No MFA required, complete login
+  return completeLogin(user, membership, ipAddress);
+}
+
+export async function loginWithMfa(
+  mfaToken: string,
+  code: string,
+  ipAddress?: string
+): Promise<LoginResult> {
+  // Verify MFA token
+  let payload: any;
+  try {
+    const result = await jwtVerify(mfaToken, JWT_SECRET);
+    payload = result.payload;
+  } catch {
+    throw new UnauthorizedError('Invalid or expired MFA token');
+  }
+
+  if (payload.type !== 'mfa_pending') {
+    throw new UnauthorizedError('Invalid MFA token');
+  }
+
+  // Verify the token is still valid in Redis
+  const storedToken = await redis.get(`mfa_pending:${payload.sub}`);
+  if (storedToken !== mfaToken) {
+    throw new UnauthorizedError('MFA token has expired or been used');
+  }
+
+  // Get user
+  const user = await prisma.user.findUnique({
+    where: { id: payload.sub },
+    include: {
+      organizationMemberships: {
+        include: {
+          organization: true,
+        },
+        take: 1,
+      },
+    },
+  });
+
+  if (!user || !user.mfaSecret) {
+    throw new UnauthorizedError('Invalid user or MFA not configured');
+  }
+
+  // Verify TOTP code
+  const totp = new OTPAuth.TOTP({
+    issuer: 'NATS Console',
+    label: user.email,
+    algorithm: 'SHA1',
+    digits: 6,
+    period: 30,
+    secret: OTPAuth.Secret.fromBase32(user.mfaSecret),
+  });
+
+  const delta = totp.validate({ token: code, window: 1 });
+
+  if (delta === null) {
+    throw new UnauthorizedError('Invalid MFA code');
+  }
+
+  // Delete the pending MFA token
+  await redis.del(`mfa_pending:${payload.sub}`);
+
+  const membership = user.organizationMemberships[0];
+  if (!membership) {
+    throw new UnauthorizedError('User has no organization membership');
+  }
+
+  // Complete login
+  return completeLogin(user, membership, ipAddress);
+}
+
+async function completeLogin(
+  user: any,
+  membership: any,
+  ipAddress?: string
+): Promise<LoginResult> {
   // Update last login
   await prisma.user.update({
     where: { id: user.id },
