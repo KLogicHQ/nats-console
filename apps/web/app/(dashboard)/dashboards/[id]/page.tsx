@@ -20,6 +20,8 @@ import {
   PieChart,
   X,
   CheckCircle2,
+  Edit,
+  MoreVertical,
 } from 'lucide-react';
 import Link from 'next/link';
 import { api } from '@/lib/api';
@@ -41,6 +43,13 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
 import { DashboardWidget } from '@/components/dashboard/dashboard-widget';
 
 // Widget types
@@ -77,6 +86,7 @@ export default function DashboardBuilderPage() {
   const [newWidgetCluster, setNewWidgetCluster] = useState('');
   const [newWidgetMetric, setNewWidgetMetric] = useState('');
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
+  const [isEditingLayout, setIsEditingLayout] = useState(false);
 
   const { data: dashboardData, isLoading } = useQuery({
     queryKey: ['dashboard', dashboardId],
@@ -101,16 +111,30 @@ export default function DashboardBuilderPage() {
   const [saveSuccess, setSaveSuccess] = useState(false);
 
   const saveMutation = useMutation({
-    mutationFn: () =>
-      api.dashboards.update(dashboardId, {
+    mutationFn: async (updatedWidgets?: Widget[]) => {
+      const widgetsToSave = updatedWidgets ?? widgets;
+      if (dashboardId === 'new') {
+        return api.dashboards.create({
+          name: dashboardName || 'New Dashboard',
+          description: dashboardDescription,
+          widgets: widgetsToSave,
+        });
+      }
+      return api.dashboards.update(dashboardId, {
         name: dashboardName,
         description: dashboardDescription,
-        widgets,
-      }),
-    onSuccess: () => {
+        widgets: widgetsToSave,
+      });
+    },
+    onSuccess: (data) => {
       setHasUnsavedChanges(false);
+      setIsEditingLayout(false);
       setSaveSuccess(true);
       setTimeout(() => setSaveSuccess(false), 2000);
+      // If new dashboard was created, redirect to its page
+      if (dashboardId === 'new' && data?.dashboard?.id) {
+        router.replace(`/dashboards/${data.dashboard.id}`);
+      }
       queryClient.invalidateQueries({ queryKey: ['dashboard', dashboardId] });
       queryClient.invalidateQueries({ queryKey: ['dashboards'] });
     },
@@ -135,13 +159,16 @@ export default function DashboardBuilderPage() {
       },
     };
 
-    setWidgets([...widgets, newWidget]);
-    setHasUnsavedChanges(true);
+    const updatedWidgets = [...widgets, newWidget];
+    setWidgets(updatedWidgets);
     setShowAddWidget(false);
     setSelectedWidgetType('');
     setNewWidgetTitle('');
     setNewWidgetCluster('');
     setNewWidgetMetric('');
+
+    // Auto-save after adding widget
+    saveMutation.mutate(updatedWidgets);
   };
 
   const removeWidget = (widgetId: string) => {
@@ -175,24 +202,35 @@ export default function DashboardBuilderPage() {
             </Button>
           </Link>
           <div className="flex-1">
-            <Input
-              value={dashboardName}
-              onChange={(e) => {
-                setDashboardName(e.target.value);
-                setHasUnsavedChanges(true);
-              }}
-              className="text-2xl font-bold border-none shadow-none px-0 h-auto focus-visible:ring-0"
-              placeholder="Dashboard Name"
-            />
-            <Input
-              value={dashboardDescription}
-              onChange={(e) => {
-                setDashboardDescription(e.target.value);
-                setHasUnsavedChanges(true);
-              }}
-              className="text-sm text-muted-foreground border-none shadow-none px-0 h-auto focus-visible:ring-0"
-              placeholder="Add a description..."
-            />
+            {isEditingLayout ? (
+              <>
+                <Input
+                  value={dashboardName}
+                  onChange={(e) => {
+                    setDashboardName(e.target.value);
+                    setHasUnsavedChanges(true);
+                  }}
+                  className="text-2xl font-bold border-none shadow-none px-0 h-auto focus-visible:ring-0"
+                  placeholder="Dashboard Name"
+                />
+                <Input
+                  value={dashboardDescription}
+                  onChange={(e) => {
+                    setDashboardDescription(e.target.value);
+                    setHasUnsavedChanges(true);
+                  }}
+                  className="text-sm text-muted-foreground border-none shadow-none px-0 h-auto focus-visible:ring-0"
+                  placeholder="Add a description..."
+                />
+              </>
+            ) : (
+              <>
+                <h1 className="text-2xl font-bold">{dashboardName || 'Untitled Dashboard'}</h1>
+                {dashboardDescription && (
+                  <p className="text-sm text-muted-foreground">{dashboardDescription}</p>
+                )}
+              </>
+            )}
           </div>
         </div>
         <div className="flex gap-2">
@@ -200,21 +238,44 @@ export default function DashboardBuilderPage() {
             <Plus className="h-4 w-4" />
             Add Widget
           </Button>
-          <Button
-            onClick={() => saveMutation.mutate()}
-            disabled={!hasUnsavedChanges || saveMutation.isPending}
-            variant={saveSuccess ? 'default' : 'default'}
-            className={saveSuccess ? 'bg-green-600 hover:bg-green-600' : ''}
-          >
-            {saveMutation.isPending ? (
-              <Loader2 className="h-4 w-4 animate-spin" />
-            ) : saveSuccess ? (
-              <CheckCircle2 className="h-4 w-4" />
-            ) : (
-              <Save className="h-4 w-4" />
-            )}
-            {saveMutation.isPending ? 'Saving...' : saveSuccess ? 'Saved!' : hasUnsavedChanges ? 'Save Changes' : 'Saved'}
-          </Button>
+          {isEditingLayout ? (
+            <>
+              <Button
+                variant="outline"
+                onClick={() => {
+                  // Cancel editing - restore original data
+                  if (dashboardData?.dashboard) {
+                    setDashboardName(dashboardData.dashboard.name);
+                    setDashboardDescription(dashboardData.dashboard.description || '');
+                    setWidgets(dashboardData.dashboard.widgets || []);
+                  }
+                  setHasUnsavedChanges(false);
+                  setIsEditingLayout(false);
+                }}
+              >
+                Cancel
+              </Button>
+              <Button
+                onClick={() => saveMutation.mutate()}
+                disabled={!hasUnsavedChanges || saveMutation.isPending}
+                className={saveSuccess ? 'bg-green-600 hover:bg-green-600' : ''}
+              >
+                {saveMutation.isPending ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : saveSuccess ? (
+                  <CheckCircle2 className="h-4 w-4" />
+                ) : (
+                  <Save className="h-4 w-4" />
+                )}
+                {saveMutation.isPending ? 'Saving...' : saveSuccess ? 'Saved!' : 'Save Changes'}
+              </Button>
+            </>
+          ) : (
+            <Button variant="outline" onClick={() => setIsEditingLayout(true)}>
+              <Edit className="h-4 w-4" />
+              Edit Layout
+            </Button>
+          )}
         </div>
       </div>
 
@@ -243,28 +304,50 @@ export default function DashboardBuilderPage() {
                 gridColumn: `span ${widget.position.w}`,
               }}
             >
-              <Card className="group relative h-full">
-                <div className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity flex gap-1 z-10">
+              <Card className={`relative h-full ${isEditingLayout ? 'group ring-2 ring-dashed ring-primary/30' : ''}`}>
+                {/* Widget controls - always visible, disabled during edit layout */}
+                <div className="absolute top-2 right-2 flex gap-1 z-10">
+                  {isEditingLayout && (
+                    <GripVertical className="h-4 w-4 text-muted-foreground cursor-move opacity-0 group-hover:opacity-100 mt-2 mr-1" />
+                  )}
                   <Button
                     variant="ghost"
                     size="icon"
                     className="h-8 w-8"
-                    onClick={() => setShowWidgetConfig(widget)}
+                    onClick={() => !isEditingLayout && setShowWidgetConfig(widget)}
+                    disabled={isEditingLayout}
                   >
                     <Settings className="h-4 w-4" />
                   </Button>
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    className="h-8 w-8 text-destructive"
-                    onClick={() => removeWidget(widget.id)}
-                  >
-                    <Trash2 className="h-4 w-4" />
-                  </Button>
+                  <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-8 w-8"
+                        disabled={isEditingLayout}
+                      >
+                        <MoreVertical className="h-4 w-4" />
+                      </Button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="end">
+                      <DropdownMenuItem onClick={() => setShowWidgetConfig(widget)}>
+                        <Settings className="h-4 w-4 mr-2" />
+                        Configure
+                      </DropdownMenuItem>
+                      <DropdownMenuSeparator />
+                      <DropdownMenuItem
+                        className="text-destructive"
+                        onClick={() => removeWidget(widget.id)}
+                      >
+                        <Trash2 className="h-4 w-4 mr-2" />
+                        Delete
+                      </DropdownMenuItem>
+                    </DropdownMenuContent>
+                  </DropdownMenu>
                 </div>
                 <CardHeader className="pb-2">
                   <div className="flex items-center gap-2">
-                    <GripVertical className="h-4 w-4 text-muted-foreground cursor-move opacity-0 group-hover:opacity-100" />
                     <CardTitle className="text-sm font-medium">{widget.title}</CardTitle>
                   </div>
                 </CardHeader>

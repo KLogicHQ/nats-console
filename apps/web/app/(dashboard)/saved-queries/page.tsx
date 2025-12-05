@@ -294,7 +294,7 @@ export default function SavedQueriesPage() {
 
       {/* Create Query Dialog */}
       <Dialog open={showCreateDialog} onOpenChange={setShowCreateDialog}>
-        <DialogContent className="sm:max-w-3xl">
+        <DialogContent className="sm:max-w-4xl">
           <DialogHeader>
             <DialogTitle>Create New Query</DialogTitle>
             <DialogDescription>
@@ -314,7 +314,7 @@ export default function SavedQueriesPage() {
               <Label>Query *</Label>
               <Textarea
                 placeholder="Enter your query configuration (JSON format)..."
-                className="font-mono text-sm min-h-[300px]"
+                className="font-mono text-sm min-h-[150px]"
                 value={newQuery.query}
                 onChange={(e) => setNewQuery({ ...newQuery, query: e.target.value })}
               />
@@ -349,7 +349,7 @@ export default function SavedQueriesPage() {
 
       {/* Edit Query Dialog */}
       <Dialog open={!!editQuery} onOpenChange={() => setEditQuery(null)}>
-        <DialogContent className="sm:max-w-3xl">
+        <DialogContent className="sm:max-w-4xl">
           <DialogHeader>
             <DialogTitle>Edit Query</DialogTitle>
             <DialogDescription>
@@ -370,7 +370,7 @@ export default function SavedQueriesPage() {
                 <Label>Query *</Label>
                 <Textarea
                   placeholder="Enter your query configuration (JSON format)..."
-                  className="font-mono text-sm min-h-[300px]"
+                  className="font-mono text-sm min-h-[150px]"
                   value={editQuery.query}
                   onChange={(e) => setEditQuery({ ...editQuery, query: e.target.value })}
                 />

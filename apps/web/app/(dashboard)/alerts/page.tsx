@@ -964,7 +964,7 @@ function AlertsPageContent() {
           setIsEditChannelOpen(false);
         }
       }}>
-        <DialogContent size="full" onClose={() => {
+        <DialogContent size="full" className="sm:max-w-5xl" onClose={() => {
           setIsCreateChannelOpen(false);
           setIsEditChannelOpen(false);
         }}>

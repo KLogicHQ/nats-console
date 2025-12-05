@@ -477,6 +477,42 @@ function ConsumerDetailContent() {
             </select>
           </div>
 
+          {/* Stats Cards - Moved to top */}
+          <div className="grid gap-4 md:grid-cols-4">
+            <Card>
+              <CardHeader className="pb-2">
+                <CardTitle className="text-sm font-medium">Pending</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="text-2xl font-bold">{formatNumber(consumer.num_pending || 0)}</div>
+              </CardContent>
+            </Card>
+            <Card>
+              <CardHeader className="pb-2">
+                <CardTitle className="text-sm font-medium">Ack Pending</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="text-2xl font-bold">{formatNumber(consumer.num_ack_pending || 0)}</div>
+              </CardContent>
+            </Card>
+            <Card>
+              <CardHeader className="pb-2">
+                <CardTitle className="text-sm font-medium">Redelivered</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="text-2xl font-bold">{formatNumber(consumer.num_redelivered || 0)}</div>
+              </CardContent>
+            </Card>
+            <Card>
+              <CardHeader className="pb-2">
+                <CardTitle className="text-sm font-medium">Waiting</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="text-2xl font-bold">{formatNumber(consumer.num_waiting || 0)}</div>
+              </CardContent>
+            </Card>
+          </div>
+
           {/* Consumer Lag Chart */}
           <Card>
             <CardHeader>
@@ -569,42 +605,6 @@ function ConsumerDetailContent() {
               )}
             </CardContent>
           </Card>
-
-          {/* Quick Stats */}
-          <div className="grid gap-4 md:grid-cols-4">
-            <Card>
-              <CardHeader className="pb-2">
-                <CardTitle className="text-sm font-medium">Pending</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="text-2xl font-bold">{formatNumber(consumer.num_pending || 0)}</div>
-              </CardContent>
-            </Card>
-            <Card>
-              <CardHeader className="pb-2">
-                <CardTitle className="text-sm font-medium">Ack Pending</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="text-2xl font-bold">{formatNumber(consumer.num_ack_pending || 0)}</div>
-              </CardContent>
-            </Card>
-            <Card>
-              <CardHeader className="pb-2">
-                <CardTitle className="text-sm font-medium">Redelivered</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="text-2xl font-bold">{formatNumber(consumer.num_redelivered || 0)}</div>
-              </CardContent>
-            </Card>
-            <Card>
-              <CardHeader className="pb-2">
-                <CardTitle className="text-sm font-medium">Waiting</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="text-2xl font-bold">{formatNumber(consumer.num_waiting || 0)}</div>
-              </CardContent>
-            </Card>
-          </div>
         </div>
       )}
     </div>
