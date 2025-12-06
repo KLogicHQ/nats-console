@@ -65,6 +65,48 @@ const TIME_RANGES = [
   { value: '30d', label: 'Last 30 days' },
 ];
 
+// Metric options with labels - includes all golden dashboard metrics (sorted alphabetically)
+const METRIC_OPTIONS = [
+  { value: 'ack_rate', label: 'Ack Rate' },
+  { value: 'avg_lag', label: 'Average Lag' },
+  { value: 'avg_rate', label: 'Average Rate' },
+  { value: 'avg_latency', label: 'Avg Latency' },
+  { value: 'bytes_rate', label: 'Bytes Rate' },
+  { value: 'connections', label: 'Connections' },
+  { value: 'connections_percent', label: 'Connections %' },
+  { value: 'consumer_lag', label: 'Consumer Lag' },
+  { value: 'cpu_percent', label: 'CPU %' },
+  { value: 'lag_history', label: 'Lag History' },
+  { value: 'latency_dist', label: 'Latency Distribution' },
+  { value: 'latency_history', label: 'Latency History' },
+  { value: 'max_latency', label: 'Max Latency' },
+  { value: 'memory_bytes', label: 'Memory Bytes' },
+  { value: 'memory_percent', label: 'Memory Used %' },
+  { value: 'message_distribution', label: 'Message Distribution' },
+  { value: 'message_rate', label: 'Message Rate' },
+  { value: 'messages_rate', label: 'Messages/sec' },
+  { value: 'p50_latency', label: 'P50 Latency' },
+  { value: 'p95_latency', label: 'P95 Latency' },
+  { value: 'p99_latency', label: 'P99 Latency' },
+  { value: 'peak_rate', label: 'Peak Rate' },
+  { value: 'pending_by_consumer', label: 'Pending by Consumer' },
+  { value: 'processing_rate', label: 'Processing Rate' },
+  { value: 'redelivery_rate', label: 'Redelivery Rate' },
+  { value: 'resource_trends', label: 'Resource Trends' },
+  { value: 'storage_percent', label: 'Storage Used %' },
+  { value: 'stream_sizes', label: 'Stream Sizes' },
+  { value: 'stream_throughput', label: 'Stream Throughput' },
+  { value: 'throughput', label: 'Throughput' },
+  { value: 'total_bytes', label: 'Total Storage' },
+  { value: 'consumers_count', label: 'Total Consumers' },
+  { value: 'total_messages', label: 'Total Messages' },
+  { value: 'total_pending', label: 'Total Pending' },
+  { value: 'streams_count', label: 'Total Streams' },
+  { value: 'total_today', label: 'Total Today' },
+  { value: 'uptime', label: 'Uptime' },
+  { value: 'weekly_trends', label: 'Weekly Trends' },
+];
+
 // Widget types
 const WIDGET_TYPES = [
   { id: 'line-chart', name: 'Line Chart', icon: LineChart, description: 'Time series data' },
@@ -101,6 +143,9 @@ export default function DashboardBuilderPage() {
   const [newWidgetTitle, setNewWidgetTitle] = useState('');
   const [newWidgetCluster, setNewWidgetCluster] = useState('');
   const [newWidgetMetric, setNewWidgetMetric] = useState('');
+  const [newWidgetStream, setNewWidgetStream] = useState('');
+  const [newWidgetConsumer, setNewWidgetConsumer] = useState('');
+  const [newWidgetSubject, setNewWidgetSubject] = useState('');
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
   const [isEditingLayout, setIsEditingLayout] = useState(false);
   const [draggedWidget, setDraggedWidget] = useState<string | null>(null);
@@ -111,6 +156,10 @@ export default function DashboardBuilderPage() {
   const [configTitle, setConfigTitle] = useState('');
   const [configClusterId, setConfigClusterId] = useState('');
   const [configMetric, setConfigMetric] = useState('');
+  const [configWidgetType, setConfigWidgetType] = useState('');
+  const [configStream, setConfigStream] = useState('');
+  const [configConsumer, setConfigConsumer] = useState('');
+  const [configSubject, setConfigSubject] = useState('');
 
   // Initialize widget config state when dialog opens
   useEffect(() => {
@@ -118,6 +167,10 @@ export default function DashboardBuilderPage() {
       setConfigTitle(showWidgetConfig.title);
       setConfigClusterId((showWidgetConfig.config.clusterId as string) || '');
       setConfigMetric((showWidgetConfig.config.metric as string) || '');
+      setConfigWidgetType(showWidgetConfig.type);
+      setConfigStream((showWidgetConfig.config.streamFilter as string) || '');
+      setConfigConsumer((showWidgetConfig.config.consumerFilter as string) || '');
+      setConfigSubject((showWidgetConfig.config.subjectFilter as string) || '');
     }
   }, [showWidgetConfig]);
 
@@ -183,6 +236,9 @@ export default function DashboardBuilderPage() {
       config: {
         clusterId: newWidgetCluster,
         metric: newWidgetMetric,
+        streamFilter: newWidgetStream || undefined,
+        consumerFilter: newWidgetConsumer || undefined,
+        subjectFilter: newWidgetSubject || undefined,
       },
       position: {
         x: (widgets.length % 2) * 6,
@@ -199,6 +255,9 @@ export default function DashboardBuilderPage() {
     setNewWidgetTitle('');
     setNewWidgetCluster('');
     setNewWidgetMetric('');
+    setNewWidgetStream('');
+    setNewWidgetConsumer('');
+    setNewWidgetSubject('');
 
     // Auto-save after adding widget
     saveMutation.mutate(updatedWidgets);
@@ -311,7 +370,7 @@ export default function DashboardBuilderPage() {
             <Clock className="h-4 w-4 text-muted-foreground" />
             <Select value={timeRange} onValueChange={setTimeRange}>
               <SelectTrigger className="w-[160px]">
-                <SelectValue />
+                <SelectValue placeholder={TIME_RANGES.find(r => r.value === timeRange)?.label} />
               </SelectTrigger>
               <SelectContent>
                 {TIME_RANGES.map((range) => (
@@ -462,7 +521,7 @@ export default function DashboardBuilderPage() {
 
       {/* Add Widget Dialog */}
       <Dialog open={showAddWidget} onOpenChange={setShowAddWidget}>
-        <DialogContent className="max-w-2xl">
+        <DialogContent size="2xl">
           <DialogHeader>
             <DialogTitle>Add Widget</DialogTitle>
             <DialogDescription>
@@ -510,11 +569,14 @@ export default function DashboardBuilderPage() {
                       <SelectValue placeholder="Select a cluster" />
                     </SelectTrigger>
                     <SelectContent>
-                      {clustersData?.clusters?.map((cluster: any) => (
-                        <SelectItem key={cluster.id} value={cluster.id}>
-                          {cluster.name}
-                        </SelectItem>
-                      ))}
+                      {clustersData?.clusters
+                        ?.slice()
+                        .sort((a: any, b: any) => a.name.localeCompare(b.name))
+                        .map((cluster: any) => (
+                          <SelectItem key={cluster.id} value={cluster.id}>
+                            {cluster.name}
+                          </SelectItem>
+                        ))}
                     </SelectContent>
                   </Select>
                 </div>
@@ -526,14 +588,47 @@ export default function DashboardBuilderPage() {
                       <SelectValue placeholder="Select a metric" />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="messages_rate">Message Rate</SelectItem>
-                      <SelectItem value="bytes_rate">Bytes Rate</SelectItem>
-                      <SelectItem value="consumer_lag">Consumer Lag</SelectItem>
-                      <SelectItem value="connections">Connections</SelectItem>
-                      <SelectItem value="cpu_percent">CPU %</SelectItem>
-                      <SelectItem value="memory_bytes">Memory</SelectItem>
+                      {METRIC_OPTIONS.map((metric) => (
+                        <SelectItem key={metric.value} value={metric.value}>
+                          {metric.label}
+                        </SelectItem>
+                      ))}
                     </SelectContent>
                   </Select>
+                </div>
+
+                {/* Filters Section */}
+                <div className="pt-4 border-t">
+                  <h4 className="text-sm font-medium text-muted-foreground mb-3">Filters (Optional)</h4>
+                  <div className="grid grid-cols-3 gap-3">
+                    <div className="space-y-1">
+                      <label className="text-xs text-muted-foreground">Stream</label>
+                      <Input
+                        placeholder="e.g., ORDERS"
+                        value={newWidgetStream}
+                        onChange={(e) => setNewWidgetStream(e.target.value)}
+                        className="h-8 text-sm"
+                      />
+                    </div>
+                    <div className="space-y-1">
+                      <label className="text-xs text-muted-foreground">Consumer</label>
+                      <Input
+                        placeholder="e.g., order-processor"
+                        value={newWidgetConsumer}
+                        onChange={(e) => setNewWidgetConsumer(e.target.value)}
+                        className="h-8 text-sm"
+                      />
+                    </div>
+                    <div className="space-y-1">
+                      <label className="text-xs text-muted-foreground">Subject</label>
+                      <Input
+                        placeholder="e.g., orders.created"
+                        value={newWidgetSubject}
+                        onChange={(e) => setNewWidgetSubject(e.target.value)}
+                        className="h-8 text-sm"
+                      />
+                    </div>
+                  </div>
                 </div>
               </>
             )}
@@ -562,7 +657,7 @@ export default function DashboardBuilderPage() {
           }
         }}
       >
-        <DialogContent size="md">
+        <DialogContent size="lg">
           <DialogHeader>
             <DialogTitle>Configure Widget</DialogTitle>
             <DialogDescription>
@@ -579,20 +674,47 @@ export default function DashboardBuilderPage() {
                 />
               </div>
               <div className="space-y-2">
+                <label className="text-sm font-medium">Widget Type</label>
+                <div className="grid grid-cols-3 gap-2">
+                  {WIDGET_TYPES.map((type) => {
+                    const IconComponent = type.icon;
+                    const isSelected = configWidgetType === type.id;
+                    return (
+                      <button
+                        key={type.id}
+                        type="button"
+                        onClick={() => setConfigWidgetType(type.id)}
+                        className={`flex flex-col items-center gap-1 p-3 rounded-lg border text-center transition-colors ${
+                          isSelected
+                            ? 'border-primary bg-primary/5'
+                            : 'border-border hover:border-primary/50'
+                        }`}
+                      >
+                        <IconComponent className={`h-5 w-5 ${isSelected ? 'text-primary' : 'text-muted-foreground'}`} />
+                        <span className={`text-xs ${isSelected ? 'text-primary font-medium' : ''}`}>{type.name}</span>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+              <div className="space-y-2">
                 <label className="text-sm font-medium">Cluster</label>
                 <Select
                   value={configClusterId}
                   onValueChange={setConfigClusterId}
                 >
                   <SelectTrigger>
-                    <SelectValue placeholder="Select a cluster" />
+                    <SelectValue placeholder={clustersData?.clusters?.find((c: any) => c.id === configClusterId)?.name || "Select a cluster"} />
                   </SelectTrigger>
                   <SelectContent>
-                    {clustersData?.clusters?.map((cluster: any) => (
-                      <SelectItem key={cluster.id} value={cluster.id}>
-                        {cluster.name}
-                      </SelectItem>
-                    ))}
+                    {clustersData?.clusters
+                      ?.slice()
+                      .sort((a: any, b: any) => a.name.localeCompare(b.name))
+                      .map((cluster: any) => (
+                        <SelectItem key={cluster.id} value={cluster.id}>
+                          {cluster.name}
+                        </SelectItem>
+                      ))}
                   </SelectContent>
                 </Select>
               </div>
@@ -603,19 +725,50 @@ export default function DashboardBuilderPage() {
                   onValueChange={setConfigMetric}
                 >
                   <SelectTrigger>
-                    <SelectValue placeholder="Select a metric" />
+                    <SelectValue placeholder={METRIC_OPTIONS.find(m => m.value === configMetric)?.label || "Select a metric"} />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="messages_rate">Message Rate</SelectItem>
-                    <SelectItem value="bytes_rate">Bytes Rate</SelectItem>
-                    <SelectItem value="consumer_lag">Consumer Lag</SelectItem>
-                    <SelectItem value="connections">Connections</SelectItem>
-                    <SelectItem value="cpu_percent">CPU %</SelectItem>
-                    <SelectItem value="memory_bytes">Memory</SelectItem>
-                    <SelectItem value="streams_count">Total Streams</SelectItem>
-                    <SelectItem value="consumers_count">Total Consumers</SelectItem>
+                    {METRIC_OPTIONS.map((metric) => (
+                      <SelectItem key={metric.value} value={metric.value}>
+                        {metric.label}
+                      </SelectItem>
+                    ))}
                   </SelectContent>
                 </Select>
+              </div>
+
+              {/* Filters Section */}
+              <div className="pt-4 border-t">
+                <h4 className="text-sm font-medium text-muted-foreground mb-3">Filters (Optional)</h4>
+                <div className="grid grid-cols-3 gap-3">
+                  <div className="space-y-1">
+                    <label className="text-xs text-muted-foreground">Stream</label>
+                    <Input
+                      placeholder="e.g., ORDERS"
+                      value={configStream}
+                      onChange={(e) => setConfigStream(e.target.value)}
+                      className="h-8 text-sm"
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <label className="text-xs text-muted-foreground">Consumer</label>
+                    <Input
+                      placeholder="e.g., order-processor"
+                      value={configConsumer}
+                      onChange={(e) => setConfigConsumer(e.target.value)}
+                      className="h-8 text-sm"
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <label className="text-xs text-muted-foreground">Subject</label>
+                    <Input
+                      placeholder="e.g., orders.created"
+                      value={configSubject}
+                      onChange={(e) => setConfigSubject(e.target.value)}
+                      className="h-8 text-sm"
+                    />
+                  </div>
+                </div>
               </div>
             </div>
           )}
@@ -631,11 +784,15 @@ export default function DashboardBuilderPage() {
                     w.id === showWidgetConfig.id
                       ? {
                           ...w,
+                          type: configWidgetType,
                           title: configTitle,
                           config: {
                             ...w.config,
                             clusterId: configClusterId,
                             metric: configMetric,
+                            streamFilter: configStream || undefined,
+                            consumerFilter: configConsumer || undefined,
+                            subjectFilter: configSubject || undefined,
                           },
                         }
                       : w
@@ -660,7 +817,7 @@ export default function DashboardBuilderPage() {
 
       {/* Edit Dashboard Dialog */}
       <Dialog open={showEditDashboard} onOpenChange={setShowEditDashboard}>
-        <DialogContent size="md">
+        <DialogContent size="lg">
           <DialogHeader>
             <DialogTitle>Edit Dashboard</DialogTitle>
             <DialogDescription>

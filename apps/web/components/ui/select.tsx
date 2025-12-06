@@ -36,13 +36,11 @@ export function Select({ value, onValueChange, children }: SelectProps) {
     }
   }, [value]);
 
-  // Update display value when value changes
-  React.useEffect(() => {
+  // Use useLayoutEffect for synchronous updates before paint
+  React.useLayoutEffect(() => {
     const label = itemLabelsRef.current.get(value);
     if (label) {
       setDisplayValue(label);
-    } else {
-      setDisplayValue('');
     }
   }, [value]);
 
@@ -161,7 +159,8 @@ export function SelectItem({ className, value, children, ...props }: SelectItemP
   const label = getTextContent(children);
 
   // Register this item's label on mount and when label changes
-  React.useEffect(() => {
+  // Use useLayoutEffect for synchronous registration before paint
+  React.useLayoutEffect(() => {
     context.registerItem(value, label);
   }, [value, label, context.registerItem]);
 

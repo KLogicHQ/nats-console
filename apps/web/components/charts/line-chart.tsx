@@ -52,11 +52,33 @@ export function LineChart({
     };
   }, []);
 
+  // Ensure data has valid time labels
+  const xAxisData = data.map((d) => d.time || d.name || '');
+  const seriesData = data.map((d) => d.value);
+
   const option: EChartsOption = {
     title: title ? { text: title, left: 'center', textStyle: { fontSize: 14 } } : undefined,
     tooltip: {
       trigger: 'axis',
       axisPointer: { type: 'cross' },
+      formatter: (params: any) => {
+        if (!params || !params.length) return '';
+        const point = params[0];
+        const dataIndex = point.dataIndex;
+        const item = data[dataIndex];
+        const timeLabel = item?.time || item?.name || point.axisValue || '';
+        const value = typeof point.value === 'number' ? point.value.toLocaleString() : point.value;
+        // Show data point name if it's different from time (e.g., consumer name)
+        const dataName = item?.name && item.name !== item?.time ? item.name : null;
+        const displayLabel = dataName || title || 'Value';
+        return `<div style="padding: 4px 8px;">
+          <div style="font-weight: 500; margin-bottom: 4px;">${timeLabel}</div>
+          <div style="display: flex; align-items: center; gap: 8px;">
+            <span style="display: inline-block; width: 10px; height: 10px; background: ${color}; border-radius: 50%;"></span>
+            <span>${displayLabel}: ${value}</span>
+          </div>
+        </div>`;
+      },
     },
     grid: {
       left: '0%',
@@ -68,7 +90,7 @@ export function LineChart({
     xAxis: {
       type: 'category',
       boundaryGap: false,
-      data: data.map((d) => d.time),
+      data: xAxisData,
       axisLine: { lineStyle: { color: '#e5e7eb' } },
       axisLabel: { color: '#6b7280', fontSize: 11 },
     },
@@ -91,7 +113,7 @@ export function LineChart({
         itemStyle: { color },
         lineStyle: { width: 2 },
         areaStyle: showArea ? { color: `${color}20` } : undefined,
-        data: data.map((d) => d.value),
+        data: seriesData,
       },
     ],
   };

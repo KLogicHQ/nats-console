@@ -5,6 +5,7 @@
   "type": "module",
   "scripts": {
     "setup-streams": "tsx src/setup-streams.ts",
+    "setup-alert-rules": "tsx src/setup-alert-rules.ts",
     "producer": "tsx src/producer.ts",
     "producer:ecommerce": "SCENARIO=ecommerce tsx src/producer.ts",
     "producer:iot": "SCENARIO=iot tsx src/producer.ts",

@@ -214,15 +214,22 @@ reset: db-clean install db-up prisma-generate prisma-migrate ## Reset everything
 examples-setup: ## Setup example NATS streams and consumers
 	cd examples && pnpm run setup-streams
 
+examples-setup-alerts: ## Setup golden alert rules for testing
+	cd examples && pnpm run setup-alert-rules
+
 examples-producer: ## Run example message producer
 	cd examples && pnpm run producer
 
 examples-consumer: ## Run example message consumer
 	cd examples && pnpm run consumer
 
-examples-load-test: ## Run load test to generate high message volume
-	cd examples && pnpm run load-test
+examples-load-test: ## Run load test with DLQ messages to generate incidents
+	@echo "$(YELLOW)Running load test with DLQ scenario to trigger alerts...$(RESET)"
+	cd examples && SCENARIO=dlq RATE=50 DURATION=30 pnpm run load-test
 
-examples-all: examples-setup ## Setup streams and run producer
-	@echo "$(GREEN)Streams created. Starting producer...$(RESET)"
+examples-load-test-heavy: ## Run heavy load test for stress testing
+	cd examples && SCENARIO=mixed RATE=200 DURATION=60 pnpm run load-test
+
+examples-all: examples-setup examples-setup-alerts ## Setup streams, alert rules and run producer
+	@echo "$(GREEN)Streams and alert rules created. Starting producer...$(RESET)"
 	cd examples && pnpm run producer

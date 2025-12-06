@@ -66,8 +66,10 @@ export class AlertProcessor {
   async start(): Promise<void> {
     logger.info('Starting alert processor...');
 
-    // Process alerts every minute
-    this.processInterval = setInterval(() => this.processAlerts(), 60000);
+    // Process alerts at configured interval (default 30 seconds)
+    const intervalMs = config.ALERT_CHECK_INTERVAL_MS;
+    logger.info({ intervalMs }, 'Alert check interval configured');
+    this.processInterval = setInterval(() => this.processAlerts(), intervalMs);
 
     // Run immediately on start
     await this.processAlerts();
@@ -200,8 +202,8 @@ export class AlertProcessor {
           query_params: {
             streamName,
             clusterId: rule.clusterId,
-            from: windowStart.toISOString(),
-            to: windowEnd.toISOString(),
+            from: this.formatClickHouseDate(windowStart),
+            to: this.formatClickHouseDate(windowEnd),
           },
           format: 'JSONEachRow',
         });
@@ -229,8 +231,8 @@ export class AlertProcessor {
             streamName,
             consumerName,
             clusterId: rule.clusterId,
-            from: windowStart.toISOString(),
-            to: windowEnd.toISOString(),
+            from: this.formatClickHouseDate(windowStart),
+            to: this.formatClickHouseDate(windowEnd),
           },
           format: 'JSONEachRow',
         });
@@ -259,6 +261,11 @@ export class AlertProcessor {
     return simpleMetrics.includes(metric);
   }
 
+  // Format date for ClickHouse DateTime64(3) - removes 'T' and 'Z' from ISO string
+  private formatClickHouseDate(date: Date): string {
+    return date.toISOString().replace('T', ' ').replace('Z', '');
+  }
+
   private async getSimpleMetricValue(
     metric: string,
     aggregation: string,
@@ -269,8 +276,8 @@ export class AlertProcessor {
     const clusterCondition = clusterId ? 'AND cluster_id = {clusterId:UUID}' : '';
     const params: Record<string, unknown> = {
       clusterId,
-      from: windowStart.toISOString(),
-      to: windowEnd.toISOString(),
+      from: this.formatClickHouseDate(windowStart),
+      to: this.formatClickHouseDate(windowEnd),
     };
 
     try {

@@ -45,10 +45,64 @@ const STREAM_ACTIVITY_METRICS = [
 // Data sources for table widgets
 const TABLE_DATA_SOURCES = ['streams', 'consumers', 'lagging_consumers'];
 
+// Helper to parse comma-separated filter values
+const parseFilterValues = (filter: string | undefined): string[] => {
+  if (!filter) return [];
+  return filter.split(',').map(s => s.trim()).filter(Boolean);
+};
+
+// Filter data based on stream/consumer/subject filters
+const filterData = (
+  data: any[],
+  streamFilters: string[],
+  consumerFilters: string[],
+  subjectFilters: string[]
+): any[] => {
+  if (!data || data.length === 0) return data;
+  if (streamFilters.length === 0 && consumerFilters.length === 0 && subjectFilters.length === 0) return data;
+
+  return data.filter((item) => {
+    // Check stream filter
+    if (streamFilters.length > 0) {
+      const itemStream = item.stream || item.streamName || item.name || '';
+      const matchesStream = streamFilters.some(f =>
+        itemStream.toLowerCase().includes(f.toLowerCase())
+      );
+      if (!matchesStream) return false;
+    }
+
+    // Check consumer filter
+    if (consumerFilters.length > 0) {
+      const itemConsumer = item.consumer || item.consumerName || item.name || '';
+      const matchesConsumer = consumerFilters.some(f =>
+        itemConsumer.toLowerCase().includes(f.toLowerCase())
+      );
+      if (!matchesConsumer) return false;
+    }
+
+    // Check subject filter
+    if (subjectFilters.length > 0) {
+      const itemSubject = item.subject || item.subjects?.join(',') || '';
+      const matchesSubject = subjectFilters.some(f =>
+        itemSubject.toLowerCase().includes(f.toLowerCase())
+      );
+      if (!matchesSubject) return false;
+    }
+
+    return true;
+  });
+};
+
 export function DashboardWidget({ widget, timeRange = '1h' }: DashboardWidgetProps) {
   const clusterId = widget.config.clusterId as string;
   const metric = widget.config.metric as string;
   const dataSource = widget.config.dataSource as string;
+
+  // Get filter values
+  const streamFilters = parseFilterValues(widget.config.streamFilter as string);
+  const consumerFilters = parseFilterValues(widget.config.consumerFilter as string);
+  const subjectFilters = parseFilterValues(widget.config.subjectFilter as string);
+  const hasFilters = streamFilters.length > 0 || consumerFilters.length > 0 || subjectFilters.length > 0;
 
   // Determine which API to call based on metric or dataSource
   const getApiCall = () => {
@@ -78,7 +132,7 @@ export function DashboardWidget({ widget, timeRange = '1h' }: DashboardWidgetPro
 
   // Fetch data based on metric type
   const { data, isLoading, error } = useQuery({
-    queryKey: ['widget-data', widget.id, clusterId, metric, dataSource, timeRange],
+    queryKey: ['widget-data', widget.id, clusterId, metric, dataSource, timeRange, streamFilters.join(','), consumerFilters.join(','), subjectFilters.join(',')],
     queryFn: async () => {
       if (!clusterId) return null;
       return getApiCall();
@@ -117,15 +171,30 @@ export function DashboardWidget({ widget, timeRange = '1h' }: DashboardWidgetPro
     );
   }
 
-  // Helper to safely extract chart data
-  const chartData = data && 'data' in data ? (data as { data: any[] }).data : [];
+  // Helper to safely extract chart data and apply filters
+  const rawChartData = data && 'data' in data ? (data as { data: any[] }).data : [];
+  const chartData = filterData(rawChartData, streamFilters, consumerFilters, subjectFilters);
+
+  // Normalize chart data to ensure it has required fields for LineChart
+  // Some APIs return { name, value } while LineChart expects { name, value, time }
+  const normalizeChartData = (rawData: any[]): { name: string; value: number; time: string }[] => {
+    if (!rawData || rawData.length === 0) return [];
+
+    return rawData.map((item, index) => ({
+      name: item.name || `Item ${index + 1}`,
+      value: typeof item.value === 'number' ? item.value : 0,
+      // Use existing time, or timestamp, or generate a relative time label
+      time: item.time || item.timestamp || item.name || `Point ${index + 1}`,
+    }));
+  };
 
   // Render based on widget type
   switch (widget.type) {
     case 'line-chart':
       return (
         <LineChart
-          data={chartData}
+          data={normalizeChartData(chartData)}
+          title={widget.title}
           yAxisLabel={metric === 'bytes_rate' ? 'bytes/s' : 'msg/s'}
           color="#2563eb"
           height={200}
@@ -175,7 +244,7 @@ export function DashboardWidget({ widget, timeRange = '1h' }: DashboardWidgetPro
 
     case 'table':
       // Handle different data sources for tables
-      const tableData = getTableData(data, dataSource, chartData);
+      const tableData = getTableData(data, dataSource, chartData, streamFilters, consumerFilters, subjectFilters);
       return (
         <div className="h-[200px] overflow-auto">
           {tableData.length > 0 ? (
@@ -205,7 +274,7 @@ export function DashboardWidget({ widget, timeRange = '1h' }: DashboardWidgetPro
 
     case 'pie-chart':
       // For pie charts, show as a bar chart (horizontal) with legend
-      const pieData = getPieChartData(data, metric);
+      const pieData = getPieChartData(data, metric, streamFilters);
       if (pieData.length > 0) {
         return (
           <BarChart
@@ -341,28 +410,70 @@ function formatThroughput(value: number): string {
   return `${formatNumber(value)}/s`;
 }
 
-function getTableData(data: any, dataSource: string, chartData: any[]): Array<{ name: string; value: number; formatted?: string }> {
+function getTableData(
+  data: any,
+  dataSource: string,
+  chartData: any[],
+  streamFilters: string[] = [],
+  consumerFilters: string[] = [],
+  subjectFilters: string[] = []
+): Array<{ name: string; value: number; formatted?: string }> {
   if (!data) return [];
+
+  // Helper to check if item matches filters
+  const matchesFilters = (item: any) => {
+    if (streamFilters.length > 0) {
+      const itemName = item.stream || item.streamName || item.name || '';
+      if (!streamFilters.some(f => itemName.toLowerCase().includes(f.toLowerCase()))) {
+        return false;
+      }
+    }
+    if (consumerFilters.length > 0) {
+      const itemName = item.consumer || item.consumerName || item.name || '';
+      if (!consumerFilters.some(f => itemName.toLowerCase().includes(f.toLowerCase()))) {
+        return false;
+      }
+    }
+    if (subjectFilters.length > 0) {
+      const subjects = item.subject || item.subjects?.join(',') || item.config?.filterSubject || '';
+      if (!subjectFilters.some(f => subjects.toLowerCase().includes(f.toLowerCase()))) {
+        return false;
+      }
+    }
+    return true;
+  };
 
   // Handle streams data source
   if (dataSource === 'streams' && data.streams) {
-    return data.streams.slice(0, 10).map((stream: any) => ({
-      name: stream.name,
-      value: stream.state?.messages || 0,
-      formatted: formatNumber(stream.state?.messages || 0),
-    }));
+    return data.streams
+      .filter((stream: any) => {
+        if (streamFilters.length > 0) {
+          return streamFilters.some(f => stream.name.toLowerCase().includes(f.toLowerCase()));
+        }
+        return true;
+      })
+      .slice(0, 10)
+      .map((stream: any) => ({
+        name: stream.name,
+        value: stream.state?.messages || 0,
+        formatted: formatNumber(stream.state?.messages || 0),
+        stream: stream.name,
+      }));
   }
 
   // Handle consumers/lagging_consumers data source
   if ((dataSource === 'consumers' || dataSource === 'lagging_consumers') && data.data) {
-    return data.data.slice(0, 10).map((item: any) => ({
-      name: item.name || item.consumer || 'Unknown',
-      value: item.value || item.pending || 0,
-      formatted: formatNumber(item.value || item.pending || 0),
-    }));
+    return data.data
+      .filter(matchesFilters)
+      .slice(0, 10)
+      .map((item: any) => ({
+        name: item.name || item.consumer || 'Unknown',
+        value: item.value || item.pending || 0,
+        formatted: formatNumber(item.value || item.pending || 0),
+      }));
   }
 
-  // Fallback to chartData
+  // Fallback to chartData (already filtered)
   if (chartData.length > 0) {
     return chartData;
   }
@@ -370,10 +481,22 @@ function getTableData(data: any, dataSource: string, chartData: any[]): Array<{ 
   return [];
 }
 
-function getPieChartData(data: any, metric: string): Array<{ name: string; value: number }> {
+function getPieChartData(
+  data: any,
+  metric: string,
+  streamFilters: string[] = []
+): Array<{ name: string; value: number }> {
+  // Helper to filter by stream name
+  const filterStreams = (entries: [string, any][]) => {
+    if (streamFilters.length === 0) return entries;
+    return entries.filter(([name]) =>
+      streamFilters.some(f => name.toLowerCase().includes(f.toLowerCase()))
+    );
+  };
+
   // Handle stream activity data for distribution
   if (metric === 'message_distribution' && data?.streams) {
-    const streams = Object.entries(data.streams);
+    const streams = filterStreams(Object.entries(data.streams));
     return streams.slice(0, 5).map(([name, values]: [string, any]) => {
       // Sum up the values in the time series
       const total = Array.isArray(values)
@@ -385,7 +508,7 @@ function getPieChartData(data: any, metric: string): Array<{ name: string; value
 
   // Handle stream sizes from streams list
   if (metric === 'stream_sizes' && data?.streams) {
-    const streams = Object.entries(data.streams);
+    const streams = filterStreams(Object.entries(data.streams));
     return streams.slice(0, 5).map(([name, values]: [string, any]) => {
       const lastValue = Array.isArray(values) && values.length > 0
         ? values[values.length - 1]?.value || 0
@@ -396,7 +519,13 @@ function getPieChartData(data: any, metric: string): Array<{ name: string; value
 
   // Fallback: try to extract from data.data
   if (data?.data && Array.isArray(data.data)) {
-    return data.data.slice(0, 5).map((item: any) => ({
+    let items = data.data;
+    if (streamFilters.length > 0) {
+      items = items.filter((item: any) =>
+        streamFilters.some(f => (item.name || '').toLowerCase().includes(f.toLowerCase()))
+      );
+    }
+    return items.slice(0, 5).map((item: any) => ({
       name: item.name || 'Unknown',
       value: item.value || 0,
     }));

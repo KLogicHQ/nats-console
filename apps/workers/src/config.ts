@@ -24,6 +24,7 @@ const envSchema = z.object({
   // Worker settings
   METRICS_INTERVAL_MS: z.coerce.number().default(10000), // 10 seconds
   CLUSTER_METRICS_INTERVAL_MS: z.coerce.number().default(30000), // 30 seconds
+  ALERT_CHECK_INTERVAL_MS: z.coerce.number().default(30000), // 30 seconds (faster for dev)
 });
 
 function loadConfig() {

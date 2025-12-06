@@ -448,6 +448,15 @@ export const alertRoutes: FastifyPluginAsync = async (fastify) => {
               id: true,
               name: true,
               severity: true,
+              condition: true,
+              threshold: true,
+              clusterId: true,
+              cluster: {
+                select: {
+                  id: true,
+                  name: true,
+                },
+              },
             },
           },
         },

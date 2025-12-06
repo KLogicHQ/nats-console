@@ -99,6 +99,18 @@ interface Incident {
     id: string;
     name: string;
     severity: string;
+    condition: {
+      metric: string;
+      operator: string;
+      window: number;
+      aggregation: string;
+    };
+    threshold: {
+      value: number;
+      type: string;
+    };
+    clusterId: string | null;
+    cluster: { id: string; name: string } | null;
   };
 }
 
@@ -354,12 +366,60 @@ const formatTimeAgo = (timestamp: string | null) => {
   return 'Just now';
 };
 
+const formatOperator = (op: string): string => {
+  const operators: Record<string, string> = {
+    gt: '>',
+    lt: '<',
+    gte: '>=',
+    lte: '<=',
+    eq: '=',
+    neq: '!=',
+  };
+  return operators[op] || op;
+};
+
+const formatWindow = (seconds: number): string => {
+  if (seconds >= 3600) return `${Math.floor(seconds / 3600)}h`;
+  if (seconds >= 60) return `${Math.floor(seconds / 60)}m`;
+  return `${seconds}s`;
+};
+
+// Parse metric name to extract stream/consumer info
+// Formats: "stream.STREAM_NAME.metric" or "consumer.STREAM.CONSUMER.metric"
+const parseMetricName = (metric: string): { stream?: string; consumer?: string; metricName: string } => {
+  const parts = metric.split('.');
+  if (parts[0] === 'stream' && parts.length >= 3) {
+    return { stream: parts[1], metricName: parts.slice(2).join('.') };
+  }
+  if (parts[0] === 'consumer' && parts.length >= 4) {
+    return { stream: parts[1], consumer: parts[2], metricName: parts.slice(3).join('.') };
+  }
+  return { metricName: metric };
+};
+
+const formatMetricLabel = (metric: string): string => {
+  const labels: Record<string, string> = {
+    consumer_lag: 'Consumer Lag',
+    message_rate: 'Message Rate',
+    messages_rate: 'Messages/sec',
+    bytes_rate: 'Bytes Rate',
+    stream_size: 'Stream Size',
+    pending_count: 'Pending Count',
+    ack_rate: 'Ack Rate',
+    redelivered_count: 'Redelivered Count',
+    messages_count: 'Message Count',
+    lag: 'Lag',
+  };
+  return labels[metric] || metric.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
+};
+
 function AlertsPageContent() {
   const queryClient = useQueryClient();
   const { activeTab, setActiveTab } = useTabs(tabs, 'incidents');
 
   // Incidents state
-  const [incidentFilter, setIncidentFilter] = useState<'all' | 'open' | 'acknowledged' | 'resolved' | 'closed'>('all');
+  const [incidentFilter, setIncidentFilter] = useState<'all' | 'open' | 'acknowledged' | 'resolved' | 'closed'>('open');
+  const [selectedIncident, setSelectedIncident] = useState<Incident | null>(null);
 
   // Rules state
   const [ruleFilter, setRuleFilter] = useState<'all' | 'enabled' | 'disabled'>('all');
@@ -646,63 +706,185 @@ function AlertsPageContent() {
               </CardHeader>
               <CardContent>
                 <div className="space-y-3">
-                  {incidentsData.incidents.map((incident: Incident) => (
+                  {incidentsData.incidents.map((incident: Incident) => {
+                    const parsedMetric = parseMetricName(incident.rule.condition.metric);
+                    return (
                     <div
                       key={incident.id}
-                      className="flex items-center justify-between p-4 border rounded-lg hover:bg-muted/30"
+                      className={`border rounded-lg hover:bg-muted/30 cursor-pointer ${
+                        selectedIncident?.id === incident.id ? 'ring-2 ring-primary' : ''
+                      }`}
+                      onClick={() => setSelectedIncident(selectedIncident?.id === incident.id ? null : incident)}
                     >
-                      <div className="flex items-center gap-4">
-                        <AlertCircle className={`h-5 w-5 ${
-                          incident.status === 'open' ? 'text-red-500' :
-                          incident.status === 'acknowledged' ? 'text-yellow-500' :
-                          'text-muted-foreground'
-                        }`} />
-                        <div>
-                          <h4 className="font-medium">{incident.rule.name}</h4>
-                          <p className="text-sm text-muted-foreground">
-                            Triggered {formatTimeAgo(incident.triggeredAt)}
-                            {incident.acknowledgedAt && ` • Acknowledged ${formatTimeAgo(incident.acknowledgedAt)}`}
-                          </p>
+                      <div className="flex items-center justify-between p-4">
+                        <div className="flex items-center gap-4">
+                          <AlertCircle className={`h-5 w-5 ${
+                            incident.status === 'open' ? 'text-red-500' :
+                            incident.status === 'acknowledged' ? 'text-yellow-500' :
+                            'text-muted-foreground'
+                          }`} />
+                          <div>
+                            <h4 className="font-medium hover:text-blue-600 transition-colors">{incident.rule.name}</h4>
+                            <p className="text-sm text-muted-foreground">
+                              Triggered {formatTimeAgo(incident.triggeredAt)}
+                              {incident.acknowledgedAt && ` • Acknowledged ${formatTimeAgo(incident.acknowledgedAt)}`}
+                            </p>
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-4">
+                          {getSeverityBadge(incident.rule.severity)}
+                          {getStatusBadge(incident.status)}
+                          <div className="flex items-center gap-1" onClick={(e) => e.stopPropagation()}>
+                            {incident.status === 'open' && (
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={() => acknowledgeIncidentMutation.mutate(incident.id)}
+                                disabled={acknowledgeIncidentMutation.isPending}
+                              >
+                                Acknowledge
+                              </Button>
+                            )}
+                            {(incident.status === 'open' || incident.status === 'acknowledged') && (
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={() => resolveIncidentMutation.mutate(incident.id)}
+                                disabled={resolveIncidentMutation.isPending}
+                              >
+                                Resolve
+                              </Button>
+                            )}
+                            {incident.status !== 'closed' && (
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => closeIncidentMutation.mutate(incident.id)}
+                                disabled={closeIncidentMutation.isPending}
+                              >
+                                Close
+                              </Button>
+                            )}
+                          </div>
                         </div>
                       </div>
-                      <div className="flex items-center gap-4">
-                        {getSeverityBadge(incident.rule.severity)}
-                        {getStatusBadge(incident.status)}
-                        <div className="flex items-center gap-1">
-                          {incident.status === 'open' && (
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              onClick={() => acknowledgeIncidentMutation.mutate(incident.id)}
-                              disabled={acknowledgeIncidentMutation.isPending}
-                            >
-                              Acknowledge
-                            </Button>
-                          )}
-                          {(incident.status === 'open' || incident.status === 'acknowledged') && (
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              onClick={() => resolveIncidentMutation.mutate(incident.id)}
-                              disabled={resolveIncidentMutation.isPending}
-                            >
-                              Resolve
-                            </Button>
-                          )}
-                          {incident.status !== 'closed' && (
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              onClick={() => closeIncidentMutation.mutate(incident.id)}
-                              disabled={closeIncidentMutation.isPending}
-                            >
-                              Close
-                            </Button>
-                          )}
+                      {/* Incident Details - Show when selected */}
+                      {selectedIncident?.id === incident.id && (
+                        <div className="px-4 pb-4 pt-0 border-t mt-0">
+                          <div className="grid grid-cols-3 gap-4 pt-4">
+                            {/* Resource Info */}
+                            <div>
+                              <h5 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">Resource</h5>
+                              <dl className="space-y-1 text-sm">
+                                <div className="flex justify-between">
+                                  <dt className="text-muted-foreground">Cluster:</dt>
+                                  <dd className="font-medium">{incident.rule.cluster?.name || 'All Clusters'}</dd>
+                                </div>
+                                {parsedMetric.stream && (
+                                  <div className="flex justify-between">
+                                    <dt className="text-muted-foreground">Stream:</dt>
+                                    <dd className="font-medium font-mono text-xs">{parsedMetric.stream}</dd>
+                                  </div>
+                                )}
+                                {parsedMetric.consumer && (
+                                  <div className="flex justify-between">
+                                    <dt className="text-muted-foreground">Consumer:</dt>
+                                    <dd className="font-medium font-mono text-xs">{parsedMetric.consumer}</dd>
+                                  </div>
+                                )}
+                                <div className="flex justify-between">
+                                  <dt className="text-muted-foreground">Metric:</dt>
+                                  <dd className="font-medium">{formatMetricLabel(parsedMetric.metricName)}</dd>
+                                </div>
+                              </dl>
+                            </div>
+
+                            {/* Rule Condition */}
+                            <div>
+                              <h5 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">Rule Condition</h5>
+                              <div className="bg-muted rounded-md p-3">
+                                <p className="text-sm font-mono">
+                                  {incident.rule.condition.aggregation.toUpperCase()}({formatMetricLabel(parsedMetric.metricName)})
+                                </p>
+                                <p className="text-sm font-mono mt-1">
+                                  over {formatWindow(incident.rule.condition.window)} window
+                                </p>
+                                <p className="text-sm font-medium mt-2">
+                                  Threshold: {formatOperator(incident.rule.condition.operator)} {incident.rule.threshold.value.toLocaleString()}
+                                </p>
+                              </div>
+                            </div>
+
+                            {/* Violation Details */}
+                            <div>
+                              <h5 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">Violation</h5>
+                              {incident.metadata && (incident.metadata.metricValue !== undefined || incident.metadata.message) ? (
+                                <div className="bg-red-50 dark:bg-red-950/30 border border-red-200 dark:border-red-900 rounded-md p-3">
+                                  {incident.metadata.metricValue !== undefined && (
+                                    <p className="text-sm">
+                                      <span className="text-muted-foreground">Actual Value: </span>
+                                      <span className="font-bold text-red-600 dark:text-red-400">
+                                        {Number(incident.metadata.metricValue).toLocaleString()}
+                                      </span>
+                                    </p>
+                                  )}
+                                  {incident.metadata.metricValue !== undefined && incident.rule.threshold && (
+                                    <p className="text-sm mt-1">
+                                      <span className="text-muted-foreground">Expected: </span>
+                                      <span className="font-medium">
+                                        {formatOperator(incident.rule.condition.operator)} {incident.rule.threshold.value.toLocaleString()}
+                                      </span>
+                                    </p>
+                                  )}
+                                  {incident.metadata.message && (
+                                    <p className="text-xs mt-2 text-muted-foreground">{String(incident.metadata.message)}</p>
+                                  )}
+                                </div>
+                              ) : (
+                                <p className="text-sm text-muted-foreground">No violation details available</p>
+                              )}
+                            </div>
+                          </div>
+
+                          {/* Timeline */}
+                          <div className="mt-4 pt-3 border-t">
+                            <h5 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">Timeline</h5>
+                            <div className="flex gap-6 text-sm">
+                              <div>
+                                <span className="text-muted-foreground">Triggered:</span>{' '}
+                                <span className="font-medium">{new Date(incident.triggeredAt).toLocaleString()}</span>
+                              </div>
+                              {incident.acknowledgedAt && (
+                                <div>
+                                  <span className="text-muted-foreground">Acknowledged:</span>{' '}
+                                  <span className="font-medium">{new Date(incident.acknowledgedAt).toLocaleString()}</span>
+                                </div>
+                              )}
+                              {incident.resolvedAt && (
+                                <div>
+                                  <span className="text-muted-foreground">Resolved:</span>{' '}
+                                  <span className="font-medium">{new Date(incident.resolvedAt).toLocaleString()}</span>
+                                </div>
+                              )}
+                              {incident.closedAt && (
+                                <div>
+                                  <span className="text-muted-foreground">Closed:</span>{' '}
+                                  <span className="font-medium">{new Date(incident.closedAt).toLocaleString()}</span>
+                                </div>
+                              )}
+                            </div>
+                          </div>
+
+                          <div className="mt-3 pt-3 border-t">
+                            <p className="text-xs text-muted-foreground">
+                              Incident ID: <span className="font-mono">{incident.id}</span>
+                            </p>
+                          </div>
                         </div>
-                      </div>
+                      )}
                     </div>
-                  ))}
+                  );
+                  })}
                 </div>
               </CardContent>
             </Card>
@@ -925,7 +1107,7 @@ function AlertsPageContent() {
           setIsEditRuleOpen(false);
         }
       }}>
-        <DialogContent size="2xl" onClose={() => {
+        <DialogContent size="4xl" onClose={() => {
           setIsCreateRuleOpen(false);
           setIsEditRuleOpen(false);
         }}>
@@ -1210,7 +1392,7 @@ function AlertsPageContent() {
           setIsEditChannelOpen(false);
         }
       }}>
-        <DialogContent size="2xl" onClose={() => {
+        <DialogContent size="xl" onClose={() => {
           setIsCreateChannelOpen(false);
           setIsEditChannelOpen(false);
         }}>
