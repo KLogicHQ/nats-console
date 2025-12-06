@@ -97,7 +97,7 @@ init_clickhouse() {
     chown -R clickhouse:clickhouse "$CLICKHOUSE_DATA"
 
     # Start ClickHouse temporarily
-    sudo -u clickhouse /usr/bin/clickhouse-server --config-file=/etc/clickhouse-server/config.xml --daemon
+    su - clickhouse -s /bin/bash -c "/usr/bin/clickhouse-server --config-file=/etc/clickhouse-server/config.xml --daemon"
     sleep 5
 
     # Wait for ClickHouse to be ready
