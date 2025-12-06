@@ -172,7 +172,7 @@ export const organizationRoutes: FastifyPluginAsync = async (fastify) => {
         });
       }
 
-      // Prevent changing owner's role
+      // Prevent changing owner's role (only owner transfer is allowed)
       if (targetMember.role === 'owner') {
         return reply.status(400).send({
           error: { code: 'INVALID_OPERATION', message: 'Cannot change the role of an owner' },
@@ -184,6 +184,47 @@ export const organizationRoutes: FastifyPluginAsync = async (fastify) => {
         return reply.status(400).send({
           error: { code: 'INVALID_ROLE', message: 'Invalid role specified' },
         });
+      }
+
+      // Owner transfer: only current owner can make someone else owner
+      if (role === 'owner') {
+        if (requesterMembership.role !== 'owner') {
+          return reply.status(403).send({
+            error: { code: 'FORBIDDEN', message: 'Only the owner can transfer ownership' },
+          });
+        }
+
+        // Transfer ownership in a transaction:
+        // 1. Make target member the new owner
+        // 2. Demote current owner to admin
+        const [updatedMember] = await prisma.$transaction([
+          prisma.organizationMember.update({
+            where: { id: request.params.memberId },
+            data: { role: 'owner' },
+            include: { user: true },
+          }),
+          prisma.organizationMember.update({
+            where: { id: requesterMembership.id },
+            data: { role: 'admin' },
+          }),
+        ]);
+
+        return {
+          member: {
+            id: updatedMember.id,
+            userId: updatedMember.userId,
+            role: updatedMember.role,
+            joinedAt: updatedMember.joinedAt,
+            user: {
+              id: updatedMember.user.id,
+              email: updatedMember.user.email,
+              firstName: updatedMember.user.firstName,
+              lastName: updatedMember.user.lastName,
+              avatarUrl: updatedMember.user.avatarUrl,
+            },
+          },
+          ownershipTransferred: true,
+        };
       }
 
       const updatedMember = await prisma.organizationMember.update({

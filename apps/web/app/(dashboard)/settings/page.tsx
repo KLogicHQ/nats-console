@@ -148,6 +148,7 @@ function SettingsPageContent() {
   const [showDeleteAccountDialog, setShowDeleteAccountDialog] = useState(false);
   const [removeMemberId, setRemoveMemberId] = useState<string | null>(null);
   const [editingMember, setEditingMember] = useState<{ id: string; role: string } | null>(null);
+  const [transferOwnershipTarget, setTransferOwnershipTarget] = useState<{ memberId: string; memberName: string } | null>(null);
 
   // Initialize form with user data
   useEffect(() => {
@@ -323,6 +324,7 @@ function SettingsPageContent() {
       api.organizations.updateMemberRole(orgId!, memberId, role),
     onSuccess: () => {
       setEditingMember(null);
+      setTransferOwnershipTarget(null);
       queryClient.invalidateQueries({ queryKey: ['organization-members', orgId] });
     },
   });
@@ -575,6 +577,7 @@ function SettingsPageContent() {
                       // Find current user's role from the members list
                       const currentUserMember = membersData.members.find(m => m.userId === user?.id);
                       const currentUserRole = currentUserMember?.role || '';
+                      const isCurrentUserOwner = currentUserRole === 'owner';
                       const isOwnerOrAdmin = ['owner', 'admin'].includes(currentUserRole);
 
                       return (
@@ -584,6 +587,16 @@ function SettingsPageContent() {
                             const isOwner = member.role === 'owner';
                             // Can manage if current user is owner/admin, target is not current user, and target is not an owner
                             const canManage = isOwnerOrAdmin && !isCurrentUser && !isOwner;
+
+                            const handleRoleChange = (role: string) => {
+                              if (role === 'owner') {
+                                // Show confirmation dialog for ownership transfer
+                                const memberName = `${member.user.firstName} ${member.user.lastName}`.trim() || member.user.email;
+                                setTransferOwnershipTarget({ memberId: member.id, memberName });
+                              } else {
+                                updateMemberRoleMutation.mutate({ memberId: member.id, role });
+                              }
+                            };
 
                             return (
                               <div key={member.id} className="flex items-center justify-between p-3 border rounded-lg">
@@ -606,15 +619,15 @@ function SettingsPageContent() {
                                     <>
                                       <Select
                                         value={member.role}
-                                        onValueChange={(role) =>
-                                          updateMemberRoleMutation.mutate({ memberId: member.id, role })
-                                        }
+                                        onValueChange={handleRoleChange}
                                       >
                                         <SelectTrigger className="w-28 h-8" disabled={updateMemberRoleMutation.isPending}>
                                           <SelectValue />
                                         </SelectTrigger>
                                         <SelectContent>
-                                          <SelectItem value="owner">Owner</SelectItem>
+                                          {isCurrentUserOwner && (
+                                            <SelectItem value="owner">Owner</SelectItem>
+                                          )}
                                           <SelectItem value="admin">Admin</SelectItem>
                                           <SelectItem value="member">Member</SelectItem>
                                           <SelectItem value="viewer">Viewer</SelectItem>
@@ -1868,6 +1881,40 @@ function SettingsPageContent() {
                 <Loader2 className="h-4 w-4 animate-spin mr-2" />
               ) : null}
               Remove Member
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Transfer Ownership Dialog */}
+      <AlertDialog open={!!transferOwnershipTarget} onOpenChange={(open) => !open && setTransferOwnershipTarget(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Transfer Ownership</AlertDialogTitle>
+            <AlertDialogDescription>
+              Are you sure you want to transfer ownership to <strong>{transferOwnershipTarget?.memberName}</strong>?
+              <br /><br />
+              This action will:
+              <ul className="list-disc list-inside mt-2 space-y-1">
+                <li>Make {transferOwnershipTarget?.memberName} the new owner</li>
+                <li>Change your role to Admin</li>
+              </ul>
+              <br />
+              This action cannot be undone without the new owner's consent.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => transferOwnershipTarget && updateMemberRoleMutation.mutate({
+                memberId: transferOwnershipTarget.memberId,
+                role: 'owner'
+              })}
+            >
+              {updateMemberRoleMutation.isPending ? (
+                <Loader2 className="h-4 w-4 animate-spin mr-2" />
+              ) : null}
+              Transfer Ownership
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
