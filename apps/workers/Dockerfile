@@ -9,13 +9,13 @@ RUN corepack enable && corepack prepare pnpm@latest --activate
 # Copy package files
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml turbo.json ./
 COPY apps/workers/package.json ./apps/workers/
-COPY packages/shared/package.json ./packages/shared/
+COPY apps/shared/package.json ./apps/shared/
 
 # Install dependencies
 RUN pnpm install --frozen-lockfile
 
 # Copy source files
-COPY packages/shared ./packages/shared
+COPY apps/shared ./apps/shared
 COPY apps/workers ./apps/workers
 
 # Build packages
@@ -34,8 +34,8 @@ COPY --from=builder /app/package.json /app/pnpm-lock.yaml /app/pnpm-workspace.ya
 COPY --from=builder /app/apps/workers/package.json ./apps/workers/
 COPY --from=builder /app/apps/workers/dist ./apps/workers/dist
 COPY --from=builder /app/apps/workers/node_modules ./apps/workers/node_modules
-COPY --from=builder /app/packages/shared/package.json ./packages/shared/
-COPY --from=builder /app/packages/shared/dist ./packages/shared/dist
+COPY --from=builder /app/apps/shared/package.json ./apps/shared/
+COPY --from=builder /app/apps/shared/dist ./apps/shared/dist
 COPY --from=builder /app/node_modules ./node_modules
 
 WORKDIR /app/apps/workers
