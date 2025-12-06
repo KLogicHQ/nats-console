@@ -134,7 +134,7 @@ export const useAuthStore = create<AuthState>()(
       register: async (data) => {
         set({ isLoading: true });
         try {
-          const { user, tokens } = await api.auth.register(data);
+          const { user, tokens, orgId } = await api.auth.register(data) as any;
 
           localStorage.setItem('accessToken', tokens.accessToken);
 
@@ -142,6 +142,7 @@ export const useAuthStore = create<AuthState>()(
             user,
             accessToken: tokens.accessToken,
             refreshToken: tokens.refreshToken,
+            orgId,
             isAuthenticated: true,
             isLoading: false,
           });

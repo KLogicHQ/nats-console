@@ -221,8 +221,9 @@ export async function register(data: {
   const tokens = await generateTokens(result.user.id, result.user.email, result.organization.id, 'owner');
 
   return {
-    user: mapUser(result.user),
+    user: { ...mapUser(result.user), role: 'owner' },
     tokens,
+    orgId: result.organization.id,
   };
 }
 
@@ -399,7 +400,7 @@ async function completeLogin(
   });
 
   return {
-    user: mapUser(user),
+    user: { ...mapUser(user), role: membership.role },
     tokens,
     orgId: membership.orgId,
   };

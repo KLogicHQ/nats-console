@@ -571,72 +571,83 @@ function SettingsPageContent() {
                       <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
                     </div>
                   ) : membersData?.members && membersData.members.length > 0 ? (
-                    <div className="space-y-3">
-                      {membersData.members.map((member) => {
-                        const isCurrentUser = member.userId === user?.id;
-                        const canManage = ['owner', 'admin'].includes(user?.role || '') && !isCurrentUser;
+                    (() => {
+                      // Find current user's role from the members list
+                      const currentUserMember = membersData.members.find(m => m.userId === user?.id);
+                      const currentUserRole = currentUserMember?.role || '';
+                      const isOwnerOrAdmin = ['owner', 'admin'].includes(currentUserRole);
 
-                        return (
-                          <div key={member.id} className="flex items-center justify-between p-3 border rounded-lg">
-                            <div className="flex items-center gap-3">
-                              <div className="h-10 w-10 rounded-full bg-primary/10 flex items-center justify-center">
-                                <User className="h-5 w-5 text-primary" />
-                              </div>
-                              <div>
-                                <p className="font-medium">
-                                  {member.user.firstName} {member.user.lastName}
-                                  {isCurrentUser && (
-                                    <span className="ml-2 text-xs text-muted-foreground">(you)</span>
+                      return (
+                        <div className="space-y-3">
+                          {membersData.members.map((member) => {
+                            const isCurrentUser = member.userId === user?.id;
+                            const isOwner = member.role === 'owner';
+                            // Can manage if current user is owner/admin, target is not current user, and target is not an owner
+                            const canManage = isOwnerOrAdmin && !isCurrentUser && !isOwner;
+
+                            return (
+                              <div key={member.id} className="flex items-center justify-between p-3 border rounded-lg">
+                                <div className="flex items-center gap-3">
+                                  <div className="h-10 w-10 rounded-full bg-primary/10 flex items-center justify-center">
+                                    <User className="h-5 w-5 text-primary" />
+                                  </div>
+                                  <div>
+                                    <p className="font-medium">
+                                      {member.user.firstName} {member.user.lastName}
+                                      {isCurrentUser && (
+                                        <span className="ml-2 text-xs text-muted-foreground">(you)</span>
+                                      )}
+                                    </p>
+                                    <p className="text-sm text-muted-foreground">{member.user.email}</p>
+                                  </div>
+                                </div>
+                                <div className="flex items-center gap-2">
+                                  {canManage ? (
+                                    <>
+                                      <Select
+                                        value={member.role}
+                                        onValueChange={(role) =>
+                                          updateMemberRoleMutation.mutate({ memberId: member.id, role })
+                                        }
+                                        disabled={updateMemberRoleMutation.isPending}
+                                      >
+                                        <SelectTrigger className="w-28 h-8">
+                                          <SelectValue />
+                                        </SelectTrigger>
+                                        <SelectContent>
+                                          <SelectItem value="owner">Owner</SelectItem>
+                                          <SelectItem value="admin">Admin</SelectItem>
+                                          <SelectItem value="member">Member</SelectItem>
+                                          <SelectItem value="viewer">Viewer</SelectItem>
+                                        </SelectContent>
+                                      </Select>
+                                      <Button
+                                        variant="ghost"
+                                        size="icon"
+                                        onClick={() => setRemoveMemberId(member.id)}
+                                        disabled={removeMemberMutation.isPending}
+                                      >
+                                        <Trash2 className="h-4 w-4 text-destructive" />
+                                      </Button>
+                                    </>
+                                  ) : (
+                                    <span className={`px-2 py-1 text-xs rounded-full capitalize ${
+                                      member.role === 'owner'
+                                        ? 'bg-primary/10 text-primary'
+                                        : member.role === 'admin'
+                                        ? 'bg-blue-100 text-blue-700'
+                                        : 'bg-gray-100 text-gray-700'
+                                    }`}>
+                                      {member.role}
+                                    </span>
                                   )}
-                                </p>
-                                <p className="text-sm text-muted-foreground">{member.user.email}</p>
+                                </div>
                               </div>
-                            </div>
-                            <div className="flex items-center gap-2">
-                              {canManage ? (
-                                <>
-                                  <Select
-                                    value={member.role}
-                                    onValueChange={(role) =>
-                                      updateMemberRoleMutation.mutate({ memberId: member.id, role })
-                                    }
-                                    disabled={updateMemberRoleMutation.isPending}
-                                  >
-                                    <SelectTrigger className="w-28 h-8">
-                                      <SelectValue />
-                                    </SelectTrigger>
-                                    <SelectContent>
-                                      <SelectItem value="owner">Owner</SelectItem>
-                                      <SelectItem value="admin">Admin</SelectItem>
-                                      <SelectItem value="member">Member</SelectItem>
-                                      <SelectItem value="viewer">Viewer</SelectItem>
-                                    </SelectContent>
-                                  </Select>
-                                  <Button
-                                    variant="ghost"
-                                    size="icon"
-                                    onClick={() => setRemoveMemberId(member.id)}
-                                    disabled={removeMemberMutation.isPending}
-                                  >
-                                    <Trash2 className="h-4 w-4 text-destructive" />
-                                  </Button>
-                                </>
-                              ) : (
-                                <span className={`px-2 py-1 text-xs rounded-full capitalize ${
-                                  member.role === 'owner'
-                                    ? 'bg-primary/10 text-primary'
-                                    : member.role === 'admin'
-                                    ? 'bg-blue-100 text-blue-700'
-                                    : 'bg-gray-100 text-gray-700'
-                                }`}>
-                                  {member.role}
-                                </span>
-                              )}
-                            </div>
-                          </div>
-                        );
-                      })}
-                    </div>
+                            );
+                          })}
+                        </div>
+                      );
+                    })()
                   ) : (
                     <div className="border rounded-lg p-8 text-center text-muted-foreground">
                       <Users className="h-12 w-12 mx-auto mb-4 opacity-50" />

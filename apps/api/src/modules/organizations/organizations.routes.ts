@@ -172,6 +172,13 @@ export const organizationRoutes: FastifyPluginAsync = async (fastify) => {
         });
       }
 
+      // Prevent changing owner's role
+      if (targetMember.role === 'owner') {
+        return reply.status(400).send({
+          error: { code: 'INVALID_OPERATION', message: 'Cannot change the role of an owner' },
+        });
+      }
+
       // Validate role
       if (!['owner', 'admin', 'member', 'viewer'].includes(role)) {
         return reply.status(400).send({
@@ -235,6 +242,13 @@ export const organizationRoutes: FastifyPluginAsync = async (fastify) => {
       if (targetMember.userId === request.user!.sub) {
         return reply.status(400).send({
           error: { code: 'INVALID_OPERATION', message: 'You cannot remove yourself from the organization' },
+        });
+      }
+
+      // Prevent removing owner
+      if (targetMember.role === 'owner') {
+        return reply.status(400).send({
+          error: { code: 'INVALID_OPERATION', message: 'Cannot remove an owner from the organization' },
         });
       }
 

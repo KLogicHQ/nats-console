@@ -96,7 +96,8 @@ export const authRoutes: FastifyPluginAsync = async (fastify) => {
   // GET /auth/me - Get current user
   fastify.get('/me', { preHandler: authenticate }, async (request) => {
     const user = await authService.getCurrentUser(request.user!.sub);
-    return { user };
+    // Include role from JWT payload
+    return { user: { ...user, role: request.user!.role } };
   });
 
   // POST /auth/forgot-password - Request password reset
