@@ -1,6 +1,6 @@
 'use client';
 
-import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { useQuery, useQueryClient, useQueries } from '@tanstack/react-query';
 import {
   Server,
   Database,
@@ -31,13 +31,33 @@ export default function OverviewPage() {
   });
 
   const clusters = clustersData?.clusters || [];
-  const connectedClusters = clusters.filter((c: any) => c.status === 'connected').length;
+  const connectedClusters = clusters.filter((c: any) => c.status === 'connected');
   const totalClusters = clusters.length;
   const openIncidents = incidentsData?.total || 0;
+
+  // Fetch info for all connected clusters to get stream/consumer counts
+  const clusterInfoQueries = useQueries({
+    queries: connectedClusters.map((cluster: any) => ({
+      queryKey: ['cluster-info', cluster.id],
+      queryFn: () => api.clusters.info(cluster.id),
+      enabled: cluster.status === 'connected',
+      staleTime: 60000, // Cache for 1 minute
+    })),
+  });
+
+  // Calculate totals from all connected clusters
+  const totalStreams = clusterInfoQueries.reduce((sum, query) => {
+    return sum + (query.data?.jetstream?.streams || 0);
+  }, 0);
+
+  const totalConsumers = clusterInfoQueries.reduce((sum, query) => {
+    return sum + (query.data?.jetstream?.consumers || 0);
+  }, 0);
 
   const handleRefresh = () => {
     refetchClusters();
     refetchIncidents();
+    queryClient.invalidateQueries({ queryKey: ['cluster-info'] });
   };
 
   return (
@@ -62,7 +82,7 @@ export default function OverviewPage() {
           <CardContent>
             <div className="text-2xl font-bold">{totalClusters}</div>
             <p className="text-xs text-muted-foreground">
-              {connectedClusters} connected
+              {connectedClusters.length} connected
             </p>
           </CardContent>
         </Card>
@@ -73,9 +93,9 @@ export default function OverviewPage() {
             <Database className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">-</div>
+            <div className="text-2xl font-bold">{formatNumber(totalStreams)}</div>
             <p className="text-xs text-muted-foreground">
-              Across all clusters
+              Across {connectedClusters.length} cluster{connectedClusters.length !== 1 ? 's' : ''}
             </p>
           </CardContent>
         </Card>
@@ -86,7 +106,7 @@ export default function OverviewPage() {
             <Users className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">-</div>
+            <div className="text-2xl font-bold">{formatNumber(totalConsumers)}</div>
             <p className="text-xs text-muted-foreground">
               Processing messages
             </p>
@@ -95,13 +115,13 @@ export default function OverviewPage() {
 
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Active Alerts</CardTitle>
+            <CardTitle className="text-sm font-medium">Alert Incidents</CardTitle>
             <AlertTriangle className={`h-4 w-4 ${openIncidents > 0 ? 'text-red-500' : 'text-muted-foreground'}`} />
           </CardHeader>
           <CardContent>
             <div className={`text-2xl font-bold ${openIncidents > 0 ? 'text-red-500' : ''}`}>{openIncidents}</div>
             <p className="text-xs text-muted-foreground">
-              {openIncidents === 0 ? 'No active alerts' : openIncidents === 1 ? '1 open incident' : `${openIncidents} open incidents`}
+              {openIncidents === 0 ? 'No open incidents' : openIncidents === 1 ? '1 open incident' : `${openIncidents} open incidents`}
             </p>
           </CardContent>
         </Card>

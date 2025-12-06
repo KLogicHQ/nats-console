@@ -254,9 +254,10 @@ export async function checkHealth(
     return {
       connected: cachedStatus.status === 'connected',
       status: cachedStatus.status as ClusterStatus,
+      rtt: cachedStatus.rtt ? parseInt(cachedStatus.rtt) : undefined,
       serverInfo: {
-        serverId: '',
-        serverName: '',
+        serverId: cachedStatus.serverId || '',
+        serverName: cachedStatus.serverName || '',
         version: cachedStatus.version,
         jetstream: true,
       },
@@ -308,6 +309,9 @@ export async function checkHealth(
     serverCount: 1,
     version,
     lastCheck: new Date().toISOString(),
+    serverId: health.serverInfo?.serverId || '',
+    serverName: health.serverInfo?.serverName || '',
+    rtt: health.rtt?.toString() || '',
   });
 
   return {

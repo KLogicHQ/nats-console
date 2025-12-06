@@ -102,6 +102,9 @@ export interface ClusterStatusCache {
   serverCount: number;
   version: string;
   lastCheck: string;
+  serverId?: string;
+  serverName?: string;
+  rtt?: string;
 }
 
 export async function setClusterStatus(clusterId: string, data: ClusterStatusCache): Promise<void> {

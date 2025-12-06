@@ -39,7 +39,6 @@ import { LineChart } from '@/components/charts';
 const tabs: Tab[] = [
   { id: 'overview', label: 'Overview', icon: Users },
   { id: 'config', label: 'Configuration', icon: Settings },
-  { id: 'metrics', label: 'Metrics', icon: BarChart3 },
 ];
 
 function ConsumerDetailContent() {
@@ -103,7 +102,7 @@ function ConsumerDetailContent() {
   const { data: metricsData, isLoading: isLoadingMetrics } = useQuery({
     queryKey: ['consumer-metrics', clusterId, streamName, consumerName, metricsTimeRange],
     queryFn: () => api.analytics.consumerLag(consumerName, getTimeRangeParams()),
-    enabled: activeTab === 'metrics',
+    enabled: activeTab === 'overview',
   });
 
   // Transform metrics data for charts
@@ -442,6 +441,108 @@ function ConsumerDetailContent() {
               </div>
             </CardContent>
           </Card>
+
+          {/* Consumer Lag Chart */}
+          <Card>
+            <CardHeader className="flex flex-row items-center justify-between">
+              <div>
+                <CardTitle>Consumer Lag Over Time</CardTitle>
+                <CardDescription>Message lag trend</CardDescription>
+              </div>
+              <select
+                className="h-9 px-3 border rounded-md bg-background text-sm"
+                value={metricsTimeRange}
+                onChange={(e) => setMetricsTimeRange(e.target.value)}
+              >
+                <option value="1h">Last 1 hour</option>
+                <option value="6h">Last 6 hours</option>
+                <option value="24h">Last 24 hours</option>
+                <option value="7d">Last 7 days</option>
+              </select>
+            </CardHeader>
+            <CardContent>
+              {isLoadingMetrics ? (
+                <div className="h-48 flex items-center justify-center">
+                  <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
+                </div>
+              ) : chartData.lag.length > 0 ? (
+                <LineChart
+                  data={chartData.lag}
+                  title=""
+                  yAxisLabel="messages"
+                  color="#ef4444"
+                  height={200}
+                />
+              ) : (
+                <div className="h-48 flex items-center justify-center text-muted-foreground">
+                  <div className="text-center">
+                    <BarChart3 className="h-12 w-12 mx-auto mb-4 opacity-50" />
+                    <p>No metrics data available</p>
+                  </div>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+
+          {/* Pending Messages Chart */}
+          <Card>
+            <CardHeader>
+              <CardTitle>Pending Messages Over Time</CardTitle>
+              <CardDescription>Messages pending delivery trend</CardDescription>
+            </CardHeader>
+            <CardContent>
+              {isLoadingMetrics ? (
+                <div className="h-48 flex items-center justify-center">
+                  <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
+                </div>
+              ) : chartData.pending.length > 0 ? (
+                <LineChart
+                  data={chartData.pending}
+                  title=""
+                  yAxisLabel="messages"
+                  color="#f59e0b"
+                  height={200}
+                />
+              ) : (
+                <div className="h-48 flex items-center justify-center text-muted-foreground">
+                  <div className="text-center">
+                    <BarChart3 className="h-12 w-12 mx-auto mb-4 opacity-50" />
+                    <p>No metrics data available</p>
+                  </div>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+
+          {/* Ack Rate Chart */}
+          <Card>
+            <CardHeader>
+              <CardTitle>Acknowledgment Rate</CardTitle>
+              <CardDescription>Message acknowledgment rate over time</CardDescription>
+            </CardHeader>
+            <CardContent>
+              {isLoadingMetrics ? (
+                <div className="h-48 flex items-center justify-center">
+                  <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
+                </div>
+              ) : chartData.ackRate.length > 0 ? (
+                <LineChart
+                  data={chartData.ackRate}
+                  title=""
+                  yAxisLabel="acks/s"
+                  color="#22c55e"
+                  height={200}
+                />
+              ) : (
+                <div className="h-48 flex items-center justify-center text-muted-foreground">
+                  <div className="text-center">
+                    <BarChart3 className="h-12 w-12 mx-auto mb-4 opacity-50" />
+                    <p>No metrics data available</p>
+                  </div>
+                </div>
+              )}
+            </CardContent>
+          </Card>
         </div>
       )}
 
@@ -460,153 +561,6 @@ function ConsumerDetailContent() {
         </Card>
       )}
 
-      {/* Metrics Tab */}
-      {activeTab === 'metrics' && (
-        <div className="space-y-6">
-          {/* Time Range Selector */}
-          <div className="flex justify-end">
-            <select
-              className="h-9 px-3 border rounded-md bg-background text-sm"
-              value={metricsTimeRange}
-              onChange={(e) => setMetricsTimeRange(e.target.value)}
-            >
-              <option value="1h">Last 1 hour</option>
-              <option value="6h">Last 6 hours</option>
-              <option value="24h">Last 24 hours</option>
-              <option value="7d">Last 7 days</option>
-            </select>
-          </div>
-
-          {/* Stats Cards - Moved to top */}
-          <div className="grid gap-4 md:grid-cols-4">
-            <Card>
-              <CardHeader className="pb-2">
-                <CardTitle className="text-sm font-medium">Pending</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="text-2xl font-bold">{formatNumber(consumer.num_pending || 0)}</div>
-              </CardContent>
-            </Card>
-            <Card>
-              <CardHeader className="pb-2">
-                <CardTitle className="text-sm font-medium">Ack Pending</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="text-2xl font-bold">{formatNumber(consumer.num_ack_pending || 0)}</div>
-              </CardContent>
-            </Card>
-            <Card>
-              <CardHeader className="pb-2">
-                <CardTitle className="text-sm font-medium">Redelivered</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="text-2xl font-bold">{formatNumber(consumer.num_redelivered || 0)}</div>
-              </CardContent>
-            </Card>
-            <Card>
-              <CardHeader className="pb-2">
-                <CardTitle className="text-sm font-medium">Waiting</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="text-2xl font-bold">{formatNumber(consumer.num_waiting || 0)}</div>
-              </CardContent>
-            </Card>
-          </div>
-
-          {/* Consumer Lag Chart */}
-          <Card>
-            <CardHeader>
-              <CardTitle>Consumer Lag</CardTitle>
-              <CardDescription>Message lag over time</CardDescription>
-            </CardHeader>
-            <CardContent>
-              {isLoadingMetrics ? (
-                <div className="h-64 flex items-center justify-center">
-                  <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
-                </div>
-              ) : chartData.lag.length > 0 ? (
-                <LineChart
-                  data={chartData.lag}
-                  title=""
-                  yAxisLabel="messages"
-                  color="#ef4444"
-                  height={250}
-                />
-              ) : (
-                <div className="h-64 flex items-center justify-center text-muted-foreground">
-                  <div className="text-center">
-                    <BarChart3 className="h-12 w-12 mx-auto mb-4 opacity-50" />
-                    <p>No metrics data available</p>
-                    <p className="text-sm">Metrics will appear once the consumer has activity</p>
-                  </div>
-                </div>
-              )}
-            </CardContent>
-          </Card>
-
-          {/* Pending Messages Chart */}
-          <Card>
-            <CardHeader>
-              <CardTitle>Pending Messages</CardTitle>
-              <CardDescription>Messages pending delivery over time</CardDescription>
-            </CardHeader>
-            <CardContent>
-              {isLoadingMetrics ? (
-                <div className="h-64 flex items-center justify-center">
-                  <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
-                </div>
-              ) : chartData.pending.length > 0 ? (
-                <LineChart
-                  data={chartData.pending}
-                  title=""
-                  yAxisLabel="messages"
-                  color="#f59e0b"
-                  height={250}
-                />
-              ) : (
-                <div className="h-64 flex items-center justify-center text-muted-foreground">
-                  <div className="text-center">
-                    <BarChart3 className="h-12 w-12 mx-auto mb-4 opacity-50" />
-                    <p>No metrics data available</p>
-                    <p className="text-sm">Metrics will appear once the consumer has activity</p>
-                  </div>
-                </div>
-              )}
-            </CardContent>
-          </Card>
-
-          {/* Ack Rate Chart */}
-          <Card>
-            <CardHeader>
-              <CardTitle>Acknowledgment Rate</CardTitle>
-              <CardDescription>Message acknowledgment rate over time</CardDescription>
-            </CardHeader>
-            <CardContent>
-              {isLoadingMetrics ? (
-                <div className="h-64 flex items-center justify-center">
-                  <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
-                </div>
-              ) : chartData.ackRate.length > 0 ? (
-                <LineChart
-                  data={chartData.ackRate}
-                  title=""
-                  yAxisLabel="acks/s"
-                  color="#22c55e"
-                  height={250}
-                />
-              ) : (
-                <div className="h-64 flex items-center justify-center text-muted-foreground">
-                  <div className="text-center">
-                    <BarChart3 className="h-12 w-12 mx-auto mb-4 opacity-50" />
-                    <p>No metrics data available</p>
-                    <p className="text-sm">Metrics will appear once the consumer has activity</p>
-                  </div>
-                </div>
-              )}
-            </CardContent>
-          </Card>
-        </div>
-      )}
     </div>
   );
 }

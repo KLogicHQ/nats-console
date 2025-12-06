@@ -7,6 +7,18 @@ export const consumerRoutes: FastifyPluginAsync = async (fastify) => {
   // All routes require authentication
   fastify.addHook('preHandler', authenticate);
 
+  // GET /clusters/:cid/consumers - List ALL consumers across all streams
+  fastify.get<{ Params: { cid: string } }>(
+    '/:cid/consumers',
+    async (request) => {
+      const consumers = await consumerService.listAllConsumers(
+        request.user!.orgId,
+        request.params.cid
+      );
+      return { consumers };
+    }
+  );
+
   // GET /clusters/:cid/streams/:sid/consumers - List consumers
   fastify.get<{ Params: { cid: string; sid: string } }>(
     '/:cid/streams/:sid/consumers',

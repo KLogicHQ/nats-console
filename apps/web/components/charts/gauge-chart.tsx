@@ -1,5 +1,6 @@
 'use client';
 
+import { useRef, useState, useEffect } from 'react';
 import ReactECharts from 'echarts-for-react';
 import type { EChartsOption } from 'echarts';
 
@@ -22,6 +23,39 @@ export function GaugeChart({
   height = 200,
   thresholds = { warning: 70, critical: 90 },
 }: GaugeChartProps) {
+  const containerRef = useRef<HTMLDivElement>(null);
+  const [isReady, setIsReady] = useState(false);
+
+  // Wait for container to have dimensions before rendering chart
+  useEffect(() => {
+    let observer: ResizeObserver | null = null;
+    let timeout: NodeJS.Timeout | null = null;
+
+    const checkDimensions = () => {
+      if (containerRef.current) {
+        const { clientWidth, clientHeight } = containerRef.current;
+        if (clientWidth > 0 && clientHeight > 0) {
+          setIsReady(true);
+        }
+      }
+    };
+
+    // Check immediately and also after a short delay for lazy-loaded content
+    checkDimensions();
+    timeout = setTimeout(checkDimensions, 100);
+
+    // Use ResizeObserver to detect when container gets dimensions
+    if (containerRef.current && typeof ResizeObserver !== 'undefined') {
+      observer = new ResizeObserver(checkDimensions);
+      observer.observe(containerRef.current);
+    }
+
+    return () => {
+      if (timeout) clearTimeout(timeout);
+      if (observer) observer.disconnect();
+    };
+  }, []);
+
   const percentage = (value / max) * 100;
   const gaugeColor =
     percentage >= thresholds.critical
@@ -74,5 +108,16 @@ export function GaugeChart({
     ],
   };
 
-  return <ReactECharts option={option} style={{ height }} />;
+  return (
+    <div ref={containerRef} style={{ width: '100%', minWidth: 150, height }}>
+      {isReady && (
+        <ReactECharts
+          option={option}
+          style={{ width: '100%', height: '100%' }}
+          notMerge={true}
+          lazyUpdate={true}
+        />
+      )}
+    </div>
+  );
 }

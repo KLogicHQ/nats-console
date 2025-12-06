@@ -1,8 +1,8 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { Plus, Database, Search, ChevronRight, RefreshCw } from 'lucide-react';
+import { Plus, Database, Search, ChevronRight, RefreshCw, WifiOff } from 'lucide-react';
 import Link from 'next/link';
 import { api } from '@/lib/api';
 import { Button } from '@/components/ui/button';
@@ -10,9 +10,10 @@ import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { formatBytes, formatNumber } from '@nats-console/shared';
 import { CreateStreamDialog } from '@/components/forms/create-stream-dialog';
+import { useClusterStore } from '@/stores/cluster';
 
 export default function StreamsPage() {
-  const [selectedCluster, setSelectedCluster] = useState<string | null>(null);
+  const { selectedClusterId, setSelectedClusterId } = useClusterStore();
   const [search, setSearch] = useState('');
   const [showCreateDialog, setShowCreateDialog] = useState(false);
 
@@ -21,16 +22,38 @@ export default function StreamsPage() {
     queryFn: () => api.clusters.list(),
   });
 
-  const { data: streamsData, isLoading, refetch } = useQuery({
-    queryKey: ['streams', selectedCluster],
-    queryFn: () => (selectedCluster ? api.streams.list(selectedCluster) : null),
-    enabled: !!selectedCluster,
+  // Ensure cluster connection before fetching streams
+  const { data: healthData, isLoading: isLoadingHealth, refetch: refetchHealth } = useQuery({
+    queryKey: ['cluster-health', selectedClusterId],
+    queryFn: () => (selectedClusterId ? api.clusters.health(selectedClusterId) : null),
+    enabled: !!selectedClusterId,
+    staleTime: 30000, // Cache for 30 seconds
+    retry: 1,
   });
 
-  // Auto-select first cluster
-  if (clustersData?.clusters?.length && !selectedCluster) {
-    setSelectedCluster(clustersData.clusters[0].id);
-  }
+  const isClusterConnected = healthData?.connected === true;
+  const isClusterDisconnected = selectedClusterId && healthData && !healthData.connected;
+
+  const { data: streamsData, isLoading, refetch } = useQuery({
+    queryKey: ['streams', selectedClusterId],
+    queryFn: () => (selectedClusterId ? api.streams.list(selectedClusterId) : null),
+    enabled: !!selectedClusterId && isClusterConnected,
+  });
+
+  // Auto-select saved cluster or first cluster
+  useEffect(() => {
+    if (clustersData?.clusters?.length) {
+      // Check if saved cluster still exists
+      const savedClusterExists = clustersData.clusters.some(
+        (c: any) => c.id === selectedClusterId
+      );
+      if (!savedClusterExists) {
+        setSelectedClusterId(clustersData.clusters[0].id);
+      } else if (!selectedClusterId) {
+        setSelectedClusterId(clustersData.clusters[0].id);
+      }
+    }
+  }, [clustersData?.clusters, selectedClusterId, setSelectedClusterId]);
 
   const filteredStreams = streamsData?.streams?.filter((stream: any) =>
     stream.config.name.toLowerCase().includes(search.toLowerCase())
@@ -44,19 +67,19 @@ export default function StreamsPage() {
           <p className="text-muted-foreground">Manage JetStream streams</p>
         </div>
         <div className="flex gap-2">
-          <Button variant="outline" size="icon" onClick={() => refetch()} disabled={!selectedCluster}>
+          <Button variant="outline" size="icon" onClick={() => refetch()} disabled={!selectedClusterId}>
             <RefreshCw className="h-4 w-4" />
           </Button>
-          <Button disabled={!selectedCluster} onClick={() => setShowCreateDialog(true)}>
+          <Button disabled={!selectedClusterId} onClick={() => setShowCreateDialog(true)}>
             <Plus className="h-4 w-4" />
             Create Stream
           </Button>
         </div>
-        {selectedCluster && (
+        {selectedClusterId && (
           <CreateStreamDialog
             open={showCreateDialog}
             onOpenChange={setShowCreateDialog}
-            clusterId={selectedCluster}
+            clusterId={selectedClusterId}
           />
         )}
       </div>
@@ -64,8 +87,8 @@ export default function StreamsPage() {
       <div className="flex gap-4">
         <select
           className="h-10 rounded-md border border-input bg-background px-3 py-2 text-sm"
-          value={selectedCluster || ''}
-          onChange={(e) => setSelectedCluster(e.target.value)}
+          value={selectedClusterId || ''}
+          onChange={(e) => setSelectedClusterId(e.target.value)}
         >
           <option value="">Select cluster...</option>
           {clustersData?.clusters?.map((cluster: any) => (
@@ -85,7 +108,7 @@ export default function StreamsPage() {
         </div>
       </div>
 
-      {!selectedCluster && (
+      {!selectedClusterId && (
         <Card>
           <CardContent className="py-12 text-center">
             <Database className="h-12 w-12 mx-auto text-muted-foreground mb-4" />
@@ -95,13 +118,29 @@ export default function StreamsPage() {
         </Card>
       )}
 
-      {selectedCluster && isLoading && (
+      {isClusterDisconnected && (
+        <Card className="border-red-200 bg-red-50">
+          <CardContent className="py-12 text-center">
+            <WifiOff className="h-12 w-12 mx-auto text-red-500 mb-4" />
+            <h3 className="text-lg font-semibold mb-2 text-red-700">Cluster Not Reachable</h3>
+            <p className="text-red-600 mb-4">
+              Unable to connect to the selected cluster. Please check if the cluster is running and accessible.
+            </p>
+            <Button variant="outline" onClick={() => refetchHealth()}>
+              <RefreshCw className="h-4 w-4 mr-2" />
+              Retry Connection
+            </Button>
+          </CardContent>
+        </Card>
+      )}
+
+      {selectedClusterId && (isLoading || isLoadingHealth) && !isClusterDisconnected && (
         <div className="flex items-center justify-center h-64">
           <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
         </div>
       )}
 
-      {selectedCluster && filteredStreams && filteredStreams.length === 0 && (
+      {selectedClusterId && isClusterConnected && filteredStreams && filteredStreams.length === 0 && (
         <Card>
           <CardContent className="py-12 text-center">
             <Database className="h-12 w-12 mx-auto text-muted-foreground mb-4" />
@@ -137,7 +176,7 @@ export default function StreamsPage() {
                 <tr key={stream.config.name} className="border-t hover:bg-muted/30">
                   <td className="p-4">
                     <Link
-                      href={`/streams/${selectedCluster}/${stream.config.name}`}
+                      href={`/streams/${selectedClusterId}/${stream.config.name}`}
                       className="font-medium text-primary hover:underline flex items-center gap-1"
                     >
                       {stream.config.name}

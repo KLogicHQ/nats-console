@@ -74,7 +74,6 @@ const tabs: Tab[] = [
   { id: 'schema', label: 'Schema', icon: FileCode },
   { id: 'consumers', label: 'Consumers', icon: Users },
   { id: 'config', label: 'Configuration', icon: Settings },
-  { id: 'metrics', label: 'Metrics', icon: BarChart3 },
 ];
 
 function StreamDetailContent() {
@@ -257,7 +256,7 @@ function StreamDetailContent() {
   const { data: metricsData, isLoading: isLoadingMetrics } = useQuery({
     queryKey: ['stream-metrics', clusterId, streamName, metricsTimeRange],
     queryFn: () => api.analytics.streamThroughput(streamName, getTimeRangeParams()),
-    enabled: activeTab === 'metrics',
+    enabled: activeTab === 'overview',
   });
 
   // Schema data
@@ -648,6 +647,77 @@ function StreamDetailContent() {
                 <span className="text-muted-foreground">Max Age</span>
                 <span>{stream.config.max_age === 0 ? 'Unlimited' : formatDuration(stream.config.max_age)}</span>
               </div>
+            </CardContent>
+          </Card>
+
+          {/* Throughput Charts */}
+          <Card className="md:col-span-4">
+            <CardHeader className="flex flex-row items-center justify-between">
+              <div>
+                <CardTitle>Message Throughput</CardTitle>
+                <CardDescription>Messages per second over time</CardDescription>
+              </div>
+              <select
+                className="h-9 px-3 border rounded-md bg-background text-sm"
+                value={metricsTimeRange}
+                onChange={(e) => setMetricsTimeRange(e.target.value)}
+              >
+                <option value="1h">Last 1 hour</option>
+                <option value="6h">Last 6 hours</option>
+                <option value="24h">Last 24 hours</option>
+                <option value="7d">Last 7 days</option>
+              </select>
+            </CardHeader>
+            <CardContent>
+              {isLoadingMetrics ? (
+                <div className="h-48 flex items-center justify-center">
+                  <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
+                </div>
+              ) : chartData.messages.length > 0 ? (
+                <LineChart
+                  data={chartData.messages}
+                  title=""
+                  yAxisLabel="msg/s"
+                  color="#2563eb"
+                  height={200}
+                />
+              ) : (
+                <div className="h-48 flex items-center justify-center text-muted-foreground">
+                  <div className="text-center">
+                    <BarChart3 className="h-12 w-12 mx-auto mb-4 opacity-50" />
+                    <p>No metrics data available</p>
+                  </div>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+
+          <Card className="md:col-span-4">
+            <CardHeader>
+              <CardTitle>Data Throughput</CardTitle>
+              <CardDescription>Bytes per second over time</CardDescription>
+            </CardHeader>
+            <CardContent>
+              {isLoadingMetrics ? (
+                <div className="h-48 flex items-center justify-center">
+                  <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
+                </div>
+              ) : chartData.bytes.length > 0 ? (
+                <LineChart
+                  data={chartData.bytes}
+                  title=""
+                  yAxisLabel="bytes/s"
+                  color="#16a34a"
+                  height={200}
+                />
+              ) : (
+                <div className="h-48 flex items-center justify-center text-muted-foreground">
+                  <div className="text-center">
+                    <BarChart3 className="h-12 w-12 mx-auto mb-4 opacity-50" />
+                    <p>No metrics data available</p>
+                  </div>
+                </div>
+              )}
             </CardContent>
           </Card>
         </div>
@@ -1052,122 +1122,6 @@ function StreamDetailContent() {
         </Card>
       )}
 
-      {/* Metrics Tab */}
-      {activeTab === 'metrics' && (
-        <div className="space-y-6">
-          {/* Time Range Selector */}
-          <div className="flex justify-end">
-            <select
-              className="h-9 px-3 border rounded-md bg-background text-sm"
-              value={metricsTimeRange}
-              onChange={(e) => setMetricsTimeRange(e.target.value)}
-            >
-              <option value="1h">Last 1 hour</option>
-              <option value="6h">Last 6 hours</option>
-              <option value="24h">Last 24 hours</option>
-              <option value="7d">Last 7 days</option>
-            </select>
-          </div>
-
-          {/* Quick Stats */}
-          <div className="grid gap-4 md:grid-cols-4">
-            <Card>
-              <CardHeader className="pb-2">
-                <CardTitle className="text-sm font-medium">Current Messages</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="text-2xl font-bold">{formatNumber(stream.state?.messages || 0)}</div>
-              </CardContent>
-            </Card>
-            <Card>
-              <CardHeader className="pb-2">
-                <CardTitle className="text-sm font-medium">Current Size</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="text-2xl font-bold">{formatBytes(stream.state?.bytes || 0)}</div>
-              </CardContent>
-            </Card>
-            <Card>
-              <CardHeader className="pb-2">
-                <CardTitle className="text-sm font-medium">First Sequence</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="text-2xl font-bold">{formatNumber(stream.state?.first_seq || 0)}</div>
-              </CardContent>
-            </Card>
-            <Card>
-              <CardHeader className="pb-2">
-                <CardTitle className="text-sm font-medium">Last Sequence</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="text-2xl font-bold">{formatNumber(stream.state?.last_seq || 0)}</div>
-              </CardContent>
-            </Card>
-          </div>
-
-          {/* Message Throughput Chart */}
-          <Card>
-            <CardHeader>
-              <CardTitle>Message Throughput</CardTitle>
-              <CardDescription>Messages per second over time</CardDescription>
-            </CardHeader>
-            <CardContent>
-              {isLoadingMetrics ? (
-                <div className="h-64 flex items-center justify-center">
-                  <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
-                </div>
-              ) : chartData.messages.length > 0 ? (
-                <LineChart
-                  data={chartData.messages}
-                  title=""
-                  yAxisLabel="msg/s"
-                  color="#2563eb"
-                  height={250}
-                />
-              ) : (
-                <div className="h-64 flex items-center justify-center text-muted-foreground">
-                  <div className="text-center">
-                    <BarChart3 className="h-12 w-12 mx-auto mb-4 opacity-50" />
-                    <p>No metrics data available</p>
-                    <p className="text-sm">Metrics will appear once the stream has activity</p>
-                  </div>
-                </div>
-              )}
-            </CardContent>
-          </Card>
-
-          {/* Bytes Throughput Chart */}
-          <Card>
-            <CardHeader>
-              <CardTitle>Data Throughput</CardTitle>
-              <CardDescription>Bytes per second over time</CardDescription>
-            </CardHeader>
-            <CardContent>
-              {isLoadingMetrics ? (
-                <div className="h-64 flex items-center justify-center">
-                  <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
-                </div>
-              ) : chartData.bytes.length > 0 ? (
-                <LineChart
-                  data={chartData.bytes}
-                  title=""
-                  yAxisLabel="bytes/s"
-                  color="#16a34a"
-                  height={250}
-                />
-              ) : (
-                <div className="h-64 flex items-center justify-center text-muted-foreground">
-                  <div className="text-center">
-                    <BarChart3 className="h-12 w-12 mx-auto mb-4 opacity-50" />
-                    <p>No metrics data available</p>
-                    <p className="text-sm">Metrics will appear once the stream has activity</p>
-                  </div>
-                </div>
-              )}
-            </CardContent>
-          </Card>
-        </div>
-      )}
     </div>
   );
 }

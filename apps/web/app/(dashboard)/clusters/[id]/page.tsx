@@ -1,6 +1,6 @@
 'use client';
 
-import { Suspense, useState, useMemo } from 'react';
+import { Suspense, useState, useMemo, useEffect } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
@@ -37,12 +37,13 @@ import {
 import { formatBytes, formatNumber } from '@nats-console/shared';
 import { CreateClusterDialog } from '@/components/forms/create-cluster-dialog';
 import { GaugeChart } from '@/components/charts';
+import { useClusterStore } from '@/stores/cluster';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 
 const tabs: Tab[] = [
   { id: 'overview', label: 'Overview', icon: Server },
   { id: 'streams', label: 'Streams', icon: Database },
   { id: 'config', label: 'Configuration', icon: Settings },
-  { id: 'metrics', label: 'Metrics', icon: BarChart3 },
 ];
 
 function ClusterDetailContent() {
@@ -52,8 +53,16 @@ function ClusterDetailContent() {
   const clusterId = params.id as string;
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
   const [showEditDialog, setShowEditDialog] = useState(false);
+  const { setSelectedClusterId } = useClusterStore();
 
   const { activeTab, setActiveTab } = useTabs(tabs, 'overview');
+
+  // Set this cluster as selected when visiting
+  useEffect(() => {
+    if (clusterId) {
+      setSelectedClusterId(clusterId);
+    }
+  }, [clusterId, setSelectedClusterId]);
 
   const { data: clusterData, isLoading } = useQuery({
     queryKey: ['cluster', clusterId],
@@ -120,15 +129,17 @@ function ClusterDetailContent() {
 
   const getEnvironmentBadge = (env: string) => {
     const colors: Record<string, string> = {
-      production: 'bg-red-100 text-red-700',
-      staging: 'bg-yellow-100 text-yellow-700',
-      development: 'bg-green-100 text-green-700',
+      production: 'bg-purple-100 text-purple-700',
+      staging: 'bg-amber-100 text-amber-700',
+      development: 'bg-sky-100 text-sky-700',
     };
     return colors[env] || 'bg-gray-100 text-gray-700';
   };
 
-  const jetstream = infoData?.jetstream;
+  const jetstream = infoData?.jetstream || { streams: 0, consumers: 0, messages: 0, bytes: 0 };
   const streams = streamsData?.streams || [];
+  // Get URL from primary connection
+  const clusterUrl = cluster?.connections?.[0]?.serverUrl || '';
 
   return (
     <div className="space-y-6">
@@ -229,7 +240,7 @@ function ClusterDetailContent() {
                 </div>
                 <div>
                   <p className="text-sm text-muted-foreground">URL</p>
-                  <p className="text-lg font-mono">{cluster.url}</p>
+                  <p className="text-lg font-mono">{clusterUrl || 'Not configured'}</p>
                 </div>
                 <div>
                   <p className="text-sm text-muted-foreground">Version</p>
@@ -240,50 +251,48 @@ function ClusterDetailContent() {
           </Card>
 
           {/* JetStream Info */}
-          {jetstream && (
-            <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-              <Card>
-                <CardHeader className="pb-2">
-                  <CardTitle className="text-sm font-medium">Streams</CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <div className="text-2xl font-bold">
-                    {jetstream.streams || 0}
-                  </div>
-                </CardContent>
-              </Card>
-              <Card>
-                <CardHeader className="pb-2">
-                  <CardTitle className="text-sm font-medium">Consumers</CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <div className="text-2xl font-bold">
-                    {jetstream.consumers || 0}
-                  </div>
-                </CardContent>
-              </Card>
-              <Card>
-                <CardHeader className="pb-2">
-                  <CardTitle className="text-sm font-medium">Messages</CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <div className="text-2xl font-bold">
-                    {formatNumber(jetstream.messages || 0)}
-                  </div>
-                </CardContent>
-              </Card>
-              <Card>
-                <CardHeader className="pb-2">
-                  <CardTitle className="text-sm font-medium">Storage Used</CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <div className="text-2xl font-bold">
-                    {formatBytes(jetstream.bytes || 0)}
-                  </div>
-                </CardContent>
-              </Card>
-            </div>
-          )}
+          <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+            <Card>
+              <CardHeader className="pb-2">
+                <CardTitle className="text-sm font-medium">Streams</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="text-2xl font-bold">
+                  {jetstream.streams || 0}
+                </div>
+              </CardContent>
+            </Card>
+            <Card>
+              <CardHeader className="pb-2">
+                <CardTitle className="text-sm font-medium">Consumers</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="text-2xl font-bold">
+                  {jetstream.consumers || 0}
+                </div>
+              </CardContent>
+            </Card>
+            <Card>
+              <CardHeader className="pb-2">
+                <CardTitle className="text-sm font-medium">Messages</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="text-2xl font-bold">
+                  {formatNumber(jetstream.messages || 0)}
+                </div>
+              </CardContent>
+            </Card>
+            <Card>
+              <CardHeader className="pb-2">
+                <CardTitle className="text-sm font-medium">Storage Used</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="text-2xl font-bold">
+                  {formatBytes(jetstream.bytes || 0)}
+                </div>
+              </CardContent>
+            </Card>
+          </div>
 
           {/* Server Info */}
           <Card>
@@ -291,44 +300,117 @@ function ClusterDetailContent() {
               <CardTitle>Server Information</CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="grid gap-4 md:grid-cols-2">
-                <div className="space-y-3">
-                  <div className="flex justify-between">
-                    <span className="text-muted-foreground">Server ID</span>
-                    <span className="font-mono text-sm truncate max-w-[200px]">
-                      {healthData?.serverInfo?.serverId || '-'}
-                    </span>
+              <TooltipProvider>
+                <div className="grid gap-4 md:grid-cols-2">
+                  <div className="space-y-3">
+                    <div className="flex justify-between items-center gap-4">
+                      <span className="text-muted-foreground shrink-0">Server ID</span>
+                      {healthData?.serverInfo?.serverId ? (
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <span className="font-mono text-sm truncate max-w-[180px] cursor-help">
+                              {healthData.serverInfo.serverId}
+                            </span>
+                          </TooltipTrigger>
+                          <TooltipContent>
+                            <p className="font-mono text-xs break-all max-w-[300px]">{healthData.serverInfo.serverId}</p>
+                          </TooltipContent>
+                        </Tooltip>
+                      ) : (
+                        <span>-</span>
+                      )}
+                    </div>
+                    <div className="flex justify-between items-center gap-4">
+                      <span className="text-muted-foreground shrink-0">Server Name</span>
+                      {healthData?.serverInfo?.serverName ? (
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <span className="truncate max-w-[180px] cursor-help">
+                              {healthData.serverInfo.serverName}
+                            </span>
+                          </TooltipTrigger>
+                          <TooltipContent>
+                            <p className="break-all max-w-[300px]">{healthData.serverInfo.serverName}</p>
+                          </TooltipContent>
+                        </Tooltip>
+                      ) : (
+                        <span>-</span>
+                      )}
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-muted-foreground">Version</span>
+                      <span>{healthData?.serverInfo?.version || cluster.version || '-'}</span>
+                    </div>
                   </div>
-                  <div className="flex justify-between">
-                    <span className="text-muted-foreground">Server Name</span>
-                    <span>{healthData?.serverInfo?.serverName || '-'}</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-muted-foreground">Version</span>
-                    <span>{healthData?.serverInfo?.version || cluster.version || '-'}</span>
+                  <div className="space-y-3">
+                    <div className="flex justify-between">
+                      <span className="text-muted-foreground">JetStream</span>
+                      <span className={healthData?.serverInfo?.jetstream ? 'text-green-500' : 'text-red-500'}>
+                        {healthData?.serverInfo?.jetstream ? 'Enabled' : 'Disabled'}
+                      </span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-muted-foreground">RTT</span>
+                      <span>{healthData?.rtt ? `${healthData.rtt}ms` : '-'}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-muted-foreground">Status</span>
+                      <span className={cluster.status === 'connected' ? 'text-green-500' : 'text-red-500'}>
+                        {cluster.status}
+                      </span>
+                    </div>
                   </div>
                 </div>
-                <div className="space-y-3">
-                  <div className="flex justify-between">
-                    <span className="text-muted-foreground">JetStream</span>
-                    <span className={healthData?.serverInfo?.jetstream ? 'text-green-500' : 'text-red-500'}>
-                      {healthData?.serverInfo?.jetstream ? 'Enabled' : 'Disabled'}
-                    </span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-muted-foreground">RTT</span>
-                    <span>{healthData?.rtt ? `${healthData.rtt}ms` : '-'}</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-muted-foreground">Status</span>
-                    <span className={cluster.status === 'connected' ? 'text-green-500' : 'text-red-500'}>
-                      {cluster.status}
-                    </span>
-                  </div>
-                </div>
-              </div>
+              </TooltipProvider>
             </CardContent>
           </Card>
+
+          {/* Resource Usage Gauges */}
+          <div className="grid gap-4 md:grid-cols-3">
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-sm font-medium">Streams</CardTitle>
+              </CardHeader>
+              <CardContent className="flex justify-center">
+                <GaugeChart
+                  value={jetstream?.streams || 0}
+                  max={Math.max(100, (jetstream?.streams || 0) * 2)}
+                  title={`${jetstream?.streams || 0} streams`}
+                  color="#2563eb"
+                  height={150}
+                />
+              </CardContent>
+            </Card>
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-sm font-medium">Consumers</CardTitle>
+              </CardHeader>
+              <CardContent className="flex justify-center">
+                <GaugeChart
+                  value={jetstream?.consumers || 0}
+                  max={Math.max(100, (jetstream?.consumers || 0) * 2)}
+                  title={`${jetstream?.consumers || 0} consumers`}
+                  color="#16a34a"
+                  height={150}
+                />
+              </CardContent>
+            </Card>
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-sm font-medium">Storage Usage</CardTitle>
+              </CardHeader>
+              <CardContent className="flex justify-center">
+                <GaugeChart
+                  value={jetstream?.bytes ? Math.round(jetstream.bytes / (1024 * 1024)) : 0}
+                  max={Math.max(1024, jetstream?.bytes ? Math.round(jetstream.bytes / (1024 * 1024)) * 2 : 1024)}
+                  title={formatBytes(jetstream?.bytes || 0)}
+                  unit=" MB"
+                  color="#f59e0b"
+                  height={150}
+                />
+              </CardContent>
+            </Card>
+          </div>
         </div>
       )}
 
@@ -412,7 +494,7 @@ function ClusterDetailContent() {
                 </div>
                 <div>
                   <label className="text-sm font-medium">URL</label>
-                  <p className="mt-1 font-mono">{cluster.url}</p>
+                  <p className="mt-1 font-mono">{clusterUrl || 'Not configured'}</p>
                 </div>
                 <div>
                   <label className="text-sm font-medium">Authentication</label>
@@ -428,133 +510,6 @@ function ClusterDetailContent() {
         </Card>
       )}
 
-      {/* Metrics Tab */}
-      {activeTab === 'metrics' && (
-        <div className="space-y-6">
-          {/* Resource Usage Gauges */}
-          <div className="grid gap-4 md:grid-cols-3">
-            <Card>
-              <CardHeader>
-                <CardTitle className="text-sm font-medium">Streams</CardTitle>
-              </CardHeader>
-              <CardContent className="flex justify-center">
-                <GaugeChart
-                  value={jetstream?.streams || 0}
-                  max={Math.max(100, (jetstream?.streams || 0) * 2)}
-                  title={`${jetstream?.streams || 0} streams`}
-                  color="#2563eb"
-                  height={150}
-                />
-              </CardContent>
-            </Card>
-            <Card>
-              <CardHeader>
-                <CardTitle className="text-sm font-medium">Consumers</CardTitle>
-              </CardHeader>
-              <CardContent className="flex justify-center">
-                <GaugeChart
-                  value={jetstream?.consumers || 0}
-                  max={Math.max(100, (jetstream?.consumers || 0) * 2)}
-                  title={`${jetstream?.consumers || 0} consumers`}
-                  color="#16a34a"
-                  height={150}
-                />
-              </CardContent>
-            </Card>
-            <Card>
-              <CardHeader>
-                <CardTitle className="text-sm font-medium">Storage Usage</CardTitle>
-              </CardHeader>
-              <CardContent className="flex justify-center">
-                <GaugeChart
-                  value={jetstream?.bytes ? Math.round(jetstream.bytes / (1024 * 1024)) : 0}
-                  max={Math.max(1024, jetstream?.bytes ? Math.round(jetstream.bytes / (1024 * 1024)) * 2 : 1024)}
-                  title={formatBytes(jetstream?.bytes || 0)}
-                  unit=" MB"
-                  color="#f59e0b"
-                  height={150}
-                />
-              </CardContent>
-            </Card>
-          </div>
-
-          {/* JetStream Stats */}
-          <Card>
-            <CardHeader>
-              <CardTitle>JetStream Overview</CardTitle>
-              <CardDescription>Current JetStream resource usage</CardDescription>
-            </CardHeader>
-            <CardContent>
-              <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-                <div className="space-y-2">
-                  <p className="text-sm text-muted-foreground">Streams</p>
-                  <p className="text-3xl font-bold">{formatNumber(jetstream?.streams || 0)}</p>
-                </div>
-                <div className="space-y-2">
-                  <p className="text-sm text-muted-foreground">Consumers</p>
-                  <p className="text-3xl font-bold">{formatNumber(jetstream?.consumers || 0)}</p>
-                </div>
-                <div className="space-y-2">
-                  <p className="text-sm text-muted-foreground">Messages</p>
-                  <p className="text-3xl font-bold">{formatNumber(jetstream?.messages || 0)}</p>
-                </div>
-                <div className="space-y-2">
-                  <p className="text-sm text-muted-foreground">Data Size</p>
-                  <p className="text-3xl font-bold">{formatBytes(jetstream?.bytes || 0)}</p>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-
-          {/* Server Info */}
-          <Card>
-            <CardHeader>
-              <CardTitle>Server Information</CardTitle>
-              <CardDescription>Server runtime statistics</CardDescription>
-            </CardHeader>
-            <CardContent>
-              <div className="grid gap-4 md:grid-cols-2">
-                <div className="space-y-3">
-                  <div className="flex justify-between">
-                    <span className="text-muted-foreground">Server ID</span>
-                    <span className="font-medium font-mono text-sm truncate max-w-[200px]">
-                      {healthData?.serverInfo?.serverId || '-'}
-                    </span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-muted-foreground">Server Name</span>
-                    <span className="font-medium">{healthData?.serverInfo?.serverName || '-'}</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-muted-foreground">RTT</span>
-                    <span className="font-medium">{healthData?.rtt ? `${healthData.rtt}ms` : '-'}</span>
-                  </div>
-                </div>
-                <div className="space-y-3">
-                  <div className="flex justify-between">
-                    <span className="text-muted-foreground">Server Version</span>
-                    <span className="font-medium">{healthData?.serverInfo?.version || cluster.version || '-'}</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-muted-foreground">JetStream</span>
-                    <span className={`font-medium ${healthData?.serverInfo?.jetstream ? 'text-green-500' : 'text-red-500'}`}>
-                      {healthData?.serverInfo?.jetstream ? 'Enabled' : 'Disabled'}
-                    </span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-muted-foreground">Status</span>
-                    <span className={`font-medium capitalize ${
-                      cluster.status === 'connected' ? 'text-green-500' : 'text-red-500'
-                    }`}>
-                      {cluster.status}
-                    </span>
-                  </div>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-        </div>
-      )}
     </div>
   );
 }

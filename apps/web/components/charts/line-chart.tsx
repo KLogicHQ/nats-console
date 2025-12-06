@@ -1,5 +1,6 @@
 'use client';
 
+import { useRef, useState, useEffect } from 'react';
 import ReactECharts from 'echarts-for-react';
 import type { EChartsOption } from 'echarts';
 
@@ -20,6 +21,37 @@ export function LineChart({
   height = 300,
   showArea = true,
 }: LineChartProps) {
+  const containerRef = useRef<HTMLDivElement>(null);
+  const [isReady, setIsReady] = useState(false);
+
+  // Wait for container to have dimensions before rendering chart
+  useEffect(() => {
+    let observer: ResizeObserver | null = null;
+    let timeout: NodeJS.Timeout | null = null;
+
+    const checkDimensions = () => {
+      if (containerRef.current) {
+        const { clientWidth, clientHeight } = containerRef.current;
+        if (clientWidth > 0 && clientHeight > 0) {
+          setIsReady(true);
+        }
+      }
+    };
+
+    checkDimensions();
+    timeout = setTimeout(checkDimensions, 100);
+
+    if (containerRef.current && typeof ResizeObserver !== 'undefined') {
+      observer = new ResizeObserver(checkDimensions);
+      observer.observe(containerRef.current);
+    }
+
+    return () => {
+      if (timeout) clearTimeout(timeout);
+      if (observer) observer.disconnect();
+    };
+  }, []);
+
   const option: EChartsOption = {
     title: title ? { text: title, left: 'center', textStyle: { fontSize: 14 } } : undefined,
     tooltip: {
@@ -64,5 +96,16 @@ export function LineChart({
     ],
   };
 
-  return <ReactECharts option={option} style={{ height }} />;
+  return (
+    <div ref={containerRef} style={{ width: '100%', height }}>
+      {isReady && (
+        <ReactECharts
+          option={option}
+          style={{ width: '100%', height: '100%' }}
+          notMerge={true}
+          lazyUpdate={true}
+        />
+      )}
+    </div>
+  );
 }

@@ -1,15 +1,17 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { BarChart3, TrendingUp, TrendingDown, Activity, ArrowUpRight, ArrowDownRight, Loader2 } from 'lucide-react';
+import { BarChart3, TrendingUp, TrendingDown, Activity, ArrowUpRight, ArrowDownRight, Loader2, WifiOff, RefreshCw } from 'lucide-react';
 import { api } from '@/lib/api';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
 import { LineChart, BarChart, MultiLineChart } from '@/components/charts';
 import { formatBytes, formatNumber } from '@nats-console/shared';
+import { useClusterStore } from '@/stores/cluster';
 
 export default function AnalyticsPage() {
-  const [selectedCluster, setSelectedCluster] = useState<string | null>(null);
+  const { selectedClusterId, setSelectedClusterId } = useClusterStore();
   const [timeRange, setTimeRange] = useState('24h');
 
   const { data: clustersData } = useQuery({
@@ -17,47 +19,68 @@ export default function AnalyticsPage() {
     queryFn: () => api.clusters.list(),
   });
 
+  // Ensure cluster connection before fetching analytics
+  const { data: healthData, isLoading: isLoadingHealth, refetch: refetchHealth } = useQuery({
+    queryKey: ['cluster-health', selectedClusterId],
+    queryFn: () => (selectedClusterId ? api.clusters.health(selectedClusterId) : null),
+    enabled: !!selectedClusterId,
+    staleTime: 30000,
+    retry: 1,
+  });
+
+  const isClusterConnected = healthData?.connected === true;
+  const isClusterDisconnected = selectedClusterId && healthData && !healthData.connected;
+
   const { data: analyticsData, isLoading } = useQuery({
-    queryKey: ['analytics', selectedCluster, timeRange],
+    queryKey: ['analytics', selectedClusterId, timeRange],
     queryFn: () =>
-      selectedCluster
-        ? api.analytics.overview(selectedCluster, timeRange)
+      selectedClusterId
+        ? api.analytics.overview(selectedClusterId, timeRange)
         : null,
-    enabled: !!selectedCluster,
+    enabled: !!selectedClusterId && isClusterConnected,
   });
 
   // Chart data queries
   const { data: throughputData, isLoading: throughputLoading } = useQuery({
-    queryKey: ['analytics-throughput', selectedCluster, timeRange],
+    queryKey: ['analytics-throughput', selectedClusterId, timeRange],
     queryFn: () =>
-      selectedCluster
-        ? api.analytics.chartThroughput(selectedCluster, timeRange)
+      selectedClusterId
+        ? api.analytics.chartThroughput(selectedClusterId, timeRange)
         : null,
-    enabled: !!selectedCluster,
+    enabled: !!selectedClusterId && isClusterConnected,
   });
 
   const { data: consumerLagData, isLoading: consumerLagLoading } = useQuery({
-    queryKey: ['analytics-consumer-lag', selectedCluster, timeRange],
+    queryKey: ['analytics-consumer-lag', selectedClusterId, timeRange],
     queryFn: () =>
-      selectedCluster
-        ? api.analytics.chartConsumerLag(selectedCluster, timeRange)
+      selectedClusterId
+        ? api.analytics.chartConsumerLag(selectedClusterId, timeRange)
         : null,
-    enabled: !!selectedCluster,
+    enabled: !!selectedClusterId && isClusterConnected,
   });
 
   const { data: streamActivityData, isLoading: streamActivityLoading } = useQuery({
-    queryKey: ['analytics-stream-activity', selectedCluster, timeRange],
+    queryKey: ['analytics-stream-activity', selectedClusterId, timeRange],
     queryFn: () =>
-      selectedCluster
-        ? api.analytics.chartStreamActivity(selectedCluster, timeRange)
+      selectedClusterId
+        ? api.analytics.chartStreamActivity(selectedClusterId, timeRange)
         : null,
-    enabled: !!selectedCluster,
+    enabled: !!selectedClusterId && isClusterConnected,
   });
 
-  // Auto-select first cluster
-  if (clustersData?.clusters?.length && !selectedCluster) {
-    setSelectedCluster(clustersData.clusters[0].id);
-  }
+  // Auto-select saved cluster or first cluster
+  useEffect(() => {
+    if (clustersData?.clusters?.length) {
+      const savedClusterExists = clustersData.clusters.some(
+        (c: any) => c.id === selectedClusterId
+      );
+      if (!savedClusterExists) {
+        setSelectedClusterId(clustersData.clusters[0].id);
+      } else if (!selectedClusterId) {
+        setSelectedClusterId(clustersData.clusters[0].id);
+      }
+    }
+  }, [clustersData?.clusters, selectedClusterId, setSelectedClusterId]);
 
   const stats = analyticsData || {
     totalMessages: 0,
@@ -132,8 +155,8 @@ export default function AnalyticsPage() {
       <div className="flex gap-4">
         <select
           className="h-10 rounded-md border border-input bg-background px-3 py-2 text-sm"
-          value={selectedCluster || ''}
-          onChange={(e) => setSelectedCluster(e.target.value)}
+          value={selectedClusterId || ''}
+          onChange={(e) => setSelectedClusterId(e.target.value)}
         >
           <option value="">Select cluster...</option>
           {clustersData?.clusters?.map((cluster: any) => (
@@ -155,7 +178,7 @@ export default function AnalyticsPage() {
         </select>
       </div>
 
-      {!selectedCluster && (
+      {!selectedClusterId && (
         <Card>
           <CardContent className="py-12 text-center">
             <BarChart3 className="h-12 w-12 mx-auto text-muted-foreground mb-4" />
@@ -165,13 +188,29 @@ export default function AnalyticsPage() {
         </Card>
       )}
 
-      {selectedCluster && isLoading && (
+      {isClusterDisconnected && (
+        <Card className="border-red-200 bg-red-50">
+          <CardContent className="py-12 text-center">
+            <WifiOff className="h-12 w-12 mx-auto text-red-500 mb-4" />
+            <h3 className="text-lg font-semibold mb-2 text-red-700">Cluster Not Reachable</h3>
+            <p className="text-red-600 mb-4">
+              Unable to connect to the selected cluster. Please check if the cluster is running and accessible.
+            </p>
+            <Button variant="outline" onClick={() => refetchHealth()}>
+              <RefreshCw className="h-4 w-4 mr-2" />
+              Retry Connection
+            </Button>
+          </CardContent>
+        </Card>
+      )}
+
+      {selectedClusterId && (isLoading || isLoadingHealth) && !isClusterDisconnected && (
         <div className="flex items-center justify-center h-64">
           <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
         </div>
       )}
 
-      {selectedCluster && !isLoading && (
+      {selectedClusterId && isClusterConnected && !isLoading && (
         <>
           <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
             <StatCard

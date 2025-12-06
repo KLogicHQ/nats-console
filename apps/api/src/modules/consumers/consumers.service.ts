@@ -7,9 +7,15 @@ import {
   deleteConsumer as natsDeleteConsumer,
   pauseConsumer as natsPauseConsumer,
   resumeConsumer as natsResumeConsumer,
+  listStreams as natsListStreams,
 } from '../../lib/nats';
 import { NotFoundError } from '../../../../shared/src/index';
 import type { ConsumerInfo, CreateConsumerInput, UpdateConsumerInput } from '../../../../shared/src/index';
+
+// Extended consumer info with stream name
+export interface ConsumerInfoWithStream extends ConsumerInfo {
+  streamName: string;
+}
 
 // ==================== Consumer Operations ====================
 
@@ -28,6 +34,41 @@ export async function listConsumers(
   }
 
   return natsListConsumers(clusterId, streamName);
+}
+
+export async function listAllConsumers(
+  orgId: string,
+  clusterId: string
+): Promise<ConsumerInfoWithStream[]> {
+  // Verify cluster belongs to org
+  const cluster = await prisma.natsCluster.findFirst({
+    where: { id: clusterId, orgId },
+  });
+
+  if (!cluster) {
+    throw new NotFoundError('Cluster', clusterId);
+  }
+
+  // Get all streams
+  const streams = await natsListStreams(clusterId);
+
+  // Get consumers from each stream
+  const allConsumers: ConsumerInfoWithStream[] = [];
+  for (const stream of streams) {
+    try {
+      const consumers = await natsListConsumers(clusterId, stream.config.name);
+      for (const consumer of consumers) {
+        allConsumers.push({
+          ...consumer,
+          streamName: stream.config.name,
+        });
+      }
+    } catch {
+      // Skip streams that have issues
+    }
+  }
+
+  return allConsumers;
 }
 
 export async function getConsumer(

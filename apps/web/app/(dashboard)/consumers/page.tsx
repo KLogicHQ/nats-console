@@ -1,8 +1,8 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { Plus, Users, Search, AlertTriangle, CheckCircle, ChevronRight, RefreshCw, Trash2 } from 'lucide-react';
+import { Plus, Users, Search, AlertTriangle, CheckCircle, ChevronRight, RefreshCw, Trash2, WifiOff } from 'lucide-react';
 import Link from 'next/link';
 import { api } from '@/lib/api';
 import { Button } from '@/components/ui/button';
@@ -20,53 +20,74 @@ import {
 } from '@/components/ui/alert-dialog';
 import { formatNumber, formatDuration } from '@nats-console/shared';
 import { CreateConsumerDialog } from '@/components/forms/create-consumer-dialog';
+import { useClusterStore } from '@/stores/cluster';
 
 export default function ConsumersPage() {
   const queryClient = useQueryClient();
-  const [selectedCluster, setSelectedCluster] = useState<string | null>(null);
-  const [selectedStream, setSelectedStream] = useState<string | null>(null);
+  const { selectedClusterId, setSelectedClusterId } = useClusterStore();
+  const [selectedStream, setSelectedStream] = useState<string>('__all__');
   const [search, setSearch] = useState('');
   const [showCreateDialog, setShowCreateDialog] = useState(false);
-  const [consumerToDelete, setConsumerToDelete] = useState<string | null>(null);
+  const [consumerToDelete, setConsumerToDelete] = useState<{ name: string; streamName: string } | null>(null);
 
   const { data: clustersData } = useQuery({
     queryKey: ['clusters'],
     queryFn: () => api.clusters.list(),
   });
 
-  const { data: streamsData } = useQuery({
-    queryKey: ['streams', selectedCluster],
-    queryFn: () => (selectedCluster ? api.streams.list(selectedCluster) : null),
-    enabled: !!selectedCluster,
+  // Ensure cluster connection before fetching data
+  const { data: healthData, isLoading: isLoadingHealth, refetch: refetchHealth } = useQuery({
+    queryKey: ['cluster-health', selectedClusterId],
+    queryFn: () => (selectedClusterId ? api.clusters.health(selectedClusterId) : null),
+    enabled: !!selectedClusterId,
+    staleTime: 30000, // Cache for 30 seconds
+    retry: 1,
   });
 
+  const isClusterConnected = healthData?.connected === true;
+  const isClusterDisconnected = selectedClusterId && healthData && !healthData.connected;
+
+  const { data: streamsData } = useQuery({
+    queryKey: ['streams', selectedClusterId],
+    queryFn: () => (selectedClusterId ? api.streams.list(selectedClusterId) : null),
+    enabled: !!selectedClusterId && isClusterConnected,
+  });
+
+  // Fetch all consumers when "All" is selected, or specific stream consumers
   const { data: consumersData, isLoading, refetch } = useQuery({
-    queryKey: ['consumers', selectedCluster, selectedStream],
-    queryFn: () =>
-      selectedCluster && selectedStream
-        ? api.consumers.list(selectedCluster, selectedStream)
-        : null,
-    enabled: !!selectedCluster && !!selectedStream,
+    queryKey: ['consumers', selectedClusterId, selectedStream],
+    queryFn: () => {
+      if (!selectedClusterId) return null;
+      if (selectedStream === '__all__') {
+        return api.consumers.listAll(selectedClusterId);
+      }
+      return api.consumers.list(selectedClusterId, selectedStream);
+    },
+    enabled: !!selectedClusterId && isClusterConnected,
   });
 
   const deleteMutation = useMutation({
-    mutationFn: (consumerName: string) =>
-      api.consumers.delete(selectedCluster!, selectedStream!, consumerName),
+    mutationFn: ({ name, streamName }: { name: string; streamName: string }) =>
+      api.consumers.delete(selectedClusterId!, streamName, name),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['consumers', selectedCluster, selectedStream] });
+      queryClient.invalidateQueries({ queryKey: ['consumers', selectedClusterId, selectedStream] });
       setConsumerToDelete(null);
     },
   });
 
-  // Auto-select first cluster
-  if (clustersData?.clusters?.length && !selectedCluster) {
-    setSelectedCluster(clustersData.clusters[0].id);
-  }
-
-  // Auto-select first stream when cluster changes
-  if (streamsData?.streams?.length && !selectedStream) {
-    setSelectedStream(streamsData.streams[0].config.name);
-  }
+  // Auto-select saved cluster or first cluster
+  useEffect(() => {
+    if (clustersData?.clusters?.length) {
+      const savedClusterExists = clustersData.clusters.some(
+        (c: any) => c.id === selectedClusterId
+      );
+      if (!savedClusterExists) {
+        setSelectedClusterId(clustersData.clusters[0].id);
+      } else if (!selectedClusterId) {
+        setSelectedClusterId(clustersData.clusters[0].id);
+      }
+    }
+  }, [clustersData?.clusters, selectedClusterId, setSelectedClusterId]);
 
   const filteredConsumers = consumersData?.consumers?.filter((consumer: any) =>
     consumer.name.toLowerCase().includes(search.toLowerCase())
@@ -87,19 +108,19 @@ export default function ConsumersPage() {
           <p className="text-muted-foreground">Manage JetStream consumers</p>
         </div>
         <div className="flex gap-2">
-          <Button variant="outline" size="icon" onClick={() => refetch()} disabled={!selectedStream}>
+          <Button variant="outline" size="icon" onClick={() => refetch()} disabled={!selectedClusterId}>
             <RefreshCw className="h-4 w-4" />
           </Button>
-          <Button disabled={!selectedStream} onClick={() => setShowCreateDialog(true)}>
+          <Button disabled={!selectedClusterId || selectedStream === '__all__'} onClick={() => setShowCreateDialog(true)}>
             <Plus className="h-4 w-4" />
             Create Consumer
           </Button>
         </div>
-        {selectedCluster && selectedStream && (
+        {selectedClusterId && selectedStream && selectedStream !== '__all__' && (
           <CreateConsumerDialog
             open={showCreateDialog}
             onOpenChange={setShowCreateDialog}
-            clusterId={selectedCluster}
+            clusterId={selectedClusterId}
             streamName={selectedStream}
           />
         )}
@@ -108,10 +129,10 @@ export default function ConsumersPage() {
       <div className="flex gap-4">
         <select
           className="h-10 rounded-md border border-input bg-background px-3 py-2 text-sm"
-          value={selectedCluster || ''}
+          value={selectedClusterId || ''}
           onChange={(e) => {
-            setSelectedCluster(e.target.value);
-            setSelectedStream(null);
+            setSelectedClusterId(e.target.value);
+            setSelectedStream('__all__');
           }}
         >
           <option value="">Select cluster...</option>
@@ -123,11 +144,11 @@ export default function ConsumersPage() {
         </select>
         <select
           className="h-10 rounded-md border border-input bg-background px-3 py-2 text-sm"
-          value={selectedStream || ''}
+          value={selectedStream}
           onChange={(e) => setSelectedStream(e.target.value)}
-          disabled={!selectedCluster}
+          disabled={!selectedClusterId}
         >
-          <option value="">Select stream...</option>
+          <option value="__all__">All Streams</option>
           {streamsData?.streams?.map((stream: any) => (
             <option key={stream.config.name} value={stream.config.name}>
               {stream.config.name}
@@ -145,23 +166,29 @@ export default function ConsumersPage() {
         </div>
       </div>
 
-      {!selectedStream && (
-        <Card>
+      {isClusterDisconnected && (
+        <Card className="border-red-200 bg-red-50">
           <CardContent className="py-12 text-center">
-            <Users className="h-12 w-12 mx-auto text-muted-foreground mb-4" />
-            <h3 className="text-lg font-semibold mb-2">Select a stream</h3>
-            <p className="text-muted-foreground">Choose a cluster and stream to view consumers</p>
+            <WifiOff className="h-12 w-12 mx-auto text-red-500 mb-4" />
+            <h3 className="text-lg font-semibold mb-2 text-red-700">Cluster Not Reachable</h3>
+            <p className="text-red-600 mb-4">
+              Unable to connect to the selected cluster. Please check if the cluster is running and accessible.
+            </p>
+            <Button variant="outline" onClick={() => refetchHealth()}>
+              <RefreshCw className="h-4 w-4 mr-2" />
+              Retry Connection
+            </Button>
           </CardContent>
         </Card>
       )}
 
-      {selectedStream && isLoading && (
+      {(isLoading || isLoadingHealth) && !isClusterDisconnected && (
         <div className="flex items-center justify-center h-64">
           <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
         </div>
       )}
 
-      {selectedStream && filteredConsumers && filteredConsumers.length === 0 && (
+      {!isLoading && isClusterConnected && filteredConsumers && filteredConsumers.length === 0 && (
         <Card>
           <CardContent className="py-12 text-center">
             <Users className="h-12 w-12 mx-auto text-muted-foreground mb-4" />
@@ -169,7 +196,7 @@ export default function ConsumersPage() {
             <p className="text-muted-foreground mb-4">
               {search ? 'No consumers match your search' : 'Create your first consumer to get started'}
             </p>
-            {!search && (
+            {!search && selectedStream !== '__all__' && (
               <Button onClick={() => setShowCreateDialog(true)}>
                 <Plus className="h-4 w-4" />
                 Create Consumer
@@ -185,6 +212,9 @@ export default function ConsumersPage() {
             <thead className="bg-muted/50">
               <tr>
                 <th className="text-left p-4 font-medium">Name</th>
+                {selectedStream === '__all__' && (
+                  <th className="text-left p-4 font-medium">Stream</th>
+                )}
                 <th className="text-left p-4 font-medium">Type</th>
                 <th className="text-right p-4 font-medium">Pending</th>
                 <th className="text-right p-4 font-medium">Redelivered</th>
@@ -198,16 +228,27 @@ export default function ConsumersPage() {
               {filteredConsumers.map((consumer: any) => {
                 const health = getHealthStatus(consumer);
                 const HealthIcon = health.icon;
+                const streamName = consumer.streamName || selectedStream;
                 return (
-                  <tr key={consumer.name} className="border-t hover:bg-muted/30">
+                  <tr key={`${streamName}-${consumer.name}`} className="border-t hover:bg-muted/30">
                     <td className="p-4">
                       <Link
-                        href={`/consumers/${selectedCluster}/${selectedStream}/${consumer.name}`}
+                        href={`/consumers/${selectedClusterId}/${streamName}/${consumer.name}`}
                         className="font-medium text-primary hover:underline flex items-center gap-1"
                       >
                         {consumer.name}
                       </Link>
                     </td>
+                    {selectedStream === '__all__' && (
+                      <td className="p-4">
+                        <Link
+                          href={`/streams/${selectedClusterId}/${streamName}`}
+                          className="text-muted-foreground hover:text-primary hover:underline"
+                        >
+                          {streamName}
+                        </Link>
+                      </td>
+                    )}
                     <td className="p-4">
                       <span
                         className={`px-2 py-1 text-xs rounded-full ${
@@ -234,7 +275,7 @@ export default function ConsumersPage() {
                         size="icon"
                         onClick={(e) => {
                           e.preventDefault();
-                          setConsumerToDelete(consumer.name);
+                          setConsumerToDelete({ name: consumer.name, streamName });
                         }}
                       >
                         <Trash2 className="h-4 w-4 text-red-500" />
@@ -254,7 +295,7 @@ export default function ConsumersPage() {
           <AlertDialogHeader>
             <AlertDialogTitle>Delete Consumer</AlertDialogTitle>
             <AlertDialogDescription>
-              Are you sure you want to delete consumer &quot;{consumerToDelete}&quot;? This action cannot be undone.
+              Are you sure you want to delete consumer &quot;{consumerToDelete?.name}&quot;? This action cannot be undone.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>

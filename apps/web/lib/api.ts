@@ -278,6 +278,9 @@ export const consumers = {
   list: (clusterId: string, streamName: string) =>
     request<{ consumers: any[] }>(`/clusters/${clusterId}/streams/${streamName}/consumers`),
 
+  listAll: (clusterId: string) =>
+    request<{ consumers: any[] }>(`/clusters/${clusterId}/consumers`),
+
   get: (clusterId: string, streamName: string, name: string) =>
     request<{ consumer: any }>(`/clusters/${clusterId}/streams/${streamName}/consumers/${name}`),
 

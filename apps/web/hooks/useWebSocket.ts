@@ -20,6 +20,7 @@ export function useWebSocket() {
   const wsRef = useRef<WebSocket | null>(null);
   const reconnectTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const reconnectAttempts = useRef(0);
+  const hasConnectedBefore = useRef(false);
   const subscribedChannels = useRef<Set<string>>(new Set());
   const messageHandlers = useRef<Map<string, Set<MessageHandler>>>(new Map());
 
@@ -28,8 +29,8 @@ export function useWebSocket() {
 
   const { accessToken, isAuthenticated } = useAuthStore();
 
-  const maxReconnectAttempts = 5;
-  const baseReconnectDelay = 1000;
+  const maxReconnectAttempts = 3;
+  const baseReconnectDelay = 2000;
 
   const connect = useCallback(() => {
     if (!accessToken || !isAuthenticated) {
@@ -48,6 +49,7 @@ export function useWebSocket() {
     ws.onopen = () => {
       setStatus('connected');
       reconnectAttempts.current = 0;
+      hasConnectedBefore.current = true;
 
       // Resubscribe to channels
       subscribedChannels.current.forEach((channel) => {
@@ -73,12 +75,22 @@ export function useWebSocket() {
       }
     };
 
-    ws.onclose = () => {
+    ws.onclose = (event) => {
       setStatus('disconnected');
       wsRef.current = null;
 
-      // Attempt reconnection
-      if (isAuthenticated && reconnectAttempts.current < maxReconnectAttempts) {
+      // Only attempt reconnection if:
+      // 1. We've successfully connected before (server is available)
+      // 2. It wasn't a clean close
+      // 3. We're still authenticated
+      // 4. We haven't exceeded max attempts
+      const shouldReconnect =
+        hasConnectedBefore.current &&
+        !event.wasClean &&
+        isAuthenticated &&
+        reconnectAttempts.current < maxReconnectAttempts;
+
+      if (shouldReconnect) {
         const delay = baseReconnectDelay * Math.pow(2, reconnectAttempts.current);
         reconnectAttempts.current += 1;
         setStatus('reconnecting');
@@ -89,8 +101,9 @@ export function useWebSocket() {
       }
     };
 
-    ws.onerror = (error) => {
-      console.error('WebSocket error:', error);
+    ws.onerror = () => {
+      // WebSocket errors are typically followed by onclose, so we just silently handle them
+      // The actual error details are not available in the browser for security reasons
     };
   }, [accessToken, isAuthenticated]);
 
