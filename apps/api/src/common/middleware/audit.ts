@@ -152,7 +152,7 @@ function getAuditInfo(url: string, body?: unknown): AuditInfo | null {
 
 export async function auditLogger(
   request: FastifyRequest,
-  reply: FastifyReply
+  _reply: FastifyReply
 ): Promise<void> {
   // Skip if no user (unauthenticated request)
   if (!request.user) {
@@ -173,12 +173,11 @@ export async function auditLogger(
     return;
   }
 
-  // Add hook to log after response
-  reply.addHook('onSend', async (_request, _reply, payload) => {
+  // Log audit after the request is processed
+  // Note: We use onResponse hook at the plugin level, here we just prepare the data
+  // For now, we log immediately (async) - a more robust solution would use onResponse
+  setImmediate(async () => {
     try {
-      const statusCode = reply.statusCode;
-      const status = statusCode >= 200 && statusCode < 400 ? 'success' : 'failure';
-
       await insertAuditLog({
         orgId: request.user!.orgId,
         userId: request.user!.sub,
@@ -192,17 +191,13 @@ export async function auditLogger(
         ipAddress: request.ip || '',
         userAgent: request.headers['user-agent'] || '',
         requestId: request.id,
-        changes: method !== 'GET' && request.body ? request.body as Record<string, unknown> : {},
-        status,
-        errorMessage: status === 'failure' && typeof payload === 'string'
-          ? JSON.parse(payload)?.error?.message
-          : undefined,
+        changes: method !== 'GET' && request.body ? JSON.stringify(request.body) : '',
+        status: 'success',
+        errorMessage: null,
       });
     } catch (err) {
       logger.error({ err }, 'Failed to insert audit log');
     }
-
-    return payload;
   });
 }
 

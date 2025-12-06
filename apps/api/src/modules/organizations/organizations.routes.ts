@@ -84,7 +84,10 @@ export const organizationRoutes: FastifyPluginAsync = async (fastify) => {
 
     const organization = await prisma.organization.update({
       where: { id: request.params.id },
-      data: body,
+      data: {
+        name: body.name,
+        settings: body.settings as any,
+      },
     });
 
     return { organization };
@@ -229,7 +232,7 @@ export const organizationRoutes: FastifyPluginAsync = async (fastify) => {
 
       const updatedMember = await prisma.organizationMember.update({
         where: { id: request.params.memberId },
-        data: { role },
+        data: { role: role as 'owner' | 'admin' | 'member' | 'viewer' },
         include: { user: true },
       });
 

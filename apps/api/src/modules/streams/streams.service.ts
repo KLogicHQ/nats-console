@@ -14,13 +14,129 @@ import {
 import { NotFoundError } from '@nats-console/shared';
 import type {
   StreamInfo,
-  StreamConfig,
   StreamMessage,
   CreateStreamInput,
   UpdateStreamInput,
   PurgeStreamInput,
   GetMessagesInput,
+  NatsStreamConfig,
 } from '@nats-console/shared';
+import { StreamInfo as NatsStreamInfo, RetentionPolicy, StorageType, DiscardPolicy } from 'nats';
+
+// Transform NATS StreamInfo to shared StreamInfo type
+function transformStreamInfo(natsInfo: NatsStreamInfo): StreamInfo {
+  const config = natsInfo.config;
+
+  // Map retention policy
+  let retention: NatsStreamConfig['retention'] = 'limits';
+  if (config.retention === RetentionPolicy.Interest) {
+    retention = 'interest';
+  } else if (config.retention === RetentionPolicy.Workqueue) {
+    retention = 'workqueue';
+  }
+
+  // Map storage type
+  const storage: NatsStreamConfig['storage'] = config.storage === StorageType.Memory ? 'memory' : 'file';
+
+  // Map discard policy
+  const discard: NatsStreamConfig['discard'] = config.discard === DiscardPolicy.New ? 'new' : 'old';
+
+  return {
+    config: {
+      name: config.name,
+      subjects: config.subjects || [],
+      retention,
+      maxConsumers: config.max_consumers ?? -1,
+      maxMsgs: config.max_msgs ?? -1,
+      maxBytes: config.max_bytes ?? -1,
+      maxAge: config.max_age ?? 0,
+      maxMsgSize: config.max_msg_size ?? -1,
+      storage,
+      replicas: config.num_replicas ?? 1,
+      noAck: config.no_ack ?? false,
+      discard,
+      duplicateWindow: config.duplicate_window ?? 0,
+      placement: config.placement ? {
+        cluster: config.placement.cluster,
+        tags: config.placement.tags,
+      } : undefined,
+      mirror: config.mirror ? {
+        name: config.mirror.name,
+        optStartSeq: config.mirror.opt_start_seq,
+        optStartTime: config.mirror.opt_start_time,
+        filterSubject: (config.mirror as any).filter_subject,
+      } : undefined,
+      sources: config.sources?.map(s => ({
+        name: s.name,
+        optStartSeq: s.opt_start_seq,
+        optStartTime: s.opt_start_time,
+        filterSubject: (s as any).filter_subject,
+      })),
+      sealed: config.sealed,
+      denyDelete: config.deny_delete,
+      denyPurge: config.deny_purge,
+      allowRollup: config.allow_rollup_hdrs,
+    },
+    created: new Date(natsInfo.created),
+    state: {
+      messages: natsInfo.state.messages,
+      bytes: natsInfo.state.bytes,
+      firstSeq: natsInfo.state.first_seq,
+      firstTs: new Date(natsInfo.state.first_ts),
+      lastSeq: natsInfo.state.last_seq,
+      lastTs: new Date(natsInfo.state.last_ts),
+      numSubjects: natsInfo.state.num_subjects ?? 0,
+      subjects: natsInfo.state.subjects,
+      numDeleted: natsInfo.state.num_deleted ?? 0,
+      deleted: natsInfo.state.deleted,
+      consumerCount: natsInfo.state.consumer_count,
+    },
+    cluster: natsInfo.cluster ? {
+      name: natsInfo.cluster.name || '',
+      leader: natsInfo.cluster.leader || '',
+      replicas: natsInfo.cluster.replicas?.map(r => ({
+        name: r.name,
+        current: r.current,
+        offline: r.offline || false,
+        active: r.active,
+        lag: r.lag || 0,
+      })),
+    } : undefined,
+    mirror: natsInfo.mirror ? {
+      name: natsInfo.mirror.name,
+      lag: natsInfo.mirror.lag,
+      active: natsInfo.mirror.active,
+      filterSubject: (natsInfo.mirror as any).filter_subject,
+      error: natsInfo.mirror.error?.description,
+    } : undefined,
+    sources: natsInfo.sources?.map(s => ({
+      name: s.name,
+      lag: s.lag,
+      active: s.active,
+      filterSubject: (s as any).filter_subject,
+      error: s.error?.description,
+    })),
+  };
+}
+
+// Map string retention to NATS enum
+function mapRetention(retention?: string): RetentionPolicy {
+  if (retention === 'interest') return RetentionPolicy.Interest;
+  if (retention === 'workqueue') return RetentionPolicy.Workqueue;
+  return RetentionPolicy.Limits;
+}
+
+// Map string storage to NATS enum
+function mapStorage(storage?: string): StorageType {
+  if (storage === 'memory') return StorageType.Memory;
+  return StorageType.File;
+}
+
+// Map string discard to NATS enum
+function mapDiscard(discard?: string): DiscardPolicy {
+  if (discard === 'new') return DiscardPolicy.New;
+  return DiscardPolicy.Old;
+}
 
 // ==================== Stream Operations ====================
 
@@ -37,7 +153,8 @@ export async function listStreams(
     throw new NotFoundError('Cluster', clusterId);
   }
 
-  return natsListStreams(clusterId);
+  const natsStreams = await natsListStreams(clusterId);
+  return natsStreams.map(transformStreamInfo);
 }
 
 export async function getStream(
@@ -55,7 +172,8 @@ export async function getStream(
   }
 
   try {
-    return await natsGetStreamInfo(clusterId, streamName);
+    const natsStream = await natsGetStreamInfo(clusterId, streamName);
+    return transformStreamInfo(natsStream);
   } catch {
     throw new NotFoundError('Stream', streamName);
   }
@@ -77,21 +195,21 @@ export async function createStream(
   }
 
   // Create stream in NATS
-  const streamInfo = await natsCreateStream(clusterId, {
+  const natsStreamInfo = await natsCreateStream(clusterId, {
     name: input.name,
     subjects: input.subjects,
-    retention: input.retention,
+    retention: mapRetention(input.retention),
     max_consumers: input.maxConsumers,
     max_msgs: input.maxMsgs,
     max_bytes: input.maxBytes,
     max_age: input.maxAge,
     max_msg_size: input.maxMsgSize,
-    storage: input.storage,
+    storage: mapStorage(input.storage),
     num_replicas: input.replicas,
     no_ack: input.noAck,
-    discard: input.discard,
+    discard: mapDiscard(input.discard),
     duplicate_window: input.duplicateWindow,
-    placement: input.placement,
+    placement: input.placement ? { cluster: input.placement.cluster || '', tags: input.placement.tags } : undefined,
     mirror: input.mirror,
     sources: input.sources,
     sealed: input.sealed,
@@ -99,13 +217,14 @@ export async function createStream(
     deny_purge: input.denyPurge,
     allow_rollup_hdrs: input.allowRollup,
   });
+  const streamInfo = transformStreamInfo(natsStreamInfo);
 
   // Store config in database for tracking
   await prisma.streamConfig.create({
     data: {
       clusterId,
       streamName: input.name,
-      configSnapshot: streamInfo.config as any,
+      configSnapshot: natsStreamInfo.config as any,
       createdBy: userId,
       isManaged: true,
       tags: input.tags || [],
@@ -134,25 +253,26 @@ export async function updateStream(
   const currentStream = await natsGetStreamInfo(clusterId, streamName);
 
   // Update stream in NATS
-  const streamInfo = await natsUpdateStream(clusterId, {
+  const natsStreamInfo = await natsUpdateStream(clusterId, {
     name: streamName,
     subjects: input.subjects ?? currentStream.config.subjects,
-    retention: input.retention ?? currentStream.config.retention,
+    retention: input.retention ? mapRetention(input.retention) : currentStream.config.retention,
     max_consumers: input.maxConsumers ?? currentStream.config.max_consumers,
     max_msgs: input.maxMsgs ?? currentStream.config.max_msgs,
     max_bytes: input.maxBytes ?? currentStream.config.max_bytes,
     max_age: input.maxAge ?? currentStream.config.max_age,
     max_msg_size: input.maxMsgSize ?? currentStream.config.max_msg_size,
-    storage: input.storage ?? currentStream.config.storage,
+    storage: input.storage ? mapStorage(input.storage) : currentStream.config.storage,
     num_replicas: input.replicas ?? currentStream.config.num_replicas,
-    discard: input.discard ?? currentStream.config.discard,
+    discard: input.discard ? mapDiscard(input.discard) : currentStream.config.discard,
   });
+  const streamInfo = transformStreamInfo(natsStreamInfo);
 
   // Update config in database
   await prisma.streamConfig.updateMany({
     where: { clusterId, streamName },
     data: {
-      configSnapshot: streamInfo.config as any,
+      configSnapshot: natsStreamInfo.config as any,
       tags: input.tags,
     },
   });
@@ -224,14 +344,14 @@ export async function getMessages(
     subject: input.subject,
   });
 
-  return messages.map((msg) => ({
+  return messages.map((msg): StreamMessage => ({
     subject: msg.subject,
     sequence: msg.seq,
     time: msg.time,
     data: new TextDecoder().decode(msg.data),
     headers: msg.header
       ? Object.fromEntries(
-          Array.from(msg.header.keys()).map((k) => [k, msg.header!.get(k)])
+          Array.from(msg.header.keys()).map((k) => [k, [msg.header!.get(k) || '']])
         )
       : undefined,
   }));
@@ -265,7 +385,7 @@ export async function getMessage(
     data: new TextDecoder().decode(msg.data),
     headers: msg.header
       ? Object.fromEntries(
-          Array.from(msg.header.keys()).map((k) => [k, msg.header!.get(k)])
+          Array.from(msg.header.keys()).map((k) => [k, [msg.header!.get(k) || '']])
         )
       : undefined,
   };

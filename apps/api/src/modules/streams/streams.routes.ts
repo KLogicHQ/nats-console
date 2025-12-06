@@ -242,12 +242,18 @@ export const streamRoutes: FastifyPluginAsync = async (fastify) => {
 
     for (const msg of filteredMessages) {
       try {
+        // Flatten headers from string[] to string
+        const flatHeaders = msg.headers
+          ? Object.fromEntries(
+              Object.entries(msg.headers).map(([k, v]) => [k, Array.isArray(v) ? v[0] || '' : v])
+            )
+          : undefined;
         await streamService.publishMessage(
           request.user!.orgId,
           request.params.cid,
           targetSubject,
           String(msg.data),
-          msg.headers
+          flatHeaders
         );
         replayedCount++;
       } catch (err) {

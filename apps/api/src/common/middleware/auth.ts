@@ -63,9 +63,9 @@ async function validateApiKey(
         }
 
         // Build JWT-like payload for API key
-        const permissions =
-          candidate.permissions.length > 0
-            ? candidate.permissions
+        const rawPermissions = candidate.permissions;
+        const permissions: string[] = Array.isArray(rawPermissions) && rawPermissions.length > 0
+            ? rawPermissions.filter((p): p is string => typeof p === 'string')
             : getPermissionsForRole(membership.role);
 
         return {
@@ -75,6 +75,8 @@ async function validateApiKey(
             orgId: membership.orgId,
             role: membership.role as 'owner' | 'admin' | 'member' | 'viewer',
             permissions,
+            iat: Math.floor(Date.now() / 1000),
+            exp: Math.floor(Date.now() / 1000) + 86400, // 24 hours
           },
           keyId: candidate.id,
         };

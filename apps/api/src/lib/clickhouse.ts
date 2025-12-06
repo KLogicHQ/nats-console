@@ -237,7 +237,7 @@ export async function insertAuditLog(log: Omit<AuditLog, 'id'>): Promise<void> {
         ip_address: log.ipAddress,
         user_agent: log.userAgent,
         request_id: log.requestId,
-        changes: log.changes,
+        changes: typeof log.changes === 'string' ? log.changes : JSON.stringify(log.changes),
         status: log.status,
         error_message: log.errorMessage,
       },
@@ -310,7 +310,7 @@ export async function queryAuditLogs(
   });
 
   const rows = await result.json() as Record<string, unknown>[];
-  const logs = rows.map((row) => ({
+  const logs: AuditLog[] = rows.map((row) => ({
     id: row.id as string,
     orgId: row.org_id as string,
     userId: row.user_id as string,
@@ -324,9 +324,9 @@ export async function queryAuditLogs(
     ipAddress: row.ip_address as string,
     userAgent: row.user_agent as string,
     requestId: row.request_id as string,
-    changes: row.changes as Record<string, unknown>,
-    status: row.status as string,
-    errorMessage: row.error_message as string | undefined,
+    changes: typeof row.changes === 'string' ? row.changes : JSON.stringify(row.changes || {}),
+    status: row.status as 'success' | 'failure' | 'denied',
+    errorMessage: (row.error_message as string) || null,
   }));
 
   return { logs, total };

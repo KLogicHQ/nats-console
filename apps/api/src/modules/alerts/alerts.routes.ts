@@ -192,7 +192,7 @@ export const alertRoutes: FastifyPluginAsync = async (fastify) => {
         orgId: request.user!.orgId,
         name: body.name,
         type: body.type,
-        config: body.config,
+        config: body.config as any,
         isEnabled: body.isEnabled,
       },
     });
@@ -238,7 +238,12 @@ export const alertRoutes: FastifyPluginAsync = async (fastify) => {
 
     const updated = await prisma.notificationChannel.update({
       where: { id: request.params.id },
-      data: body,
+      data: {
+        type: body.type,
+        name: body.name,
+        config: body.config as any,
+        isEnabled: body.isEnabled,
+      },
     });
 
     return { channel: updated };

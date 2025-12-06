@@ -52,11 +52,12 @@ export const authRoutes: FastifyPluginAsync = async (fastify) => {
       };
     }
 
-    // Normal login - return user info
+    // Normal login - return user info (cast result to LoginResult after MFA check)
+    const loginResult = result as import('./auth.service').LoginResult;
     return {
-      user: result.user,
-      tokens: result.tokens,
-      orgId: result.orgId,
+      user: loginResult.user,
+      tokens: loginResult.tokens,
+      orgId: loginResult.orgId,
     };
   });
 

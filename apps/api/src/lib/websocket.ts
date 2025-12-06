@@ -40,13 +40,13 @@ export function setupWebSocket(fastify: FastifyInstance): WebSocketServer {
         const clientId = crypto.randomUUID();
         const client: Client = {
           ws,
-          userId: payload.userId,
+          userId: payload.sub,
           orgId: payload.orgId,
           subscriptions: new Set(),
         };
 
         clients.set(clientId, client);
-        logger.info({ clientId, userId: payload.userId }, 'WebSocket client connected');
+        logger.info({ clientId, userId: payload.sub }, 'WebSocket client connected');
 
         ws.on('message', (data) => {
           try {

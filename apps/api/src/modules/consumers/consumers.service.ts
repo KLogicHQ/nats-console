@@ -10,7 +10,69 @@ import {
   listStreams as natsListStreams,
 } from '../../lib/nats';
 import { NotFoundError } from '@nats-console/shared';
-import type { ConsumerInfo, CreateConsumerInput, UpdateConsumerInput } from '@nats-console/shared';
+import type { ConsumerInfo, CreateConsumerInput, UpdateConsumerInput, NatsConsumerConfig } from '@nats-console/shared';
+import { ConsumerInfo as NatsConsumerInfo } from 'nats';
+
+// Transform NATS ConsumerInfo to shared ConsumerInfo type
+function transformConsumerInfo(natsInfo: NatsConsumerInfo): ConsumerInfo {
+  const config = natsInfo.config;
+  return {
+    name: natsInfo.name,
+    streamName: natsInfo.stream_name,
+    created: new Date(natsInfo.created),
+    config: {
+      name: config.name || natsInfo.name,
+      durableName: config.durable_name,
+      description: config.description,
+      deliverPolicy: (config.deliver_policy || 'all') as NatsConsumerConfig['deliverPolicy'],
+      optStartSeq: config.opt_start_seq,
+      optStartTime: config.opt_start_time,
+      ackPolicy: (config.ack_policy || 'explicit') as NatsConsumerConfig['ackPolicy'],
+      ackWait: config.ack_wait || 0,
+      maxDeliver: config.max_deliver || -1,
+      backoff: config.backoff,
+      filterSubject: config.filter_subject,
+      filterSubjects: config.filter_subjects,
+      replayPolicy: (config.replay_policy || 'instant') as NatsConsumerConfig['replayPolicy'],
+      rateLimit: config.rate_limit_bps,
+      sampleFreq: config.sample_freq,
+      maxWaiting: config.max_waiting || 512,
+      maxAckPending: config.max_ack_pending || 1000,
+      headersOnly: config.headers_only,
+      maxBatch: config.max_batch,
+      maxExpires: config.max_expires,
+      inactiveThreshold: config.inactive_threshold,
+      numReplicas: config.num_replicas || 0,
+      memStorage: config.mem_storage,
+    },
+    delivered: {
+      consumerSeq: natsInfo.delivered.consumer_seq,
+      streamSeq: natsInfo.delivered.stream_seq,
+      lastActive: natsInfo.delivered.last_active ? new Date(natsInfo.delivered.last_active) : undefined,
+    },
+    ackFloor: {
+      consumerSeq: natsInfo.ack_floor.consumer_seq,
+      streamSeq: natsInfo.ack_floor.stream_seq,
+      lastActive: natsInfo.ack_floor.last_active ? new Date(natsInfo.ack_floor.last_active) : undefined,
+    },
+    numAckPending: natsInfo.num_ack_pending,
+    numRedelivered: natsInfo.num_redelivered,
+    numWaiting: natsInfo.num_waiting,
+    numPending: natsInfo.num_pending,
+    cluster: natsInfo.cluster ? {
+      name: natsInfo.cluster.name || '',
+      leader: natsInfo.cluster.leader || '',
+      replicas: natsInfo.cluster.replicas?.map(r => ({
+        name: r.name,
+        current: r.current,
+        offline: r.offline || false,
+        active: r.active,
+        lag: r.lag || 0,
+      })),
+    } : undefined,
+    pushBound: natsInfo.push_bound,
+  };
+}
 
 // Extended consumer info with stream name
 export interface ConsumerInfoWithStream extends ConsumerInfo {
@@ -33,7 +95,8 @@ export async function listConsumers(
     throw new NotFoundError('Cluster', clusterId);
   }
 
-  return natsListConsumers(clusterId, streamName);
+  const natsConsumers = await natsListConsumers(clusterId, streamName);
+  return natsConsumers.map(transformConsumerInfo);
 }
 
 export async function listAllConsumers(
@@ -56,8 +119,9 @@ export async function listAllConsumers(
   const allConsumers: ConsumerInfoWithStream[] = [];
   for (const stream of streams) {
     try {
-      const consumers = await natsListConsumers(clusterId, stream.config.name);
-      for (const consumer of consumers) {
+      const natsConsumers = await natsListConsumers(clusterId, stream.config.name);
+      for (const natsConsumer of natsConsumers) {
+        const consumer = transformConsumerInfo(natsConsumer);
         allConsumers.push({
           ...consumer,
           streamName: stream.config.name,
@@ -87,7 +151,8 @@ export async function getConsumer(
   }
 
   try {
-    return await natsGetConsumerInfo(clusterId, streamName, consumerName);
+    const natsConsumer = await natsGetConsumerInfo(clusterId, streamName, consumerName);
+    return transformConsumerInfo(natsConsumer);
   } catch {
     throw new NotFoundError('Consumer', consumerName);
   }
@@ -144,7 +209,8 @@ export async function createConsumer(
   if (input.memStorage !== undefined) consumerConfig.mem_storage = input.memStorage;
 
   // Create consumer in NATS
-  const consumerInfo = await natsCreateConsumer(clusterId, streamName, consumerConfig as any);
+  const natsConsumerInfo = await natsCreateConsumer(clusterId, streamName, consumerConfig as any);
+  const consumerInfo = transformConsumerInfo(natsConsumerInfo);
 
   // Store config in database for tracking
   if (streamConfig) {
@@ -152,7 +218,7 @@ export async function createConsumer(
       data: {
         streamConfigId: streamConfig.id,
         consumerName: input.name,
-        configSnapshot: consumerInfo.config as any,
+        configSnapshot: natsConsumerInfo.config as any,
         createdBy: userId,
         isManaged: true,
         tags: input.tags || [],
@@ -183,7 +249,7 @@ export async function updateConsumer(
   const currentConsumer = await natsGetConsumerInfo(clusterId, streamName, consumerName);
 
   // Update consumer in NATS
-  const consumerInfo = await natsUpdateConsumer(clusterId, streamName, {
+  const natsConsumerInfo = await natsUpdateConsumer(clusterId, streamName, {
     name: consumerName,
     durable_name: consumerName,
     description: input.description ?? currentConsumer.config.description,
@@ -192,6 +258,7 @@ export async function updateConsumer(
     max_ack_pending: input.maxAckPending ?? currentConsumer.config.max_ack_pending,
     max_waiting: input.maxWaiting ?? currentConsumer.config.max_waiting,
   });
+  const consumerInfo = transformConsumerInfo(natsConsumerInfo);
 
   // Update config in database
   const streamConfig = await prisma.streamConfig.findFirst({
@@ -202,7 +269,7 @@ export async function updateConsumer(
     await prisma.consumerConfig.updateMany({
       where: { streamConfigId: streamConfig.id, consumerName },
       data: {
-        configSnapshot: consumerInfo.config as any,
+        configSnapshot: natsConsumerInfo.config as any,
         tags: input.tags,
       },
     });
@@ -290,7 +357,8 @@ export async function pauseConsumer(
     throw new NotFoundError('Cluster', clusterId);
   }
 
-  return natsPauseConsumer(clusterId, streamName, consumerName, pauseUntil);
+  const natsConsumer = await natsPauseConsumer(clusterId, streamName, consumerName, pauseUntil);
+  return transformConsumerInfo(natsConsumer);
 }
 
 export async function resumeConsumer(
@@ -308,5 +376,6 @@ export async function resumeConsumer(
     throw new NotFoundError('Cluster', clusterId);
   }
 
-  return natsResumeConsumer(clusterId, streamName, consumerName);
+  const natsConsumer = await natsResumeConsumer(clusterId, streamName, consumerName);
+  return transformConsumerInfo(natsConsumer);
 }

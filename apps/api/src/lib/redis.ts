@@ -108,7 +108,16 @@ export interface ClusterStatusCache {
 }
 
 export async function setClusterStatus(clusterId: string, data: ClusterStatusCache): Promise<void> {
-  await redis.hset(`${CLUSTER_STATUS_PREFIX}${clusterId}:status`, data as Record<string, string>);
+  const stringData: Record<string, string> = {
+    status: data.status,
+    serverCount: String(data.serverCount),
+    version: data.version,
+    lastCheck: data.lastCheck,
+  };
+  if (data.serverId) stringData.serverId = data.serverId;
+  if (data.serverName) stringData.serverName = data.serverName;
+  if (data.rtt) stringData.rtt = data.rtt;
+  await redis.hset(`${CLUSTER_STATUS_PREFIX}${clusterId}:status`, stringData);
   await redis.expire(`${CLUSTER_STATUS_PREFIX}${clusterId}:status`, CLUSTER_STATUS_TTL);
 }
 

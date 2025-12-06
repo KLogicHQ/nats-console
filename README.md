@@ -165,24 +165,24 @@ Pre-built container images are available on GitHub Container Registry (GHCR):
 
 | Image | Description |
 |-------|-------------|
-| `ghcr.io/klogic/nats-console` | All-in-one image with all services |
-| `ghcr.io/klogic/nats-console-api` | API service only |
-| `ghcr.io/klogic/nats-console-web` | Web frontend only |
-| `ghcr.io/klogic/nats-console-workers` | Background workers only |
+| `ghcr.io/klogichq/nats-console` | All-in-one image with all services |
+| `ghcr.io/klogichq/nats-console-api` | API service only |
+| `ghcr.io/klogichq/nats-console-web` | Web frontend only |
+| `ghcr.io/klogichq/nats-console-workers` | Background workers only |
 
 ### Pull from GHCR
 
 ```bash
 # Pull latest all-in-one image
-docker pull ghcr.io/klogic/nats-console:latest
+docker pull ghcr.io/klogichq/nats-console:latest
 
 # Pull specific version
-docker pull ghcr.io/klogic/nats-console:1.0.0
+docker pull ghcr.io/klogichq/nats-console:1.0.0
 
 # Pull individual services
-docker pull ghcr.io/klogic/nats-console-api:latest
-docker pull ghcr.io/klogic/nats-console-web:latest
-docker pull ghcr.io/klogic/nats-console-workers:latest
+docker pull ghcr.io/klogichq/nats-console-api:latest
+docker pull ghcr.io/klogichq/nats-console-web:latest
+docker pull ghcr.io/klogichq/nats-console-workers:latest
 ```
 
 ---
@@ -202,7 +202,7 @@ docker run -d \
   -p 4222:4222 \
   -p 8222:8222 \
   -e JWT_SECRET="your-secret-key-change-in-production" \
-  ghcr.io/klogic/nats-console:latest
+  ghcr.io/klogichq/nats-console:latest
 ```
 
 ### Build Locally (Optional)
@@ -244,7 +244,7 @@ docker run -d \
   -v nats-console-clickhouse:/var/lib/clickhouse \
   -v nats-console-nats:/var/lib/nats \
   -e JWT_SECRET="your-secret-key-change-in-production" \
-  ghcr.io/klogic/nats-console:latest
+  ghcr.io/klogichq/nats-console:latest
 ```
 
 ---

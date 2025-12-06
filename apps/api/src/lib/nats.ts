@@ -10,6 +10,8 @@ import {
   PubAck,
   JsMsg,
   StoredMsg,
+  RetentionPolicy,
+  StorageType,
 } from 'nats';
 import { config } from '../config/index';
 import type { EncryptedCredentials, TlsConfig } from '@nats-console/shared';
@@ -108,10 +110,10 @@ async function setupInternalStreams(): Promise<void> {
       await internalJsm.streams.add({
         name: stream.name,
         subjects: stream.subjects,
-        retention: stream.retention,
+        retention: stream.retention === 'workqueue' ? RetentionPolicy.Workqueue : RetentionPolicy.Limits,
         max_age: stream.maxAge,
         max_msgs: stream.maxMsgs,
-        storage: 'file',
+        storage: StorageType.File,
         num_replicas: 1,
       });
       console.log(`Created internal stream: ${stream.name}`);
@@ -253,7 +255,18 @@ export async function purgeStream(
   options?: { filter?: string; seq?: number; keep?: number }
 ): Promise<{ purged: number }> {
   const jsm = getClusterJetStreamManager(clusterId);
-  const result = await jsm.streams.purge(streamName, options);
+  // Build purge options based on what's provided
+  let purgeOpts: { filter?: string; seq?: number; keep?: number } | undefined;
+  if (options) {
+    if (options.keep !== undefined) {
+      purgeOpts = { filter: options.filter, keep: options.keep };
+    } else if (options.seq !== undefined) {
+      purgeOpts = { filter: options.filter, seq: options.seq };
+    } else if (options.filter) {
+      purgeOpts = { filter: options.filter };
+    }
+  }
+  const result = await jsm.streams.purge(streamName, purgeOpts as any);
   return { purged: result.purged };
 }
 
@@ -317,7 +330,7 @@ export async function pauseConsumer(
   return jsm.consumers.update(streamName, consumerName, {
     ...consumer.config,
     pause_until: until,
-  });
+  } as any);
 }
 
 export async function resumeConsumer(
@@ -333,7 +346,7 @@ export async function resumeConsumer(
   return jsm.consumers.update(streamName, consumerName, {
     ...consumer.config,
     pause_until: undefined,
-  });
+  } as any);
 }
 
 // ==================== Message Operations ====================
@@ -385,10 +398,12 @@ export async function getMessages(
 
   while (count < limit) {
     try {
-      const msg = await jsm.streams.getMessage(streamName, {
-        seq,
-        next_by_subj: subject,
-      });
+      // Build request options - next_by_subj is a valid option but may not be in type definitions
+      const requestOpts: { seq: number; next_by_subj?: string } = { seq };
+      if (subject) {
+        requestOpts.next_by_subj = subject;
+      }
+      const msg = await jsm.streams.getMessage(streamName, requestOpts as any);
       if (msg) {
         messages.push(msg);
         count++;

@@ -93,7 +93,7 @@ export const settingsRoutes: FastifyPluginAsync = async (fastify) => {
     // Save to database
     await prisma.user.update({
       where: { id: request.user!.sub },
-      data: { settings: newSettings },
+      data: { settings: newSettings as any },
     });
 
     // Return merged settings with defaults

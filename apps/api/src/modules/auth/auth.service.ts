@@ -129,7 +129,7 @@ export async function register(data: {
   firstName: string;
   lastName: string;
   organizationName?: string;
-}): Promise<{ user: User; tokens: AuthTokens }> {
+}): Promise<{ user: User & { role: string }; tokens: AuthTokens; orgId: string }> {
   const { email, password, firstName, lastName, organizationName } = data;
 
   // Check if user exists
@@ -221,7 +221,7 @@ export async function register(data: {
   const tokens = await generateTokens(result.user.id, result.user.email, result.organization.id, 'owner');
 
   return {
-    user: { ...mapUser(result.user), role: 'owner' },
+    user: { ...mapUser(result.user), role: 'owner' as const },
     tokens,
     orgId: result.organization.id,
   };
@@ -230,7 +230,7 @@ export async function register(data: {
 // ==================== User Login ====================
 
 export interface LoginResult {
-  user: User;
+  user: User & { role: string };
   tokens: AuthTokens;
   orgId: string;
   mfaRequired?: false;

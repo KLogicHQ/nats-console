@@ -200,7 +200,7 @@ app.register(
 );
 
 // Global error handler
-app.setErrorHandler((error, request, reply) => {
+app.setErrorHandler((error: Error & { statusCode?: number; code?: string }, request, reply) => {
   app.log.error(error);
 
   const statusCode = error.statusCode || 500;
@@ -260,7 +260,7 @@ const shutdown = async (signal: string) => {
     app.log.info('Shutdown complete');
     process.exit(0);
   } catch (err) {
-    app.log.error('Error during shutdown:', err);
+    app.log.error({ err }, 'Error during shutdown');
     clearTimeout(forceShutdownTimer);
     process.exit(1);
   }
@@ -268,12 +268,12 @@ const shutdown = async (signal: string) => {
 
 process.on('SIGTERM', () => shutdown('SIGTERM'));
 process.on('SIGINT', () => shutdown('SIGINT'));
-process.on('uncaughtException', (err) => {
-  app.log.error('Uncaught exception:', err);
+process.on('uncaughtException', (err: Error) => {
+  app.log.error({ err }, 'Uncaught exception');
   shutdown('uncaughtException');
 });
-process.on('unhandledRejection', (reason) => {
-  app.log.error('Unhandled rejection:', reason);
+process.on('unhandledRejection', (reason: unknown) => {
+  app.log.error({ reason }, 'Unhandled rejection');
   shutdown('unhandledRejection');
 });
 

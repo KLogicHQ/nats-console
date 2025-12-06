@@ -120,10 +120,10 @@ export const dlqRoutes: FastifyPluginAsync = async (fastify) => {
 
     // Enhance messages with DLQ-specific info
     const enhancedMessages = messages.map((msg) => {
-      // Try to extract original subject from headers
-      const originalSubject = msg.headers?.['Nats-Original-Subject'] || msg.headers?.['X-Original-Subject'];
-      const deliveryCount = msg.headers?.['Nats-Num-Delivered'] || msg.headers?.['X-Delivery-Count'];
-      const failureReason = msg.headers?.['Nats-Failure-Reason'] || msg.headers?.['X-Failure-Reason'];
+      // Try to extract original subject from headers (headers are string[])
+      const originalSubject = msg.headers?.['Nats-Original-Subject']?.[0] || msg.headers?.['X-Original-Subject']?.[0];
+      const deliveryCount = msg.headers?.['Nats-Num-Delivered']?.[0] || msg.headers?.['X-Delivery-Count']?.[0];
+      const failureReason = msg.headers?.['Nats-Failure-Reason']?.[0] || msg.headers?.['X-Failure-Reason']?.[0];
 
       return {
         ...msg,
@@ -152,20 +152,22 @@ export const dlqRoutes: FastifyPluginAsync = async (fastify) => {
       throw new NotFoundError('Message', seq);
     }
 
-    // Determine target subject
+    // Determine target subject (headers values are string[])
     const target =
       targetSubject ||
-      (message.headers?.['Nats-Original-Subject'] as string) ||
-      (message.headers?.['X-Original-Subject'] as string);
+      message.headers?.['Nats-Original-Subject']?.[0] ||
+      message.headers?.['X-Original-Subject']?.[0];
 
     if (!target) {
       throw new Error('Target subject not specified and original subject not found in headers');
     }
 
-    // Prepare headers for replay
+    // Prepare headers for replay - flatten string[] values to string
     let replayHeaders: Record<string, string> | undefined;
     if (preserveHeaders && message.headers) {
-      replayHeaders = { ...message.headers };
+      replayHeaders = Object.fromEntries(
+        Object.entries(message.headers).map(([k, v]) => [k, Array.isArray(v) ? v[0] || '' : v])
+      );
       // Add replay metadata
       replayHeaders['X-Replayed-From'] = streamName;
       replayHeaders['X-Replayed-Seq'] = String(message.sequence);
@@ -220,20 +222,22 @@ export const dlqRoutes: FastifyPluginAsync = async (fastify) => {
           continue;
         }
 
-        // Determine target subject
+        // Determine target subject (headers values are string[])
         const target =
           body.targetSubject ||
-          (message.headers?.['Nats-Original-Subject'] as string) ||
-          (message.headers?.['X-Original-Subject'] as string);
+          message.headers?.['Nats-Original-Subject']?.[0] ||
+          message.headers?.['X-Original-Subject']?.[0];
 
         if (!target) {
           results.push({ sequence: seq, success: false, error: 'No target subject' });
           continue;
         }
 
-        // Prepare headers
+        // Prepare headers - flatten string[] values to string
         const replayHeaders: Record<string, string> = body.preserveHeaders && message.headers
-          ? { ...message.headers }
+          ? Object.fromEntries(
+              Object.entries(message.headers).map(([k, v]) => [k, Array.isArray(v) ? v[0] || '' : v])
+            )
           : {};
         replayHeaders['X-Replayed-From'] = streamName;
         replayHeaders['X-Replayed-Seq'] = String(seq);
