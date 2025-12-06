@@ -2,6 +2,7 @@ import type { FastifyPluginAsync } from 'fastify';
 import { z } from 'zod';
 import * as crypto from 'crypto';
 import * as argon2 from 'argon2';
+import * as archiver from 'archiver';
 import { prisma } from '../../lib/prisma';
 import { authenticate, requirePermission } from '../../common/middleware/auth';
 import { NotFoundError, ForbiddenError } from '../../../../shared/src/index';
@@ -396,6 +397,7 @@ export const settingsRoutes: FastifyPluginAsync = async (fastify) => {
   // GET /settings/gdpr/export - Export user data (GDPR right to data portability)
   fastify.get('/gdpr/export', async (request, reply) => {
     const userId = request.user!.sub;
+    const exportDate = new Date().toISOString().split('T')[0];
 
     // Gather all user data
     const user = await prisma.user.findUnique({
@@ -411,6 +413,7 @@ export const settingsRoutes: FastifyPluginAsync = async (fastify) => {
         lastLoginAt: true,
         createdAt: true,
         updatedAt: true,
+        settings: true,
       },
     });
 
@@ -418,7 +421,7 @@ export const settingsRoutes: FastifyPluginAsync = async (fastify) => {
       where: { userId },
       include: {
         organization: {
-          select: { id: true, name: true, slug: true },
+          select: { id: true, name: true, slug: true, plan: true, createdAt: true },
         },
       },
     });
@@ -427,7 +430,7 @@ export const settingsRoutes: FastifyPluginAsync = async (fastify) => {
       where: { userId },
       include: {
         team: {
-          select: { id: true, name: true },
+          select: { id: true, name: true, description: true, createdAt: true },
         },
       },
     });
@@ -438,6 +441,9 @@ export const settingsRoutes: FastifyPluginAsync = async (fastify) => {
         id: true,
         name: true,
         description: true,
+        layout: true,
+        widgets: true,
+        isShared: true,
         createdAt: true,
         updatedAt: true,
       },
@@ -448,8 +454,11 @@ export const settingsRoutes: FastifyPluginAsync = async (fastify) => {
       select: {
         id: true,
         name: true,
+        description: true,
         query: true,
+        isShared: true,
         createdAt: true,
+        updatedAt: true,
       },
     });
 
@@ -459,35 +468,145 @@ export const settingsRoutes: FastifyPluginAsync = async (fastify) => {
         id: true,
         name: true,
         prefix: true,
+        permissions: true,
         lastUsedAt: true,
+        expiresAt: true,
         createdAt: true,
       },
     });
 
-    const exportData = {
-      exportedAt: new Date(),
-      user,
-      organizationMemberships: organizationMemberships.map((m) => ({
-        organization: m.organization,
-        role: m.role,
-        joinedAt: m.joinedAt,
-      })),
-      teamMemberships: teamMemberships.map((m) => ({
-        team: m.team,
-        role: m.role,
-        addedAt: m.addedAt,
-      })),
-      dashboards,
-      savedQueries,
-      apiKeys,
-    };
+    const sessions = await prisma.session.findMany({
+      where: { userId },
+      select: {
+        id: true,
+        userAgent: true,
+        ipAddress: true,
+        createdAt: true,
+        expiresAt: true,
+      },
+    });
 
-    reply.header('Content-Type', 'application/json');
+    const alertRules = await prisma.alertRule.findMany({
+      where: { orgId: request.user!.orgId },
+      select: {
+        id: true,
+        name: true,
+        condition: true,
+        threshold: true,
+        severity: true,
+        isEnabled: true,
+        cooldownMins: true,
+        createdAt: true,
+        updatedAt: true,
+      },
+    });
+
+    // Create ZIP archive
+    const archive = archiver.default('zip', { zlib: { level: 9 } });
+
+    // Set response headers for ZIP download
+    reply.header('Content-Type', 'application/zip');
     reply.header(
       'Content-Disposition',
-      `attachment; filename="user-data-export-${new Date().toISOString().split('T')[0]}.json"`
+      `attachment; filename="user-data-export-${exportDate}.zip"`
     );
-    return exportData;
+
+    // Prepare files to add to the archive
+    const exportMetadata = {
+      exportedAt: new Date().toISOString(),
+      exportVersion: '1.0',
+      userId: userId,
+      userEmail: user?.email,
+      description: 'Complete export of user data from NATS JetStream Console',
+    };
+
+    // Add files to the archive
+    archive.append(JSON.stringify(exportMetadata, null, 2), { name: 'export-info.json' });
+
+    archive.append(JSON.stringify(user, null, 2), { name: 'profile.json' });
+
+    archive.append(
+      JSON.stringify(
+        organizationMemberships.map((m) => ({
+          organization: m.organization,
+          role: m.role,
+          joinedAt: m.joinedAt,
+        })),
+        null,
+        2
+      ),
+      { name: 'organizations.json' }
+    );
+
+    archive.append(
+      JSON.stringify(
+        teamMemberships.map((m) => ({
+          team: m.team,
+          role: m.role,
+          addedAt: m.addedAt,
+        })),
+        null,
+        2
+      ),
+      { name: 'teams.json' }
+    );
+
+    archive.append(JSON.stringify(dashboards, null, 2), { name: 'dashboards.json' });
+
+    archive.append(JSON.stringify(savedQueries, null, 2), { name: 'saved-queries.json' });
+
+    archive.append(JSON.stringify(apiKeys, null, 2), { name: 'api-keys.json' });
+
+    archive.append(JSON.stringify(sessions, null, 2), { name: 'sessions.json' });
+
+    archive.append(JSON.stringify(alertRules, null, 2), { name: 'alert-rules.json' });
+
+    // Add a README file
+    const readme = `# NATS JetStream Console - Data Export
+
+Exported on: ${new Date().toISOString()}
+User: ${user?.email}
+
+## Contents
+
+This archive contains all your personal data from NATS JetStream Console:
+
+- export-info.json    - Export metadata
+- profile.json        - Your user profile information
+- organizations.json  - Organizations you are a member of
+- teams.json          - Teams you belong to
+- dashboards.json     - Dashboards you have created
+- saved-queries.json  - Saved queries you have created
+- api-keys.json       - API keys you have generated (keys are hashed)
+- sessions.json       - Your login sessions
+- alert-rules.json    - Alert rules you have configured
+
+## Data Retention
+
+This export represents a snapshot of your data at the time of export.
+For questions about data retention or to request data deletion,
+please visit the Data Privacy section in Settings.
+
+## About
+
+NATS JetStream Console is developed and maintained by:
+
+- KLogic Team (https://klogic.io)
+- Atatus Team (https://www.atatus.com)
+
+Atatus is a modern observability platform with APM, Logs, Infra, Cloud,
+K8S, Security, and Database monitoring - all in one platform.
+
+## License
+
+NATS JetStream Console is licensed under the Apache License 2.0.
+`;
+    archive.append(readme, { name: 'README.txt' });
+
+    // Finalize the archive
+    archive.finalize();
+
+    return reply.send(archive);
   });
 
   // DELETE /settings/gdpr/delete-account - Delete user account (GDPR right to erasure)

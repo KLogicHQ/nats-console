@@ -4,6 +4,19 @@ import * as React from 'react';
 import { cn } from '@/lib/utils';
 import { Button } from './button';
 
+// Context to pass onOpenChange to child components
+const AlertDialogContext = React.createContext<{
+  onOpenChange: (open: boolean) => void;
+} | null>(null);
+
+function useAlertDialogContext() {
+  const context = React.useContext(AlertDialogContext);
+  if (!context) {
+    throw new Error('AlertDialog components must be used within an AlertDialog');
+  }
+  return context;
+}
+
 interface AlertDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -14,20 +27,22 @@ export function AlertDialog({ open, onOpenChange, children }: AlertDialogProps) 
   if (!open) return null;
 
   return (
-    <div className="fixed inset-0 z-50">
-      <div
-        className="fixed inset-0 bg-black/50"
-        onClick={() => onOpenChange(false)}
-      />
-      <div className="fixed inset-0 flex items-center justify-center p-4">
+    <AlertDialogContext.Provider value={{ onOpenChange }}>
+      <div className="fixed inset-0 z-50">
         <div
-          className="relative bg-background rounded-lg shadow-lg max-h-[90vh] overflow-auto w-full max-w-lg p-6"
-          onClick={(e) => e.stopPropagation()}
-        >
-          {children}
+          className="fixed inset-0 bg-black/50"
+          onClick={() => onOpenChange(false)}
+        />
+        <div className="fixed inset-0 flex items-center justify-center p-4">
+          <div
+            className="relative bg-background rounded-lg shadow-lg max-h-[90vh] overflow-auto w-full max-w-lg p-6"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {children}
+          </div>
         </div>
       </div>
-    </div>
+    </AlertDialogContext.Provider>
   );
 }
 
@@ -113,10 +128,23 @@ export function AlertDialogAction({
 export function AlertDialogCancel({
   className,
   children,
+  onClick,
   ...props
 }: AlertDialogActionProps) {
+  const { onOpenChange } = useAlertDialogContext();
+
+  const handleClick = (e: React.MouseEvent<HTMLButtonElement>) => {
+    onOpenChange(false);
+    onClick?.(e);
+  };
+
   return (
-    <Button variant="outline" className={cn('mt-2 sm:mt-0', className)} {...props}>
+    <Button
+      variant="outline"
+      className={cn('mt-2 sm:mt-0', className)}
+      onClick={handleClick}
+      {...props}
+    >
       {children || 'Cancel'}
     </Button>
   );

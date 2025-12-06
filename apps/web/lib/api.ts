@@ -624,12 +624,11 @@ export const settings = {
       throw new Error('Failed to export data');
     }
 
-    const data = await response.json();
-    const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+    const blob = await response.blob();
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
     link.href = url;
-    link.download = `user-data-export-${new Date().toISOString().split('T')[0]}.json`;
+    link.download = `user-data-export-${new Date().toISOString().split('T')[0]}.zip`;
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
