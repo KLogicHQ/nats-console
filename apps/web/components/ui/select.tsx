@@ -60,7 +60,7 @@ export function Select({ value, onValueChange, children }: SelectProps) {
   );
 }
 
-interface SelectTriggerProps extends React.HTMLAttributes<HTMLButtonElement> {
+interface SelectTriggerProps extends React.ButtonHTMLAttributes<HTMLButtonElement> {
   children: React.ReactNode;
 }
 

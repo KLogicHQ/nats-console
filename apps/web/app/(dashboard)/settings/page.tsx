@@ -609,9 +609,8 @@ function SettingsPageContent() {
                                         onValueChange={(role) =>
                                           updateMemberRoleMutation.mutate({ memberId: member.id, role })
                                         }
-                                        disabled={updateMemberRoleMutation.isPending}
                                       >
-                                        <SelectTrigger className="w-28 h-8">
+                                        <SelectTrigger className="w-28 h-8" disabled={updateMemberRoleMutation.isPending}>
                                           <SelectValue />
                                         </SelectTrigger>
                                         <SelectContent>
