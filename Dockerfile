@@ -120,7 +120,7 @@ RUN cd apps/api && pnpm prisma generate
 # =============================================================================
 # Copy initialization scripts
 # =============================================================================
-COPY infrastructure/clickhouse/init/01-schema.sql /docker-entrypoint-initdb.d/clickhouse-init.sql
+COPY infrastructure/clickhouse/init/init.sql /docker-entrypoint-initdb.d/clickhouse-init.sql
 COPY docker/scripts/entrypoint.sh /entrypoint.sh
 COPY docker/scripts/init-databases.sh /init-databases.sh
 RUN chmod +x /entrypoint.sh /init-databases.sh
