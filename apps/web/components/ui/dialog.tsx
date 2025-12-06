@@ -51,7 +51,7 @@ export function Dialog({ open, onOpenChange, children }: DialogProps) {
   );
 }
 
-type DialogSize = 'sm' | 'md' | 'lg' | 'xl' | 'full';
+type DialogSize = 'sm' | 'md' | 'lg' | 'xl' | 'full' | '2xl';
 
 const sizeClasses: Record<DialogSize, string> = {
   sm: 'max-w-md',
@@ -59,6 +59,7 @@ const sizeClasses: Record<DialogSize, string> = {
   lg: 'max-w-xl',
   xl: 'max-w-3xl',
   full: 'max-w-5xl',
+  '2xl': 'max-w-6xl',
 };
 
 interface DialogContentProps extends React.HTMLAttributes<HTMLDivElement> {

@@ -109,6 +109,160 @@ const tabs: Tab[] = [
   { id: 'channels', label: 'Notification Channels', icon: Send },
 ];
 
+// Alert Rule Templates (Golden Signals)
+interface AlertRuleTemplate {
+  id: string;
+  name: string;
+  description: string;
+  category: 'latency' | 'traffic' | 'errors' | 'saturation';
+  config: {
+    name: string;
+    condition: {
+      metric: string;
+      operator: string;
+      window: number;
+      aggregation: string;
+    };
+    threshold: {
+      value: number;
+      type: string;
+    };
+    severity: string;
+    cooldownMins: number;
+  };
+}
+
+const alertRuleTemplates: AlertRuleTemplate[] = [
+  // Latency (Consumer Lag)
+  {
+    id: 'consumer-lag-critical',
+    name: 'Consumer Lag - Critical',
+    description: 'Alert when consumer lag exceeds 10,000 messages',
+    category: 'latency',
+    config: {
+      name: 'Consumer Lag Critical',
+      condition: { metric: 'consumer_lag', operator: 'gt', window: 300, aggregation: 'avg' },
+      threshold: { value: 10000, type: 'absolute' },
+      severity: 'critical',
+      cooldownMins: 5,
+    },
+  },
+  {
+    id: 'consumer-lag-warning',
+    name: 'Consumer Lag - Warning',
+    description: 'Alert when consumer lag exceeds 1,000 messages',
+    category: 'latency',
+    config: {
+      name: 'Consumer Lag Warning',
+      condition: { metric: 'consumer_lag', operator: 'gt', window: 300, aggregation: 'avg' },
+      threshold: { value: 1000, type: 'absolute' },
+      severity: 'warning',
+      cooldownMins: 10,
+    },
+  },
+  // Traffic (Message Rate)
+  {
+    id: 'message-rate-spike',
+    name: 'Message Rate Spike',
+    description: 'Alert when message rate exceeds 10,000 msg/s',
+    category: 'traffic',
+    config: {
+      name: 'High Message Rate',
+      condition: { metric: 'message_rate', operator: 'gt', window: 60, aggregation: 'avg' },
+      threshold: { value: 10000, type: 'absolute' },
+      severity: 'warning',
+      cooldownMins: 15,
+    },
+  },
+  {
+    id: 'message-rate-drop',
+    name: 'Message Rate Drop',
+    description: 'Alert when message rate drops below 10 msg/s',
+    category: 'traffic',
+    config: {
+      name: 'Low Message Rate',
+      condition: { metric: 'message_rate', operator: 'lt', window: 300, aggregation: 'avg' },
+      threshold: { value: 10, type: 'absolute' },
+      severity: 'warning',
+      cooldownMins: 10,
+    },
+  },
+  {
+    id: 'no-messages',
+    name: 'No Messages (Dead Stream)',
+    description: 'Alert when no messages received for 5 minutes',
+    category: 'traffic',
+    config: {
+      name: 'Dead Stream - No Messages',
+      condition: { metric: 'message_rate', operator: 'eq', window: 300, aggregation: 'avg' },
+      threshold: { value: 0, type: 'absolute' },
+      severity: 'critical',
+      cooldownMins: 5,
+    },
+  },
+  // Errors (Pending/Redelivery)
+  {
+    id: 'pending-high',
+    name: 'High Pending Messages',
+    description: 'Alert when pending messages exceed 5,000',
+    category: 'errors',
+    config: {
+      name: 'High Pending Count',
+      condition: { metric: 'pending_count', operator: 'gt', window: 300, aggregation: 'avg' },
+      threshold: { value: 5000, type: 'absolute' },
+      severity: 'warning',
+      cooldownMins: 10,
+    },
+  },
+  {
+    id: 'pending-critical',
+    name: 'Critical Pending Messages',
+    description: 'Alert when pending messages exceed 50,000',
+    category: 'errors',
+    config: {
+      name: 'Critical Pending Count',
+      condition: { metric: 'pending_count', operator: 'gt', window: 300, aggregation: 'avg' },
+      threshold: { value: 50000, type: 'absolute' },
+      severity: 'critical',
+      cooldownMins: 5,
+    },
+  },
+  // Saturation (Stream Size)
+  {
+    id: 'stream-size-warning',
+    name: 'Stream Size Warning',
+    description: 'Alert when stream size exceeds 1GB',
+    category: 'saturation',
+    config: {
+      name: 'Stream Size Warning',
+      condition: { metric: 'stream_size', operator: 'gt', window: 300, aggregation: 'max' },
+      threshold: { value: 1073741824, type: 'absolute' }, // 1GB in bytes
+      severity: 'warning',
+      cooldownMins: 30,
+    },
+  },
+  {
+    id: 'stream-size-critical',
+    name: 'Stream Size Critical',
+    description: 'Alert when stream size exceeds 10GB',
+    category: 'saturation',
+    config: {
+      name: 'Stream Size Critical',
+      condition: { metric: 'stream_size', operator: 'gt', window: 300, aggregation: 'max' },
+      threshold: { value: 10737418240, type: 'absolute' }, // 10GB in bytes
+      severity: 'critical',
+      cooldownMins: 15,
+    },
+  },
+];
+
+const templateCategories = [
+  { id: 'latency', name: 'Latency', description: 'Consumer lag monitoring' },
+  { id: 'traffic', name: 'Traffic', description: 'Message rate monitoring' },
+  { id: 'errors', name: 'Errors', description: 'Pending & failed messages' },
+  { id: 'saturation', name: 'Saturation', description: 'Resource utilization' },
+];
+
 // Default form data
 const defaultRule = {
   name: '',
@@ -214,6 +368,8 @@ function AlertsPageContent() {
   const [isDeleteRuleOpen, setIsDeleteRuleOpen] = useState(false);
   const [selectedRule, setSelectedRule] = useState<AlertRule | null>(null);
   const [ruleFormData, setRuleFormData] = useState(defaultRule);
+  const [selectedTemplate, setSelectedTemplate] = useState<string | null>(null);
+  const [showTemplates, setShowTemplates] = useState(true);
 
   // Channels state
   const [isCreateChannelOpen, setIsCreateChannelOpen] = useState(false);
@@ -420,6 +576,8 @@ function AlertsPageContent() {
           {activeTab === 'rules' && (
             <Button onClick={() => {
               setRuleFormData(defaultRule);
+              setSelectedTemplate(null);
+              setShowTemplates(true);
               setIsCreateRuleOpen(true);
             }}>
               <Plus className="h-4 w-4" />
@@ -767,149 +925,237 @@ function AlertsPageContent() {
           setIsEditRuleOpen(false);
         }
       }}>
-        <DialogContent size="xl" onClose={() => {
+        <DialogContent size="2xl" onClose={() => {
           setIsCreateRuleOpen(false);
           setIsEditRuleOpen(false);
         }}>
           <DialogHeader>
             <DialogTitle>{isEditRuleOpen ? 'Edit Alert Rule' : 'Create Alert Rule'}</DialogTitle>
             <DialogDescription>
-              {isEditRuleOpen ? 'Update the alert rule configuration' : 'Configure a new alert rule to monitor your NATS streams'}
+              {isEditRuleOpen ? 'Update the alert rule configuration' : 'Choose a template or configure a custom alert rule'}
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4 py-4">
-            <div className="space-y-2">
-              <label className="text-sm font-medium">Name</label>
-              <Input
-                placeholder="e.g., High consumer lag alert"
-                value={ruleFormData.name}
-                onChange={(e) => setRuleFormData({ ...ruleFormData, name: e.target.value })}
-              />
-            </div>
-            <div className="space-y-2">
-              <label className="text-sm font-medium">Cluster (optional)</label>
-              <Select
-                value={ruleFormData.clusterId || 'all'}
-                onValueChange={(v) => setRuleFormData({ ...ruleFormData, clusterId: v === 'all' ? null : v })}
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder="All clusters" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">All clusters</SelectItem>
-                  {clustersData?.clusters?.map((cluster: any) => (
-                    <SelectItem key={cluster.id} value={cluster.id}>
-                      {cluster.name}
-                    </SelectItem>
+            {/* Template Selection - Only show for new rules */}
+            {isCreateRuleOpen && !isEditRuleOpen && showTemplates && (
+              <div className="space-y-4">
+                <div className="flex items-center justify-between">
+                  <label className="text-sm font-medium">Choose a Template (Golden Signals)</label>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => {
+                      setShowTemplates(false);
+                      setSelectedTemplate(null);
+                    }}
+                  >
+                    Skip - Create Custom
+                  </Button>
+                </div>
+                <div className="grid grid-cols-2 gap-3">
+                  {templateCategories.map((category) => (
+                    <div key={category.id} className="space-y-2">
+                      <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+                        {category.name}
+                      </h4>
+                      <div className="space-y-1.5">
+                        {alertRuleTemplates
+                          .filter((t) => t.category === category.id)
+                          .map((template) => (
+                            <button
+                              key={template.id}
+                              type="button"
+                              className={`w-full text-left p-2.5 rounded-md border transition-colors ${
+                                selectedTemplate === template.id
+                                  ? 'border-primary bg-primary/5 ring-1 ring-primary'
+                                  : 'border-border hover:border-primary/50 hover:bg-muted/50'
+                              }`}
+                              onClick={() => {
+                                setSelectedTemplate(template.id);
+                                setRuleFormData({
+                                  ...defaultRule,
+                                  ...template.config,
+                                });
+                              }}
+                            >
+                              <div className="flex items-center justify-between">
+                                <span className="text-sm font-medium">{template.name}</span>
+                                {getSeverityBadge(template.config.severity)}
+                              </div>
+                              <p className="text-xs text-muted-foreground mt-0.5">{template.description}</p>
+                            </button>
+                          ))}
+                      </div>
+                    </div>
                   ))}
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <label className="text-sm font-medium">Metric</label>
-                <Select
-                  value={ruleFormData.condition.metric}
-                  onValueChange={(v) =>
-                    setRuleFormData({
-                      ...ruleFormData,
-                      condition: { ...ruleFormData.condition, metric: v },
-                    })
-                  }
-                >
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="consumer_lag">Consumer Lag</SelectItem>
-                    <SelectItem value="message_rate">Message Rate</SelectItem>
-                    <SelectItem value="stream_size">Stream Size</SelectItem>
-                    <SelectItem value="pending_count">Pending Count</SelectItem>
-                  </SelectContent>
-                </Select>
+                </div>
+                {selectedTemplate && (
+                  <div className="flex justify-end pt-2">
+                    <Button
+                      onClick={() => setShowTemplates(false)}
+                    >
+                      Continue with Template
+                    </Button>
+                  </div>
+                )}
               </div>
-              <div className="space-y-2">
-                <label className="text-sm font-medium">Operator</label>
-                <Select
-                  value={ruleFormData.condition.operator}
-                  onValueChange={(v) =>
-                    setRuleFormData({
-                      ...ruleFormData,
-                      condition: { ...ruleFormData.condition, operator: v },
-                    })
-                  }
-                >
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="gt">Greater than</SelectItem>
-                    <SelectItem value="lt">Less than</SelectItem>
-                    <SelectItem value="gte">Greater or equal</SelectItem>
-                    <SelectItem value="lte">Less or equal</SelectItem>
-                    <SelectItem value="eq">Equals</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-            </div>
-            <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <label className="text-sm font-medium">Threshold</label>
-                <Input
-                  type="number"
-                  value={ruleFormData.threshold.value}
-                  onChange={(e) =>
-                    setRuleFormData({
-                      ...ruleFormData,
-                      threshold: { ...ruleFormData.threshold, value: Number(e.target.value) },
-                    })
-                  }
-                />
-              </div>
-              <div className="space-y-2">
-                <label className="text-sm font-medium">Severity</label>
-                <Select
-                  value={ruleFormData.severity}
-                  onValueChange={(v) => setRuleFormData({ ...ruleFormData, severity: v })}
-                >
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="info">Info</SelectItem>
-                    <SelectItem value="warning">Warning</SelectItem>
-                    <SelectItem value="critical">Critical</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-            </div>
-            <div className="space-y-2">
-              <label className="text-sm font-medium">Notification Channels</label>
-              <Select
-                value={ruleFormData.channelIds.join(',')}
-                onValueChange={(v) => setRuleFormData({ ...ruleFormData, channelIds: v ? v.split(',').filter(Boolean) : [] })}
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder="Select channels" />
-                </SelectTrigger>
-                <SelectContent>
-                  {channelsData?.channels?.map((channel: NotificationChannel) => (
-                    <SelectItem key={channel.id} value={channel.id}>
-                      {channel.name} ({channel.type})
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              <p className="text-xs text-muted-foreground">Select a notification channel for alerts</p>
-            </div>
-            <div className="space-y-2">
-              <label className="text-sm font-medium">Cooldown (minutes)</label>
-              <Input
-                type="number"
-                value={ruleFormData.cooldownMins}
-                onChange={(e) => setRuleFormData({ ...ruleFormData, cooldownMins: Number(e.target.value) })}
-              />
-            </div>
+            )}
+
+            {/* Rule Configuration Form - Show when not in template selection mode */}
+            {(!showTemplates || isEditRuleOpen) && (
+              <>
+                {isCreateRuleOpen && !isEditRuleOpen && (
+                  <div className="flex items-center justify-between pb-2 border-b">
+                    <span className="text-sm text-muted-foreground">
+                      {selectedTemplate
+                        ? `Template: ${alertRuleTemplates.find((t) => t.id === selectedTemplate)?.name}`
+                        : 'Custom Rule'}
+                    </span>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => {
+                        setShowTemplates(true);
+                      }}
+                    >
+                      Change Template
+                    </Button>
+                  </div>
+                )}
+                <div className="space-y-2">
+                  <label className="text-sm font-medium">Name</label>
+                  <Input
+                    placeholder="e.g., High consumer lag alert"
+                    value={ruleFormData.name}
+                    onChange={(e) => setRuleFormData({ ...ruleFormData, name: e.target.value })}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <label className="text-sm font-medium">Cluster (optional)</label>
+                  <Select
+                    value={ruleFormData.clusterId || 'all'}
+                    onValueChange={(v) => setRuleFormData({ ...ruleFormData, clusterId: v === 'all' ? null : v })}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="All clusters" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">All clusters</SelectItem>
+                      {clustersData?.clusters?.map((cluster: any) => (
+                        <SelectItem key={cluster.id} value={cluster.id}>
+                          {cluster.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <label className="text-sm font-medium">Metric</label>
+                    <Select
+                      value={ruleFormData.condition.metric}
+                      onValueChange={(v) =>
+                        setRuleFormData({
+                          ...ruleFormData,
+                          condition: { ...ruleFormData.condition, metric: v },
+                        })
+                      }
+                    >
+                      <SelectTrigger>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="consumer_lag">Consumer Lag</SelectItem>
+                        <SelectItem value="message_rate">Message Rate</SelectItem>
+                        <SelectItem value="stream_size">Stream Size</SelectItem>
+                        <SelectItem value="pending_count">Pending Count</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="space-y-2">
+                    <label className="text-sm font-medium">Operator</label>
+                    <Select
+                      value={ruleFormData.condition.operator}
+                      onValueChange={(v) =>
+                        setRuleFormData({
+                          ...ruleFormData,
+                          condition: { ...ruleFormData.condition, operator: v },
+                        })
+                      }
+                    >
+                      <SelectTrigger>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="gt">Greater than</SelectItem>
+                        <SelectItem value="lt">Less than</SelectItem>
+                        <SelectItem value="gte">Greater or equal</SelectItem>
+                        <SelectItem value="lte">Less or equal</SelectItem>
+                        <SelectItem value="eq">Equals</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <label className="text-sm font-medium">Threshold</label>
+                    <Input
+                      type="number"
+                      value={ruleFormData.threshold.value}
+                      onChange={(e) =>
+                        setRuleFormData({
+                          ...ruleFormData,
+                          threshold: { ...ruleFormData.threshold, value: Number(e.target.value) },
+                        })
+                      }
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <label className="text-sm font-medium">Severity</label>
+                    <Select
+                      value={ruleFormData.severity}
+                      onValueChange={(v) => setRuleFormData({ ...ruleFormData, severity: v })}
+                    >
+                      <SelectTrigger>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="info">Info</SelectItem>
+                        <SelectItem value="warning">Warning</SelectItem>
+                        <SelectItem value="critical">Critical</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+                <div className="space-y-2">
+                  <label className="text-sm font-medium">Notification Channels</label>
+                  <Select
+                    value={ruleFormData.channelIds.join(',')}
+                    onValueChange={(v) => setRuleFormData({ ...ruleFormData, channelIds: v ? v.split(',').filter(Boolean) : [] })}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select channels" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {channelsData?.channels?.map((channel: NotificationChannel) => (
+                        <SelectItem key={channel.id} value={channel.id}>
+                          {channel.name} ({channel.type})
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <p className="text-xs text-muted-foreground">Select a notification channel for alerts</p>
+                </div>
+                <div className="space-y-2">
+                  <label className="text-sm font-medium">Cooldown (minutes)</label>
+                  <Input
+                    type="number"
+                    value={ruleFormData.cooldownMins}
+                    onChange={(e) => setRuleFormData({ ...ruleFormData, cooldownMins: Number(e.target.value) })}
+                  />
+                </div>
+              </>
+            )}
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => {
@@ -964,7 +1210,7 @@ function AlertsPageContent() {
           setIsEditChannelOpen(false);
         }
       }}>
-        <DialogContent size="full" className="sm:max-w-5xl" onClose={() => {
+        <DialogContent size="2xl" onClose={() => {
           setIsCreateChannelOpen(false);
           setIsEditChannelOpen(false);
         }}>

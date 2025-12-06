@@ -4,13 +4,13 @@ A modern, enterprise-grade web console for managing NATS JetStream clusters. Bui
 
 **Open Source** | **Maintained by [KLogic](https://klogic.io)**
 
-![Open Source](https://img.shields.io/badge/Open%20Source-MIT-green)
+![Open Source](https://img.shields.io/badge/Open%20Source-Apache%202.0-green)
 ![NATS Console](https://img.shields.io/badge/NATS-JetStream-blue)
 ![TypeScript](https://img.shields.io/badge/TypeScript-5.0-blue)
 ![Next.js](https://img.shields.io/badge/Next.js-15-black)
 ![Fastify](https://img.shields.io/badge/Fastify-5-black)
 
-> **Free and Open Source Software (FOSS)** - Use, modify, and distribute freely under the MIT License. Contributions welcome!
+> **Free and Open Source Software (FOSS)** - Use, modify, and distribute freely under the Apache License 2.0. Contributions welcome!
 
 ## Features
 
@@ -73,6 +73,62 @@ A modern, enterprise-grade web console for managing NATS JetStream clusters. Bui
 - **Dark Mode** - System, light, and dark theme support
 - **REST API** - Full-featured REST API for integrations
 - **WebSocket API** - Real-time event streaming
+
+---
+
+## Screenshots
+
+### Clusters Overview
+Connect and manage multiple NATS JetStream clusters from a single dashboard.
+
+![Clusters](screenshots/nats-clusters-01.jpg)
+
+### Cluster Details
+View detailed cluster information including server stats, health status, and real-time metrics.
+
+![Cluster Summary](screenshots/nats-cluster-summary-02.jpg)
+
+### Stream Summary
+Monitor stream health with message counts, storage usage, and throughput metrics.
+
+![Stream Summary](screenshots/nats-stream-summary-03.jpg)
+
+### Message Browser
+Browse and inspect messages with JSON formatting, expand/collapse functionality, and message metadata.
+
+![Message Inspection](screenshots/nats-messages-inspect-04.jpg)
+
+### Message Schema Detection
+Automatic schema detection and visualization for structured message payloads.
+
+![Message Schema](screenshots/nats-messages-schema-05.jpg)
+
+### Stream Configuration
+Configure stream settings including retention policies, storage limits, and replication.
+
+![Stream Configuration](screenshots/nats-stream-configuration-06.jpg)
+
+### Consumer Summary
+Track consumer performance with lag monitoring, pending messages, and delivery metrics.
+
+![Consumer Summary](screenshots/nats-consumer-summary-07.jpg)
+
+### Consumer Configuration
+Configure consumer settings including delivery policies, ack policies, and replay options.
+
+![Consumer Configuration](screenshots/nats-consumer-configuration-08.jpg)
+
+### Analytics Dashboard
+Real-time analytics with interactive charts for throughput, latency, and resource utilization.
+
+![Analytics](screenshots/nats-web-analytics-09.jpg)
+
+### Alert Rules
+Create and manage alert rules with golden templates for common monitoring scenarios.
+
+![Alert Rules](screenshots/nats-alert-rules-10.jpg)
+
+---
 
 ## Tech Stack
 
@@ -541,6 +597,6 @@ See [Local Development Mode](#4-local-development-mode) for setting up your deve
 
 ## License
 
-MIT License - see [LICENSE](./LICENSE) for details.
+Apache License 2.0 - see [LICENSE](./LICENSE) for details.
 
-This is free and open source software. You are free to use, modify, and distribute it under the terms of the MIT License.
+This is free and open source software. You are free to use, modify, and distribute it under the terms of the Apache License 2.0.

@@ -17,6 +17,13 @@ import {
   Globe,
   Lock,
   Users,
+  Edit,
+  Activity,
+  BarChart3,
+  Gauge,
+  TrendingUp,
+  Database,
+  Zap,
 } from 'lucide-react';
 import { api } from '@/lib/api';
 import { Button } from '@/components/ui/button';
@@ -50,6 +57,214 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
+
+// Dashboard Templates
+interface DashboardTemplate {
+  id: string;
+  name: string;
+  description: string;
+  icon: any;
+  category: 'overview' | 'streams' | 'consumers' | 'performance';
+  config: {
+    name: string;
+    description: string;
+    config: {
+      layout: string;
+      widgets: Array<{
+        id: string;
+        type: string;
+        title: string;
+        config: Record<string, any>;
+        position: { x: number; y: number; w: number; h: number };
+      }>;
+    };
+  };
+}
+
+const dashboardTemplates: DashboardTemplate[] = [
+  // Overview Dashboards
+  {
+    id: 'cluster-overview',
+    name: 'Cluster Overview',
+    description: 'High-level view of cluster health, streams, and consumers',
+    icon: LayoutDashboard,
+    category: 'overview',
+    config: {
+      name: 'Cluster Overview',
+      description: 'High-level view of cluster health, streams, and consumers',
+      config: {
+        layout: 'grid',
+        widgets: [
+          { id: 'w1', type: 'stat', title: 'Total Streams', config: { metric: 'streams_count' }, position: { x: 0, y: 0, w: 3, h: 2 } },
+          { id: 'w2', type: 'stat', title: 'Total Consumers', config: { metric: 'consumers_count' }, position: { x: 3, y: 0, w: 3, h: 2 } },
+          { id: 'w3', type: 'stat', title: 'Messages/sec', config: { metric: 'message_rate' }, position: { x: 6, y: 0, w: 3, h: 2 } },
+          { id: 'w4', type: 'stat', title: 'Total Storage', config: { metric: 'total_bytes' }, position: { x: 9, y: 0, w: 3, h: 2 } },
+          { id: 'w5', type: 'line-chart', title: 'Message Throughput', config: { metric: 'throughput' }, position: { x: 0, y: 2, w: 6, h: 4 } },
+          { id: 'w6', type: 'bar-chart', title: 'Consumer Lag', config: { metric: 'consumer_lag' }, position: { x: 6, y: 2, w: 6, h: 4 } },
+        ],
+      },
+    },
+  },
+  {
+    id: 'executive-summary',
+    name: 'Executive Summary',
+    description: 'Key metrics and trends for stakeholders',
+    icon: TrendingUp,
+    category: 'overview',
+    config: {
+      name: 'Executive Summary',
+      description: 'Key metrics and trends for stakeholders',
+      config: {
+        layout: 'grid',
+        widgets: [
+          { id: 'w1', type: 'stat', title: 'Uptime', config: { metric: 'uptime' }, position: { x: 0, y: 0, w: 4, h: 2 } },
+          { id: 'w2', type: 'stat', title: 'Total Messages', config: { metric: 'total_messages' }, position: { x: 4, y: 0, w: 4, h: 2 } },
+          { id: 'w3', type: 'stat', title: 'Avg Latency', config: { metric: 'avg_latency' }, position: { x: 8, y: 0, w: 4, h: 2 } },
+          { id: 'w4', type: 'line-chart', title: 'Weekly Trends', config: { metric: 'weekly_trends' }, position: { x: 0, y: 2, w: 12, h: 4 } },
+        ],
+      },
+    },
+  },
+  // Stream Dashboards
+  {
+    id: 'stream-health',
+    name: 'Stream Health Monitor',
+    description: 'Monitor stream performance and storage utilization',
+    icon: Database,
+    category: 'streams',
+    config: {
+      name: 'Stream Health Monitor',
+      description: 'Monitor stream performance and storage utilization',
+      config: {
+        layout: 'grid',
+        widgets: [
+          { id: 'w1', type: 'table', title: 'Stream Status', config: { dataSource: 'streams' }, position: { x: 0, y: 0, w: 12, h: 4 } },
+          { id: 'w2', type: 'bar-chart', title: 'Stream Sizes', config: { metric: 'stream_sizes' }, position: { x: 0, y: 4, w: 6, h: 4 } },
+          { id: 'w3', type: 'pie-chart', title: 'Message Distribution', config: { metric: 'message_distribution' }, position: { x: 6, y: 4, w: 6, h: 4 } },
+        ],
+      },
+    },
+  },
+  {
+    id: 'stream-throughput',
+    name: 'Stream Throughput Analysis',
+    description: 'Detailed throughput metrics per stream',
+    icon: Activity,
+    category: 'streams',
+    config: {
+      name: 'Stream Throughput Analysis',
+      description: 'Detailed throughput metrics per stream',
+      config: {
+        layout: 'grid',
+        widgets: [
+          { id: 'w1', type: 'line-chart', title: 'Throughput by Stream', config: { metric: 'stream_throughput' }, position: { x: 0, y: 0, w: 12, h: 5 } },
+          { id: 'w2', type: 'stat', title: 'Peak Rate', config: { metric: 'peak_rate' }, position: { x: 0, y: 5, w: 4, h: 2 } },
+          { id: 'w3', type: 'stat', title: 'Avg Rate', config: { metric: 'avg_rate' }, position: { x: 4, y: 5, w: 4, h: 2 } },
+          { id: 'w4', type: 'stat', title: 'Total Today', config: { metric: 'total_today' }, position: { x: 8, y: 5, w: 4, h: 2 } },
+        ],
+      },
+    },
+  },
+  // Consumer Dashboards
+  {
+    id: 'consumer-performance',
+    name: 'Consumer Performance',
+    description: 'Track consumer lag and processing rates',
+    icon: Gauge,
+    category: 'consumers',
+    config: {
+      name: 'Consumer Performance',
+      description: 'Track consumer lag and processing rates',
+      config: {
+        layout: 'grid',
+        widgets: [
+          { id: 'w1', type: 'stat', title: 'Total Pending', config: { metric: 'total_pending' }, position: { x: 0, y: 0, w: 3, h: 2 } },
+          { id: 'w2', type: 'stat', title: 'Avg Lag', config: { metric: 'avg_lag' }, position: { x: 3, y: 0, w: 3, h: 2 } },
+          { id: 'w3', type: 'stat', title: 'Processing Rate', config: { metric: 'processing_rate' }, position: { x: 6, y: 0, w: 3, h: 2 } },
+          { id: 'w4', type: 'stat', title: 'Redelivery Rate', config: { metric: 'redelivery_rate' }, position: { x: 9, y: 0, w: 3, h: 2 } },
+          { id: 'w5', type: 'line-chart', title: 'Consumer Lag Over Time', config: { metric: 'lag_history' }, position: { x: 0, y: 2, w: 12, h: 4 } },
+          { id: 'w6', type: 'table', title: 'Top Lagging Consumers', config: { dataSource: 'lagging_consumers' }, position: { x: 0, y: 6, w: 12, h: 3 } },
+        ],
+      },
+    },
+  },
+  {
+    id: 'consumer-health',
+    name: 'Consumer Health Check',
+    description: 'Monitor consumer status and identify issues',
+    icon: Zap,
+    category: 'consumers',
+    config: {
+      name: 'Consumer Health Check',
+      description: 'Monitor consumer status and identify issues',
+      config: {
+        layout: 'grid',
+        widgets: [
+          { id: 'w1', type: 'table', title: 'Consumer Status', config: { dataSource: 'consumers' }, position: { x: 0, y: 0, w: 12, h: 5 } },
+          { id: 'w2', type: 'line-chart', title: 'Ack Rate', config: { metric: 'ack_rate' }, position: { x: 0, y: 5, w: 6, h: 4 } },
+          { id: 'w3', type: 'bar-chart', title: 'Pending by Consumer', config: { metric: 'pending_by_consumer' }, position: { x: 6, y: 5, w: 6, h: 4 } },
+        ],
+      },
+    },
+  },
+  // Performance Dashboards
+  {
+    id: 'latency-analysis',
+    name: 'Latency Analysis',
+    description: 'Deep dive into message latency patterns',
+    icon: BarChart3,
+    category: 'performance',
+    config: {
+      name: 'Latency Analysis',
+      description: 'Deep dive into message latency patterns',
+      config: {
+        layout: 'grid',
+        widgets: [
+          { id: 'w1', type: 'stat', title: 'P50 Latency', config: { metric: 'p50_latency' }, position: { x: 0, y: 0, w: 3, h: 2 } },
+          { id: 'w2', type: 'stat', title: 'P95 Latency', config: { metric: 'p95_latency' }, position: { x: 3, y: 0, w: 3, h: 2 } },
+          { id: 'w3', type: 'stat', title: 'P99 Latency', config: { metric: 'p99_latency' }, position: { x: 6, y: 0, w: 3, h: 2 } },
+          { id: 'w4', type: 'stat', title: 'Max Latency', config: { metric: 'max_latency' }, position: { x: 9, y: 0, w: 3, h: 2 } },
+          { id: 'w5', type: 'bar-chart', title: 'Latency Distribution', config: { metric: 'latency_dist' }, position: { x: 0, y: 2, w: 6, h: 4 } },
+          { id: 'w6', type: 'line-chart', title: 'Latency Over Time', config: { metric: 'latency_history' }, position: { x: 6, y: 2, w: 6, h: 4 } },
+        ],
+      },
+    },
+  },
+  {
+    id: 'resource-utilization',
+    name: 'Resource Utilization',
+    description: 'Monitor storage and memory usage',
+    icon: Activity,
+    category: 'performance',
+    config: {
+      name: 'Resource Utilization',
+      description: 'Monitor storage and memory usage',
+      config: {
+        layout: 'grid',
+        widgets: [
+          { id: 'w1', type: 'gauge', title: 'Storage Used', config: { metric: 'storage_percent' }, position: { x: 0, y: 0, w: 4, h: 3 } },
+          { id: 'w2', type: 'gauge', title: 'Memory Used', config: { metric: 'memory_percent' }, position: { x: 4, y: 0, w: 4, h: 3 } },
+          { id: 'w3', type: 'gauge', title: 'Connection Pool', config: { metric: 'connections_percent' }, position: { x: 8, y: 0, w: 4, h: 3 } },
+          { id: 'w4', type: 'line-chart', title: 'Resource Trends', config: { metric: 'resource_trends' }, position: { x: 0, y: 3, w: 12, h: 4 } },
+        ],
+      },
+    },
+  },
+];
+
+const templateCategories = [
+  { id: 'overview', name: 'Overview', description: 'High-level cluster monitoring' },
+  { id: 'streams', name: 'Streams', description: 'Stream-focused dashboards' },
+  { id: 'consumers', name: 'Consumers', description: 'Consumer monitoring' },
+  { id: 'performance', name: 'Performance', description: 'Performance analysis' },
+];
 
 interface ShareDashboard {
   id: string;
@@ -57,25 +272,37 @@ interface ShareDashboard {
   isShared: boolean;
 }
 
+interface EditDashboard {
+  id: string;
+  name: string;
+  description: string;
+}
+
 export default function DashboardsPage() {
   const queryClient = useQueryClient();
   const [showCreateDialog, setShowCreateDialog] = useState(false);
   const [newDashboardName, setNewDashboardName] = useState('');
   const [newDashboardDescription, setNewDashboardDescription] = useState('');
+  const [selectedTemplate, setSelectedTemplate] = useState<DashboardTemplate | null>(null);
+  const [selectedClusterId, setSelectedClusterId] = useState<string>('');
   const [deleteDashboardId, setDeleteDashboardId] = useState<string | null>(null);
   const [shareDashboard, setShareDashboard] = useState<ShareDashboard | null>(null);
+  const [editDashboard, setEditDashboard] = useState<EditDashboard | null>(null);
 
   const { data: dashboardsData, isLoading } = useQuery({
     queryKey: ['dashboards'],
     queryFn: () => api.dashboards.list(),
   });
 
+  const { data: clustersData } = useQuery({
+    queryKey: ['clusters'],
+    queryFn: () => api.clusters.list(),
+  });
+
   const createMutation = useMutation({
-    mutationFn: (data: { name: string; description?: string }) => api.dashboards.create(data),
+    mutationFn: (data: { name: string; description?: string; config?: any }) => api.dashboards.create(data),
     onSuccess: () => {
-      setShowCreateDialog(false);
-      setNewDashboardName('');
-      setNewDashboardDescription('');
+      resetCreateDialog();
       queryClient.invalidateQueries({ queryKey: ['dashboards'] });
     },
   });
@@ -111,12 +338,51 @@ export default function DashboardsPage() {
     },
   });
 
+  const updateMutation = useMutation({
+    mutationFn: ({ id, name, description }: { id: string; name: string; description: string }) =>
+      api.dashboards.update(id, { name, description }),
+    onSuccess: () => {
+      setEditDashboard(null);
+      queryClient.invalidateQueries({ queryKey: ['dashboards'] });
+    },
+  });
+
   const handleCreate = () => {
     if (!newDashboardName.trim()) return;
+
+    // If using a template, inject clusterId into each widget's config
+    let widgets;
+    if (selectedTemplate && selectedClusterId) {
+      widgets = selectedTemplate.config.config.widgets.map((widget: any) => ({
+        ...widget,
+        config: {
+          ...widget.config,
+          clusterId: selectedClusterId,
+        },
+      }));
+    } else if (selectedTemplate) {
+      widgets = selectedTemplate.config.config.widgets;
+    }
+
     createMutation.mutate({
       name: newDashboardName,
       description: newDashboardDescription || undefined,
+      ...(widgets ? { widgets } : {}),
     });
+  };
+
+  const handleSelectTemplate = (template: DashboardTemplate) => {
+    setSelectedTemplate(template);
+    setNewDashboardName(template.config.name);
+    setNewDashboardDescription(template.config.description);
+  };
+
+  const resetCreateDialog = () => {
+    setShowCreateDialog(false);
+    setNewDashboardName('');
+    setNewDashboardDescription('');
+    setSelectedTemplate(null);
+    setSelectedClusterId('');
   };
 
   const formatDate = (date: string) => {
@@ -204,11 +470,12 @@ export default function DashboardsPage() {
               </Link>
               <div className="absolute top-4 right-4">
                 <DropdownMenu>
-                  <DropdownMenuTrigger asChild onClick={(e) => e.preventDefault()}>
+                  <DropdownMenuTrigger asChild>
                     <Button
                       variant="ghost"
                       size="icon"
                       className="h-8 w-8 opacity-0 group-hover:opacity-100 transition-opacity"
+                      onClick={(e) => e.preventDefault()}
                     >
                       <MoreHorizontal className="h-4 w-4" />
                     </Button>
@@ -217,8 +484,21 @@ export default function DashboardsPage() {
                     <DropdownMenuItem asChild>
                       <Link href={`/dashboards/${dashboard.id}`}>
                         <Settings className="h-4 w-4 mr-2" />
-                        Edit
+                        Edit Widgets
                       </Link>
+                    </DropdownMenuItem>
+                    <DropdownMenuItem
+                      onClick={(e) => {
+                        e.preventDefault();
+                        setEditDashboard({
+                          id: dashboard.id,
+                          name: dashboard.name,
+                          description: dashboard.description || '',
+                        });
+                      }}
+                    >
+                      <Edit className="h-4 w-4 mr-2" />
+                      Edit Name
                     </DropdownMenuItem>
                     <DropdownMenuItem
                       onClick={(e) => {
@@ -262,46 +542,154 @@ export default function DashboardsPage() {
       )}
 
       {/* Create Dashboard Dialog */}
-      <Dialog open={showCreateDialog} onOpenChange={setShowCreateDialog}>
-        <DialogContent>
+      <Dialog open={showCreateDialog} onOpenChange={resetCreateDialog}>
+        <DialogContent size="2xl">
           <DialogHeader>
             <DialogTitle>Create New Dashboard</DialogTitle>
             <DialogDescription>
-              Create a custom dashboard to visualize your NATS metrics
+              Select a template or create a blank dashboard to visualize your NATS metrics
             </DialogDescription>
           </DialogHeader>
-          <div className="space-y-4 py-4">
-            <div className="space-y-2">
-              <label className="text-sm font-medium">Name *</label>
-              <Input
-                placeholder="e.g., Production Metrics"
-                value={newDashboardName}
-                onChange={(e) => setNewDashboardName(e.target.value)}
-              />
+          <div className="space-y-6 py-4">
+            {/* Template Selection */}
+            <div className="space-y-4">
+              <div className="flex items-center justify-between">
+                <label className="text-sm font-medium">Start from a Template</label>
+                {selectedTemplate && (
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => {
+                      setSelectedTemplate(null);
+                      setNewDashboardName('');
+                      setNewDashboardDescription('');
+                    }}
+                  >
+                    Clear Selection
+                  </Button>
+                )}
+              </div>
+              <div className="space-y-4">
+                {templateCategories.map((category) => {
+                  const categoryTemplates = dashboardTemplates.filter(
+                    (t) => t.category === category.id
+                  );
+                  return (
+                    <div key={category.id} className="space-y-2">
+                      <div className="flex items-center gap-2">
+                        <span className="text-sm font-medium text-muted-foreground">
+                          {category.name}
+                        </span>
+                        <span className="text-xs text-muted-foreground">
+                          — {category.description}
+                        </span>
+                      </div>
+                      <div className="grid grid-cols-2 gap-2">
+                        {categoryTemplates.map((template) => {
+                          const IconComponent = template.icon;
+                          const isSelected = selectedTemplate?.id === template.id;
+                          return (
+                            <button
+                              key={template.id}
+                              type="button"
+                              onClick={() => handleSelectTemplate(template)}
+                              className={`flex items-start gap-3 p-3 rounded-lg border text-left transition-colors ${
+                                isSelected
+                                  ? 'border-primary bg-primary/5'
+                                  : 'border-border hover:border-primary/50 hover:bg-muted/50'
+                              }`}
+                            >
+                              <div
+                                className={`p-2 rounded-lg ${
+                                  isSelected ? 'bg-primary/10' : 'bg-muted'
+                                }`}
+                              >
+                                <IconComponent
+                                  className={`h-4 w-4 ${
+                                    isSelected ? 'text-primary' : 'text-muted-foreground'
+                                  }`}
+                                />
+                              </div>
+                              <div className="flex-1 min-w-0">
+                                <p
+                                  className={`text-sm font-medium ${
+                                    isSelected ? 'text-primary' : ''
+                                  }`}
+                                >
+                                  {template.name}
+                                </p>
+                                <p className="text-xs text-muted-foreground line-clamp-2">
+                                  {template.description}
+                                </p>
+                              </div>
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
             </div>
-            <div className="space-y-2">
-              <label className="text-sm font-medium">Description</label>
-              <Input
-                placeholder="Optional description..."
-                value={newDashboardDescription}
-                onChange={(e) => setNewDashboardDescription(e.target.value)}
-              />
+
+            <div className="border-t pt-4 space-y-4">
+              {/* Cluster selector - only show when template is selected */}
+              {selectedTemplate && (
+                <div className="space-y-2">
+                  <label className="text-sm font-medium">Cluster *</label>
+                  <Select value={selectedClusterId} onValueChange={setSelectedClusterId}>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select a cluster for widgets" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {clustersData?.clusters?.map((cluster: any) => (
+                        <SelectItem key={cluster.id} value={cluster.id}>
+                          {cluster.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <p className="text-xs text-muted-foreground">
+                    All widgets will fetch data from this cluster
+                  </p>
+                </div>
+              )}
+              <div className="space-y-2">
+                <label className="text-sm font-medium">Name *</label>
+                <Input
+                  placeholder="e.g., Production Metrics"
+                  value={newDashboardName}
+                  onChange={(e) => setNewDashboardName(e.target.value)}
+                />
+              </div>
+              <div className="space-y-2">
+                <label className="text-sm font-medium">Description</label>
+                <Input
+                  placeholder="Optional description..."
+                  value={newDashboardDescription}
+                  onChange={(e) => setNewDashboardDescription(e.target.value)}
+                />
+              </div>
             </div>
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setShowCreateDialog(false)}>
+            <Button variant="outline" onClick={resetCreateDialog}>
               Cancel
             </Button>
             <Button
               onClick={handleCreate}
-              disabled={!newDashboardName.trim() || createMutation.isPending}
+              disabled={
+                !newDashboardName.trim() ||
+                createMutation.isPending ||
+                !!(selectedTemplate && !selectedClusterId)
+              }
             >
               {createMutation.isPending ? (
                 <Loader2 className="h-4 w-4 animate-spin" />
               ) : (
                 <Plus className="h-4 w-4" />
               )}
-              Create Dashboard
+              {selectedTemplate ? 'Create from Template' : 'Create Blank Dashboard'}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -410,6 +798,65 @@ export default function DashboardsPage() {
                 <Globe className="h-4 w-4 mr-2" />
               ) : (
                 <Lock className="h-4 w-4 mr-2" />
+              )}
+              Save Changes
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Edit Dashboard Dialog */}
+      <Dialog open={!!editDashboard} onOpenChange={() => setEditDashboard(null)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Edit Dashboard</DialogTitle>
+            <DialogDescription>
+              Update the name and description of your dashboard
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <label className="text-sm font-medium">Name *</label>
+              <Input
+                placeholder="e.g., Production Metrics"
+                value={editDashboard?.name || ''}
+                onChange={(e) =>
+                  editDashboard && setEditDashboard({ ...editDashboard, name: e.target.value })
+                }
+              />
+            </div>
+            <div className="space-y-2">
+              <label className="text-sm font-medium">Description</label>
+              <Input
+                placeholder="Optional description..."
+                value={editDashboard?.description || ''}
+                onChange={(e) =>
+                  editDashboard &&
+                  setEditDashboard({ ...editDashboard, description: e.target.value })
+                }
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setEditDashboard(null)}>
+              Cancel
+            </Button>
+            <Button
+              onClick={() => {
+                if (editDashboard) {
+                  updateMutation.mutate({
+                    id: editDashboard.id,
+                    name: editDashboard.name,
+                    description: editDashboard.description,
+                  });
+                }
+              }}
+              disabled={!editDashboard?.name.trim() || updateMutation.isPending}
+            >
+              {updateMutation.isPending ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <Edit className="h-4 w-4" />
               )}
               Save Changes
             </Button>

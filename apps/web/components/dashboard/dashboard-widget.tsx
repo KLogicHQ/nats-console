@@ -72,12 +72,15 @@ export function DashboardWidget({ widget }: DashboardWidgetProps) {
     );
   }
 
+  // Helper to safely extract chart data
+  const chartData = data && 'data' in data ? (data as { data: any[] }).data : [];
+
   // Render based on widget type
   switch (widget.type) {
     case 'line-chart':
       return (
         <LineChart
-          data={data?.data || []}
+          data={chartData}
           yAxisLabel={metric === 'bytes_rate' ? 'bytes/s' : 'msg/s'}
           color="#2563eb"
           height={200}
@@ -88,7 +91,7 @@ export function DashboardWidget({ widget }: DashboardWidgetProps) {
     case 'bar-chart':
       return (
         <BarChart
-          data={data?.data || []}
+          data={chartData}
           yAxisLabel={metric === 'consumer_lag' ? 'pending' : 'value'}
           color="#16a34a"
           height={200}
@@ -97,14 +100,16 @@ export function DashboardWidget({ widget }: DashboardWidgetProps) {
       );
 
     case 'gauge':
-      const gaugeValue = data?.totalMessages || data?.avgThroughput || 0;
+      // Extract overview data for gauge
+      const overviewData = data && 'totalMessages' in data ? data : null;
+      const gaugeValue = overviewData?.totalMessages || overviewData?.avgThroughput || 0;
       const maxValue = metric === 'cpu_percent' ? 100 : gaugeValue * 2 || 100;
       return (
         <div className="h-[200px] flex items-center justify-center">
           <GaugeChart
             value={gaugeValue}
             max={maxValue}
-            label={getMetricLabel(metric)}
+            title={getMetricLabel(metric)}
             color={getGaugeColor(gaugeValue, maxValue)}
             height={180}
           />
@@ -126,7 +131,7 @@ export function DashboardWidget({ widget }: DashboardWidgetProps) {
     case 'table':
       return (
         <div className="h-[200px] overflow-auto">
-          {data?.data?.length > 0 ? (
+          {chartData.length > 0 ? (
             <table className="w-full text-sm">
               <thead>
                 <tr className="border-b">
@@ -135,7 +140,7 @@ export function DashboardWidget({ widget }: DashboardWidgetProps) {
                 </tr>
               </thead>
               <tbody>
-                {data.data.slice(0, 5).map((item: any, idx: number) => (
+                {chartData.slice(0, 5).map((item: any, idx: number) => (
                   <tr key={idx} className="border-b last:border-0">
                     <td className="py-2">{item.name}</td>
                     <td className="text-right py-2">{formatNumber(item.value)}</td>

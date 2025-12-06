@@ -9,6 +9,7 @@ interface User {
   lastName: string | null;
   avatarUrl: string | null;
   mfaEnabled?: boolean;
+  role?: string;
 }
 
 interface MfaPending {

@@ -425,7 +425,7 @@ function StreamDetailContent() {
           <div className="space-y-4 py-4">
             <div className="space-y-2">
               <label className="text-sm font-medium">Format</label>
-              <Select value={exportFormat} onValueChange={(v: 'json' | 'csv') => setExportFormat(v)}>
+              <Select value={exportFormat} onValueChange={(v) => setExportFormat(v as 'json' | 'csv')}>
                 <SelectTrigger>
                   <SelectValue />
                 </SelectTrigger>

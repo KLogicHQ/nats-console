@@ -308,7 +308,7 @@ export default function DashboardBuilderPage() {
                 Cancel
               </Button>
               <Button
-                onClick={() => saveMutation.mutate()}
+                onClick={() => saveMutation.mutate(widgets)}
                 disabled={!hasUnsavedChanges || saveMutation.isPending}
                 className={saveSuccess ? 'bg-green-600 hover:bg-green-600' : ''}
               >
@@ -591,7 +591,7 @@ export default function DashboardBuilderPage() {
             </Button>
             <Button
               onClick={() => {
-                saveMutation.mutate();
+                saveMutation.mutate(widgets);
                 setShowWidgetConfig(null);
               }}
               disabled={saveMutation.isPending}

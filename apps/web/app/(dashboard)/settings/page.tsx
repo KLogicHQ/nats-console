@@ -193,21 +193,21 @@ function SettingsPageContent() {
   const { data: ipAllowlistData, isLoading: ipAllowlistLoading } = useQuery({
     queryKey: ['ip-allowlist'],
     queryFn: () => api.settings.getIpAllowlist(),
-    enabled: user && ['owner', 'admin'].includes(user.role || ''),
+    enabled: !!user && ['owner', 'admin'].includes(user.role || ''),
   });
 
   // Fetch retention policy (admin only)
   const { data: retentionData, isLoading: retentionLoading } = useQuery({
     queryKey: ['retention-policy'],
     queryFn: () => api.settings.getRetentionPolicy(),
-    enabled: user && ['owner', 'admin'].includes(user.role || ''),
+    enabled: !!user && ['owner', 'admin'].includes(user.role || ''),
   });
 
   // Fetch compliance report (admin only)
   const { data: complianceData, isLoading: complianceLoading } = useQuery({
     queryKey: ['compliance-report'],
     queryFn: () => api.settings.getComplianceReport(),
-    enabled: user && ['owner', 'admin'].includes(user.role || ''),
+    enabled: !!user && ['owner', 'admin'].includes(user.role || ''),
   });
 
   // Initialize enterprise forms
