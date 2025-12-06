@@ -8,9 +8,9 @@ import {
   getJetStreamAccountInfo,
 } from '../../lib/nats';
 import { setClusterStatus, getClusterStatus } from '../../lib/redis';
-import { NotFoundError, ConflictError } from '../../../../shared/src/index';
-import type { NatsCluster, ClusterConnection, ClusterStatus } from '../../../../shared/src/index';
-import type { CreateClusterInput, UpdateClusterInput } from '../../../../shared/src/index';
+import { NotFoundError, ConflictError } from '@nats-console/shared';
+import type { NatsCluster, ClusterConnection, ClusterStatus } from '@nats-console/shared';
+import type { CreateClusterInput, UpdateClusterInput } from '@nats-console/shared';
 
 // ==================== Cluster CRUD ====================
 

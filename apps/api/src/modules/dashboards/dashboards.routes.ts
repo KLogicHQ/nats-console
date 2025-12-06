@@ -1,8 +1,8 @@
 import type { FastifyPluginAsync } from 'fastify';
-import { CreateDashboardSchema, UpdateDashboardSchema } from '../../../../shared/src/index';
+import { CreateDashboardSchema, UpdateDashboardSchema } from '@nats-console/shared';
 import { prisma } from '../../lib/prisma';
 import { authenticate } from '../../common/middleware/auth';
-import { NotFoundError } from '../../../../shared/src/index';
+import { NotFoundError } from '@nats-console/shared';
 
 export const dashboardRoutes: FastifyPluginAsync = async (fastify) => {
   fastify.addHook('preHandler', authenticate);

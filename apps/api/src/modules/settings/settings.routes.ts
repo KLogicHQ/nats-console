@@ -5,7 +5,7 @@ import * as argon2 from 'argon2';
 import * as archiver from 'archiver';
 import { prisma } from '../../lib/prisma';
 import { authenticate, requirePermission } from '../../common/middleware/auth';
-import { NotFoundError, ForbiddenError } from '../../../../shared/src/index';
+import { NotFoundError, ForbiddenError } from '@nats-console/shared';
 import {
   validateIpAllowlistConfig,
   invalidateIpAllowlistCache,

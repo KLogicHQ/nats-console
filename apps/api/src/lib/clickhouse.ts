@@ -1,6 +1,6 @@
 import { createClient, ClickHouseClient } from '@clickhouse/client';
 import { config } from '../config/index';
-import type { StreamMetrics, ConsumerMetrics, ClusterMetrics, AuditLog } from '../../../shared/src/index';
+import type { StreamMetrics, ConsumerMetrics, ClusterMetrics, AuditLog } from '@nats-console/shared';
 
 // Format timestamp for ClickHouse DateTime64(3)
 export function formatTimestamp(date: Date): string {

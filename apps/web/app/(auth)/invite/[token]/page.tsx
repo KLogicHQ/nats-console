@@ -1,7 +1,7 @@
 'use client';
 
-import { useState, useEffect } from 'react';
-import { useRouter, useParams } from 'next/navigation';
+import { useState } from 'react';
+import { useParams } from 'next/navigation';
 import Link from 'next/link';
 import { useQuery, useMutation } from '@tanstack/react-query';
 import { api } from '@/lib/api';
@@ -11,7 +11,6 @@ import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle }
 import { Loader2, CheckCircle2, XCircle } from 'lucide-react';
 
 export default function AcceptInvitePage() {
-  const router = useRouter();
   const params = useParams();
   const token = params.token as string;
 
@@ -22,6 +21,8 @@ export default function AcceptInvitePage() {
     confirmPassword: '',
   });
   const [error, setError] = useState('');
+  const [success, setSuccess] = useState(false);
+  const [organizationName, setOrganizationName] = useState('');
 
   const { data: inviteData, isLoading: isLoadingInvite, error: inviteError } = useQuery({
     queryKey: ['invite', token],
@@ -33,7 +34,8 @@ export default function AcceptInvitePage() {
     mutationFn: (data: { firstName: string; lastName: string; password: string }) =>
       api.invites.accept(token, data),
     onSuccess: () => {
-      router.push('/login?invited=true');
+      setOrganizationName(inviteData?.invite?.organization?.name || 'the organization');
+      setSuccess(true);
     },
     onError: (err: any) => {
       setError(err.message || 'Failed to accept invitation');
@@ -60,6 +62,30 @@ export default function AcceptInvitePage() {
       password: formData.password,
     });
   };
+
+  if (success) {
+    return (
+      <Card>
+        <CardHeader className="text-center">
+          <div className="mx-auto mb-4 h-12 w-12 rounded-full bg-green-100 dark:bg-green-900/20 flex items-center justify-center">
+            <CheckCircle2 className="h-6 w-6 text-green-600 dark:text-green-400" />
+          </div>
+          <CardTitle className="text-2xl font-bold">Welcome to {organizationName}!</CardTitle>
+          <CardDescription className="text-base">
+            Your account has been created successfully and you've joined the organization.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="text-center text-sm text-muted-foreground">
+          <p>You can now sign in with your email and password to access the dashboard.</p>
+        </CardContent>
+        <CardFooter className="flex justify-center">
+          <Link href="/login">
+            <Button>Continue to Login</Button>
+          </Link>
+        </CardFooter>
+      </Card>
+    );
+  }
 
   if (isLoadingInvite) {
     return (

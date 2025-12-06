@@ -5,7 +5,7 @@ import { prisma } from '../../lib/prisma';
 import { authenticate } from '../../common/middleware/auth';
 import { config } from '../../config/index';
 import { sendInviteEmail } from '../../lib/email';
-import { NotFoundError, ConflictError, ForbiddenError } from '../../../../shared/src/index';
+import { NotFoundError, ConflictError, ForbiddenError } from '@nats-console/shared';
 
 const CreateInviteSchema = z.object({
   email: z.string().email(),
@@ -239,9 +239,9 @@ export const inviteRoutes: FastifyPluginAsync = async (fastify) => {
       };
     }
 
-    // Create new user with bcrypt
-    const bcrypt = await import('bcrypt');
-    const passwordHash = await bcrypt.hash(body.password, 10);
+    // Create new user with argon2
+    const argon2 = await import('argon2');
+    const passwordHash = await argon2.hash(body.password);
 
     const result = await prisma.$transaction(async (tx) => {
       const user = await tx.user.create({

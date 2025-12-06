@@ -9,7 +9,7 @@ import {
   MfaLoginSchema,
   UpdateProfileSchema,
   ChangePasswordSchema,
-} from '../../../../shared/src/index';
+} from '@nats-console/shared';
 import * as authService from './auth.service';
 import { authenticate } from '../../common/middleware/auth';
 

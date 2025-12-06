@@ -1,8 +1,8 @@
 import type { FastifyPluginAsync } from 'fastify';
-import { CreateSavedQuerySchema, UpdateSavedQuerySchema } from '../../../../shared/src/index';
+import { CreateSavedQuerySchema, UpdateSavedQuerySchema } from '@nats-console/shared';
 import { prisma } from '../../lib/prisma';
 import { authenticate } from '../../common/middleware/auth';
-import { NotFoundError } from '../../../../shared/src/index';
+import { NotFoundError } from '@nats-console/shared';
 
 export const savedQueryRoutes: FastifyPluginAsync = async (fastify) => {
   fastify.addHook('preHandler', authenticate);

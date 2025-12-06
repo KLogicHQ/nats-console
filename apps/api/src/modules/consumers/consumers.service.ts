@@ -9,8 +9,8 @@ import {
   resumeConsumer as natsResumeConsumer,
   listStreams as natsListStreams,
 } from '../../lib/nats';
-import { NotFoundError } from '../../../../shared/src/index';
-import type { ConsumerInfo, CreateConsumerInput, UpdateConsumerInput } from '../../../../shared/src/index';
+import { NotFoundError } from '@nats-console/shared';
+import type { ConsumerInfo, CreateConsumerInput, UpdateConsumerInput } from '@nats-console/shared';
 
 // Extended consumer info with stream name
 export interface ConsumerInfoWithStream extends ConsumerInfo {

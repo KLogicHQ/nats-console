@@ -11,7 +11,7 @@ import {
   publishMessage as natsPublishMessage,
   deleteMessage as natsDeleteMessage,
 } from '../../lib/nats';
-import { NotFoundError } from '../../../../shared/src/index';
+import { NotFoundError } from '@nats-console/shared';
 import type {
   StreamInfo,
   StreamConfig,
@@ -20,7 +20,7 @@ import type {
   UpdateStreamInput,
   PurgeStreamInput,
   GetMessagesInput,
-} from '../../../../shared/src/index';
+} from '@nats-console/shared';
 
 // ==================== Stream Operations ====================
 

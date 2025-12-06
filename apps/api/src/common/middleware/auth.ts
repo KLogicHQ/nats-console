@@ -3,7 +3,7 @@ import * as argon2 from 'argon2';
 import { verifyToken as verifyJwtToken, getPermissionsForRole } from '../../modules/auth/auth.service';
 import { getSession, updateSessionActivity } from '../../lib/redis';
 import { prisma } from '../../lib/prisma';
-import type { JwtPayload } from '../../../../shared/src/index';
+import type { JwtPayload } from '@nats-console/shared';
 
 // Re-export verifyToken for use by other modules (e.g., websocket)
 export { verifyJwtToken as verifyToken };

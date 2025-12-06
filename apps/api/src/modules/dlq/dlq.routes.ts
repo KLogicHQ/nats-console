@@ -7,7 +7,7 @@ import {
   getStreamInfo as natsGetStreamInfo,
 } from '../../lib/nats';
 import { prisma } from '../../lib/prisma';
-import { NotFoundError } from '../../../../shared/src/index';
+import { NotFoundError } from '@nats-console/shared';
 
 // Schema for replaying DLQ messages
 const ReplayDlqMessageSchema = z.object({

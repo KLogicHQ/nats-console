@@ -7,7 +7,7 @@ import {
   UpdateNotificationChannelSchema,
   NotFoundError,
   IncidentStatusSchema,
-} from '../../../../shared/src/index';
+} from '@nats-console/shared';
 import { prisma } from '../../lib/prisma';
 import { authenticate } from '../../common/middleware/auth';
 import { IncidentStatus } from '@prisma/client';

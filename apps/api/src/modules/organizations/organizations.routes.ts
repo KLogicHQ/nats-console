@@ -1,8 +1,8 @@
 import type { FastifyPluginAsync } from 'fastify';
-import { CreateOrganizationSchema, UpdateOrganizationSchema } from '../../../../shared/src/index';
+import { CreateOrganizationSchema, UpdateOrganizationSchema } from '@nats-console/shared';
 import { prisma } from '../../lib/prisma';
 import { authenticate } from '../../common/middleware/auth';
-import { NotFoundError } from '../../../../shared/src/index';
+import { NotFoundError } from '@nats-console/shared';
 
 export const organizationRoutes: FastifyPluginAsync = async (fastify) => {
   fastify.addHook('preHandler', authenticate);
@@ -134,4 +134,115 @@ export const organizationRoutes: FastifyPluginAsync = async (fastify) => {
       })),
     };
   });
+
+  // PATCH /organizations/:id/members/:memberId - Update member role
+  fastify.patch<{ Params: { id: string; memberId: string } }>(
+    '/:id/members/:memberId',
+    async (request, reply) => {
+      const { role } = request.body as { role: string };
+
+      // Verify requester is owner or admin
+      const requesterMembership = await prisma.organizationMember.findFirst({
+        where: {
+          orgId: request.params.id,
+          userId: request.user!.sub,
+          role: { in: ['owner', 'admin'] },
+        },
+      });
+
+      if (!requesterMembership) {
+        return reply.status(403).send({
+          error: { code: 'FORBIDDEN', message: 'You do not have permission to update member roles' },
+        });
+      }
+
+      // Find the target member
+      const targetMember = await prisma.organizationMember.findUnique({
+        where: { id: request.params.memberId },
+      });
+
+      if (!targetMember || targetMember.orgId !== request.params.id) {
+        throw new NotFoundError('Member', request.params.memberId);
+      }
+
+      // Prevent modifying own role
+      if (targetMember.userId === request.user!.sub) {
+        return reply.status(400).send({
+          error: { code: 'INVALID_OPERATION', message: 'You cannot change your own role' },
+        });
+      }
+
+      // Validate role
+      if (!['owner', 'admin', 'member', 'viewer'].includes(role)) {
+        return reply.status(400).send({
+          error: { code: 'INVALID_ROLE', message: 'Invalid role specified' },
+        });
+      }
+
+      const updatedMember = await prisma.organizationMember.update({
+        where: { id: request.params.memberId },
+        data: { role },
+        include: { user: true },
+      });
+
+      return {
+        member: {
+          id: updatedMember.id,
+          userId: updatedMember.userId,
+          role: updatedMember.role,
+          joinedAt: updatedMember.joinedAt,
+          user: {
+            id: updatedMember.user.id,
+            email: updatedMember.user.email,
+            firstName: updatedMember.user.firstName,
+            lastName: updatedMember.user.lastName,
+            avatarUrl: updatedMember.user.avatarUrl,
+          },
+        },
+      };
+    }
+  );
+
+  // DELETE /organizations/:id/members/:memberId - Remove member
+  fastify.delete<{ Params: { id: string; memberId: string } }>(
+    '/:id/members/:memberId',
+    async (request, reply) => {
+      // Verify requester is owner or admin
+      const requesterMembership = await prisma.organizationMember.findFirst({
+        where: {
+          orgId: request.params.id,
+          userId: request.user!.sub,
+          role: { in: ['owner', 'admin'] },
+        },
+      });
+
+      if (!requesterMembership) {
+        return reply.status(403).send({
+          error: { code: 'FORBIDDEN', message: 'You do not have permission to remove members' },
+        });
+      }
+
+      // Find the target member
+      const targetMember = await prisma.organizationMember.findUnique({
+        where: { id: request.params.memberId },
+      });
+
+      if (!targetMember || targetMember.orgId !== request.params.id) {
+        throw new NotFoundError('Member', request.params.memberId);
+      }
+
+      // Prevent removing self
+      if (targetMember.userId === request.user!.sub) {
+        return reply.status(400).send({
+          error: { code: 'INVALID_OPERATION', message: 'You cannot remove yourself from the organization' },
+        });
+      }
+
+      await prisma.organizationMember.delete({
+        where: { id: request.params.memberId },
+      });
+
+      return reply.status(204).send();
+    }
+  );
 };

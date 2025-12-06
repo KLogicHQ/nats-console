@@ -11,8 +11,8 @@ import {
   NotFoundError,
   ConflictError,
   ValidationError,
-} from '../../../../shared/src/index';
-import type { User, AuthTokens, JwtPayload } from '../../../../shared/src/index';
+} from '@nats-console/shared';
+import type { User, AuthTokens, JwtPayload } from '@nats-console/shared';
 
 const JWT_SECRET = new TextEncoder().encode(config.JWT_SECRET);
 

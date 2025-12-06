@@ -1,5 +1,5 @@
 import type { FastifyPluginAsync } from 'fastify';
-import { MetricsQuerySchema, AuditLogQuerySchema } from '../../../../shared/src/index';
+import { MetricsQuerySchema, AuditLogQuerySchema } from '@nats-console/shared';
 import {
   queryStreamMetrics,
   queryConsumerMetrics,

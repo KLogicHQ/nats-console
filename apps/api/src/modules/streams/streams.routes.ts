@@ -5,7 +5,7 @@ import {
   PurgeStreamSchema,
   GetMessagesSchema,
   PublishMessageSchema,
-} from '../../../../shared/src/index';
+} from '@nats-console/shared';
 import * as streamService from './streams.service';
 import { authenticate } from '../../common/middleware/auth';
 

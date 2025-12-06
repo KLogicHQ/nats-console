@@ -12,7 +12,7 @@ import {
   StoredMsg,
 } from 'nats';
 import { config } from '../config/index';
-import type { EncryptedCredentials, TlsConfig } from '../../../shared/src/index';
+import type { EncryptedCredentials, TlsConfig } from '@nats-console/shared';
 
 // Connection pool for managed clusters
 const connectionPool = new Map<string, NatsConnection>();

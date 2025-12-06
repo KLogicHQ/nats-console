@@ -3,7 +3,7 @@ import { z } from 'zod';
 import { queryAuditLogs } from '../../lib/clickhouse';
 import { authenticate } from '../../common/middleware/auth';
 import { hasPermission } from '../auth/auth.service';
-import { ForbiddenError } from '../../../../shared/src/index';
+import { ForbiddenError } from '@nats-console/shared';
 
 const QueryLogsSchema = z.object({
   from: z.string().datetime().optional(),

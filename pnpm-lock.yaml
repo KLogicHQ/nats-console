@@ -38,6 +38,9 @@ importers:
       '@fastify/websocket':
         specifier: ^11.0.1
         version: 11.2.0
+      '@nats-console/shared':
+        specifier: workspace:*
+        version: link:../shared
       '@prisma/client':
         specifier: ^6.0.1
         version: 6.19.0(prisma@6.19.0(typescript@5.9.3))(typescript@5.9.3)
@@ -87,6 +90,9 @@ importers:
       '@types/ws':
         specifier: ^8.5.13
         version: 8.18.1
+      esbuild:
+        specifier: ^0.27.1
+        version: 0.27.1
       prisma:
         specifier: ^6.0.1
         version: 6.19.0(typescript@5.9.3)
@@ -255,6 +261,9 @@ importers:
       '@types/node-cron':
         specifier: ^3.0.11
         version: 3.0.11
+      esbuild:
+        specifier: ^0.27.1
+        version: 0.27.1
       prisma:
         specifier: ^6.0.1
         version: 6.19.0(typescript@5.9.3)

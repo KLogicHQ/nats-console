@@ -1,5 +1,5 @@
 import type { FastifyPluginAsync } from 'fastify';
-import { CreateConsumerSchema, UpdateConsumerSchema } from '../../../../shared/src/index';
+import { CreateConsumerSchema, UpdateConsumerSchema } from '@nats-console/shared';
 import * as consumerService from './consumers.service';
 import { authenticate } from '../../common/middleware/auth';
 

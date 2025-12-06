@@ -75,7 +75,7 @@ const tabs = [
 ];
 
 function SettingsPageContent() {
-  const { user, setUser } = useAuthStore();
+  const { user, setUser, orgId } = useAuthStore();
   const queryClient = useQueryClient();
   const searchParams = useSearchParams();
   const router = useRouter();
@@ -146,6 +146,8 @@ function SettingsPageContent() {
     messageSamplesRetentionDays: 7,
   });
   const [showDeleteAccountDialog, setShowDeleteAccountDialog] = useState(false);
+  const [removeMemberId, setRemoveMemberId] = useState<string | null>(null);
+  const [editingMember, setEditingMember] = useState<{ id: string; role: string } | null>(null);
 
   // Initialize form with user data
   useEffect(() => {
@@ -179,6 +181,13 @@ function SettingsPageContent() {
       });
     }
   }, [preferencesData]);
+
+  // Fetch organization members
+  const { data: membersData, isLoading: membersLoading } = useQuery({
+    queryKey: ['organization-members', orgId],
+    queryFn: () => api.organizations.getMembers(orgId!),
+    enabled: !!orgId,
+  });
 
   // Fetch pending invites
   const { data: invitesData } = useQuery({
@@ -297,6 +306,24 @@ function SettingsPageContent() {
     mutationFn: (id: string) => api.invites.revoke(id),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['invites'] });
+    },
+  });
+
+  // Member management mutations
+  const removeMemberMutation = useMutation({
+    mutationFn: (memberId: string) => api.organizations.removeMember(orgId!, memberId),
+    onSuccess: () => {
+      setRemoveMemberId(null);
+      queryClient.invalidateQueries({ queryKey: ['organization-members', orgId] });
+    },
+  });
+
+  const updateMemberRoleMutation = useMutation({
+    mutationFn: ({ memberId, role }: { memberId: string; role: string }) =>
+      api.organizations.updateMemberRole(orgId!, memberId, role),
+    onSuccess: () => {
+      setEditingMember(null);
+      queryClient.invalidateQueries({ queryKey: ['organization-members', orgId] });
     },
   });
 
@@ -539,23 +566,84 @@ function SettingsPageContent() {
                   </div>
                 </CardHeader>
                 <CardContent>
-                  <div className="space-y-3">
-                    {/* Current user */}
-                    <div className="flex items-center justify-between p-3 border rounded-lg">
-                      <div className="flex items-center gap-3">
-                        <div className="h-10 w-10 rounded-full bg-primary/10 flex items-center justify-center">
-                          <User className="h-5 w-5 text-primary" />
-                        </div>
-                        <div>
-                          <p className="font-medium">{user?.firstName} {user?.lastName}</p>
-                          <p className="text-sm text-muted-foreground">{user?.email}</p>
-                        </div>
-                      </div>
-                      <span className="px-2 py-1 text-xs bg-primary/10 text-primary rounded-full">
-                        Owner
-                      </span>
+                  {membersLoading ? (
+                    <div className="flex items-center justify-center py-8">
+                      <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
                     </div>
-                  </div>
+                  ) : membersData?.members && membersData.members.length > 0 ? (
+                    <div className="space-y-3">
+                      {membersData.members.map((member) => {
+                        const isCurrentUser = member.userId === user?.id;
+                        const canManage = ['owner', 'admin'].includes(user?.role || '') && !isCurrentUser;
+
+                        return (
+                          <div key={member.id} className="flex items-center justify-between p-3 border rounded-lg">
+                            <div className="flex items-center gap-3">
+                              <div className="h-10 w-10 rounded-full bg-primary/10 flex items-center justify-center">
+                                <User className="h-5 w-5 text-primary" />
+                              </div>
+                              <div>
+                                <p className="font-medium">
+                                  {member.user.firstName} {member.user.lastName}
+                                  {isCurrentUser && (
+                                    <span className="ml-2 text-xs text-muted-foreground">(you)</span>
+                                  )}
+                                </p>
+                                <p className="text-sm text-muted-foreground">{member.user.email}</p>
+                              </div>
+                            </div>
+                            <div className="flex items-center gap-2">
+                              {canManage ? (
+                                <>
+                                  <Select
+                                    value={member.role}
+                                    onValueChange={(role) =>
+                                      updateMemberRoleMutation.mutate({ memberId: member.id, role })
+                                    }
+                                    disabled={updateMemberRoleMutation.isPending}
+                                  >
+                                    <SelectTrigger className="w-28 h-8">
+                                      <SelectValue />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                      <SelectItem value="owner">Owner</SelectItem>
+                                      <SelectItem value="admin">Admin</SelectItem>
+                                      <SelectItem value="member">Member</SelectItem>
+                                      <SelectItem value="viewer">Viewer</SelectItem>
+                                    </SelectContent>
+                                  </Select>
+                                  <Button
+                                    variant="ghost"
+                                    size="icon"
+                                    onClick={() => setRemoveMemberId(member.id)}
+                                    disabled={removeMemberMutation.isPending}
+                                  >
+                                    <Trash2 className="h-4 w-4 text-destructive" />
+                                  </Button>
+                                </>
+                              ) : (
+                                <span className={`px-2 py-1 text-xs rounded-full capitalize ${
+                                  member.role === 'owner'
+                                    ? 'bg-primary/10 text-primary'
+                                    : member.role === 'admin'
+                                    ? 'bg-blue-100 text-blue-700'
+                                    : 'bg-gray-100 text-gray-700'
+                                }`}>
+                                  {member.role}
+                                </span>
+                              )}
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  ) : (
+                    <div className="border rounded-lg p-8 text-center text-muted-foreground">
+                      <Users className="h-12 w-12 mx-auto mb-4 opacity-50" />
+                      <p>No team members yet</p>
+                      <p className="text-sm">Invite team members to collaborate</p>
+                    </div>
+                  )}
                 </CardContent>
               </Card>
 
@@ -1750,6 +1838,30 @@ function SettingsPageContent() {
           )}
         </div>
       </div>
+
+      {/* Remove Member Dialog */}
+      <AlertDialog open={!!removeMemberId} onOpenChange={(open) => !open && setRemoveMemberId(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Remove Team Member</AlertDialogTitle>
+            <AlertDialogDescription>
+              Are you sure you want to remove this member from the organization? They will lose access to all organization resources.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => removeMemberId && removeMemberMutation.mutate(removeMemberId)}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              {removeMemberMutation.isPending ? (
+                <Loader2 className="h-4 w-4 animate-spin mr-2" />
+              ) : null}
+              Remove Member
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       {/* Delete Account Dialog */}
       <AlertDialog open={showDeleteAccountDialog} onOpenChange={setShowDeleteAccountDialog}>

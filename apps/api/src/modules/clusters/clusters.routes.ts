@@ -1,5 +1,5 @@
 import type { FastifyPluginAsync } from 'fastify';
-import { CreateClusterSchema, UpdateClusterSchema } from '../../../../shared/src/index';
+import { CreateClusterSchema, UpdateClusterSchema } from '@nats-console/shared';
 import * as clusterService from './clusters.service';
 import { authenticate, requirePermission } from '../../common/middleware/auth';
 

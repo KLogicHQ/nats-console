@@ -512,6 +512,39 @@ export const savedQueries = {
     }),
 };
 
+// Organizations API
+export const organizations = {
+  list: () => request<{ organizations: any[] }>('/organizations'),
+
+  get: (id: string) => request<{ organization: any }>(`/organizations/${id}`),
+
+  getMembers: (id: string) =>
+    request<{
+      members: Array<{
+        id: string;
+        userId: string;
+        role: string;
+        joinedAt: string;
+        user: {
+          id: string;
+          email: string;
+          firstName: string;
+          lastName: string;
+          avatarUrl?: string;
+        };
+      }>;
+    }>(`/organizations/${id}/members`),
+
+  removeMember: (orgId: string, memberId: string) =>
+    request(`/organizations/${orgId}/members/${memberId}`, { method: 'DELETE' }),
+
+  updateMemberRole: (orgId: string, memberId: string, role: string) =>
+    request<{ member: any }>(`/organizations/${orgId}/members/${memberId}`, {
+      method: 'PATCH',
+      body: { role },
+    }),
+};
+
 // Invites API
 export const invites = {
   list: () => request<{ invites: any[] }>('/invites'),
@@ -735,6 +768,7 @@ export const api = {
   alerts,
   dashboards,
   savedQueries,
+  organizations,
   invites,
   settings,
   mfa,
