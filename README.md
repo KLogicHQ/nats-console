@@ -128,6 +128,11 @@ Create and manage alert rules with golden templates for common monitoring scenar
 
 ![Alert Rules](screenshots/nats-alert-rules-10.jpg)
 
+### Custom Dashboards
+Build custom dashboards with drag-and-drop widgets for personalized monitoring views.
+
+![Custom Dashboard](screenshots/nats-custom-dashboard-11.jpg)
+
 ---
 
 ## Tech Stack
@@ -154,14 +159,56 @@ Choose the deployment method that fits your needs:
 
 ---
 
+## Container Images
+
+Pre-built container images are available on GitHub Container Registry (GHCR):
+
+| Image | Description |
+|-------|-------------|
+| `ghcr.io/klogic/nats-console` | All-in-one image with all services |
+| `ghcr.io/klogic/nats-console-api` | API service only |
+| `ghcr.io/klogic/nats-console-web` | Web frontend only |
+| `ghcr.io/klogic/nats-console-workers` | Background workers only |
+
+### Pull from GHCR
+
+```bash
+# Pull latest all-in-one image
+docker pull ghcr.io/klogic/nats-console:latest
+
+# Pull specific version
+docker pull ghcr.io/klogic/nats-console:1.0.0
+
+# Pull individual services
+docker pull ghcr.io/klogic/nats-console-api:latest
+docker pull ghcr.io/klogic/nats-console-web:latest
+docker pull ghcr.io/klogic/nats-console-workers:latest
+```
+
+---
+
 ## 1. All-in-One Docker Image
 
 The simplest way to try NATS Console. A single container with all services embedded.
 
-### Quick Start
+### Quick Start (from GHCR)
 
 ```bash
-# Build the image
+# Run the container from GHCR
+docker run -d \
+  --name nats-console \
+  -p 3000:3000 \
+  -p 3001:3001 \
+  -p 4222:4222 \
+  -p 8222:8222 \
+  -e JWT_SECRET="your-secret-key-change-in-production" \
+  ghcr.io/klogic/nats-console:latest
+```
+
+### Build Locally (Optional)
+
+```bash
+# Build the image locally
 docker build -t nats-console:allinone .
 
 # Run the container
@@ -197,7 +244,7 @@ docker run -d \
   -v nats-console-clickhouse:/var/lib/clickhouse \
   -v nats-console-nats:/var/lib/nats \
   -e JWT_SECRET="your-secret-key-change-in-production" \
-  nats-console:allinone
+  ghcr.io/klogic/nats-console:latest
 ```
 
 ---

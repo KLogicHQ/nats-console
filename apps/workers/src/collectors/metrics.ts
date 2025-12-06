@@ -4,7 +4,51 @@ import { PrismaClient } from '@prisma/client';
 import Redis from 'ioredis';
 import pino from 'pino';
 import { config } from '../config';
-import type { StreamMetrics, ConsumerMetrics, ClusterMetrics } from '../../../shared/src/index';
+
+// Define local types to avoid cross-package rootDir issues
+interface StreamMetrics {
+  clusterId: string;
+  streamName: string;
+  timestamp: Date;
+  messagesTotal: number;
+  bytesTotal: number;
+  messagesRate: number;
+  bytesRate: number;
+  consumerCount: number;
+  firstSeq: number;
+  lastSeq: number;
+  subjects: string[];
+}
+
+interface ConsumerMetrics {
+  clusterId: string;
+  streamName: string;
+  consumerName: string;
+  timestamp: Date;
+  pendingCount: number;
+  ackPending: number;
+  redelivered: number;
+  waiting: number;
+  deliveredRate: number;
+  ackRate: number;
+  lag: number;
+}
+
+interface ClusterMetrics {
+  clusterId: string;
+  serverId: string;
+  serverName: string;
+  timestamp: Date;
+  cpuPercent: number;
+  memoryBytes: number;
+  connections: number;
+  subscriptions: number;
+  slowConsumers: number;
+  inMsgs: number;
+  outMsgs: number;
+  inBytes: number;
+  outBytes: number;
+}
 
 const logger = pino({ name: 'metrics-collector' });
 

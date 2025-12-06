@@ -9,6 +9,10 @@ interface SelectContextValue {
   onValueChange: (value: string) => void;
   open: boolean;
   setOpen: (open: boolean) => void;
+  displayValue: string;
+  setDisplayValue: (value: string) => void;
+  registerItem: (value: string, label: string) => void;
+  itemLabels: Map<string, string>;
 }
 
 const SelectContext = React.createContext<SelectContextValue | null>(null);
@@ -21,9 +25,38 @@ interface SelectProps {
 
 export function Select({ value, onValueChange, children }: SelectProps) {
   const [open, setOpen] = React.useState(false);
+  const [displayValue, setDisplayValue] = React.useState('');
+  const itemLabelsRef = React.useRef<Map<string, string>>(new Map());
+
+  const registerItem = React.useCallback((itemValue: string, label: string) => {
+    itemLabelsRef.current.set(itemValue, label);
+    // Update display value if this is the currently selected item
+    if (itemValue === value) {
+      setDisplayValue(label);
+    }
+  }, [value]);
+
+  // Update display value when value changes
+  React.useEffect(() => {
+    const label = itemLabelsRef.current.get(value);
+    if (label) {
+      setDisplayValue(label);
+    } else {
+      setDisplayValue('');
+    }
+  }, [value]);
 
   return (
-    <SelectContext.Provider value={{ value, onValueChange, open, setOpen }}>
+    <SelectContext.Provider value={{
+      value,
+      onValueChange,
+      open,
+      setOpen,
+      displayValue,
+      setDisplayValue,
+      registerItem,
+      itemLabels: itemLabelsRef.current
+    }}>
       <div className="relative">{children}</div>
     </SelectContext.Provider>
   );
@@ -61,9 +94,11 @@ export function SelectValue({ placeholder }: SelectValueProps) {
   const context = React.useContext(SelectContext);
   if (!context) throw new Error('SelectValue must be used within Select');
 
+  const showPlaceholder = !context.value || !context.displayValue;
+
   return (
-    <span className={!context.value ? 'text-muted-foreground' : ''}>
-      {context.value || placeholder}
+    <span className={showPlaceholder ? 'text-muted-foreground' : ''}>
+      {context.displayValue || placeholder}
     </span>
   );
 }
@@ -76,7 +111,11 @@ export function SelectContent({ className, children, ...props }: SelectContentPr
   const context = React.useContext(SelectContext);
   if (!context) throw new Error('SelectContent must be used within Select');
 
-  if (!context.open) return null;
+  // Always render children in a hidden container to allow item registration
+  // This fixes the issue where items don't register until dropdown is opened
+  if (!context.open) {
+    return <div className="sr-only" aria-hidden="true">{children}</div>;
+  }
 
   return (
     <>
@@ -105,6 +144,27 @@ export function SelectItem({ className, value, children, ...props }: SelectItemP
 
   const isSelected = context.value === value;
 
+  // Extract text content from children for display
+  const getTextContent = (node: React.ReactNode): string => {
+    if (typeof node === 'string') return node;
+    if (typeof node === 'number') return String(node);
+    if (Array.isArray(node)) return node.map(getTextContent).join('');
+    if (React.isValidElement(node)) {
+      const props = node.props as { children?: React.ReactNode };
+      if (props.children) {
+        return getTextContent(props.children);
+      }
+    }
+    return '';
+  };
+
+  const label = getTextContent(children);
+
+  // Register this item's label on mount and when label changes
+  React.useEffect(() => {
+    context.registerItem(value, label);
+  }, [value, label, context.registerItem]);
+
   return (
     <div
       className={cn(
@@ -114,6 +174,7 @@ export function SelectItem({ className, value, children, ...props }: SelectItemP
       )}
       onClick={() => {
         context.onValueChange(value);
+        context.setDisplayValue(label);
         context.setOpen(false);
       }}
       {...props}

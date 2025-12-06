@@ -669,72 +669,116 @@ export const alertRoutes: FastifyPluginAsync = async (fastify) => {
     }
   });
 
+  // Simple metrics that aggregate across all streams/consumers
+  const SIMPLE_METRICS = ['consumer_lag', 'message_rate', 'stream_size', 'pending_count', 'ack_rate', 'bytes_rate', 'redelivered_count'];
+
+  // Helper to get simple metric query
+  const getSimpleMetricQuery = (metric: string, aggregation: string, clusterId: string | null): string | null => {
+    const clusterCondition = clusterId ? 'AND cluster_id = {clusterId:UUID}' : '';
+    switch (metric) {
+      case 'consumer_lag':
+      case 'pending_count':
+        return `SELECT ${aggregation}(lag) as value FROM consumer_metrics WHERE timestamp >= {from:DateTime64(3)} AND timestamp <= {to:DateTime64(3)} ${clusterCondition}`;
+      case 'message_rate':
+        return `SELECT ${aggregation}(messages_rate) as value FROM stream_metrics WHERE timestamp >= {from:DateTime64(3)} AND timestamp <= {to:DateTime64(3)} ${clusterCondition}`;
+      case 'bytes_rate':
+        return `SELECT ${aggregation}(bytes_rate) as value FROM stream_metrics WHERE timestamp >= {from:DateTime64(3)} AND timestamp <= {to:DateTime64(3)} ${clusterCondition}`;
+      case 'stream_size':
+        return `SELECT ${aggregation}(bytes_total) as value FROM stream_metrics WHERE timestamp >= {from:DateTime64(3)} AND timestamp <= {to:DateTime64(3)} ${clusterCondition}`;
+      case 'ack_rate':
+        return `SELECT ${aggregation}(ack_rate) as value FROM consumer_metrics WHERE timestamp >= {from:DateTime64(3)} AND timestamp <= {to:DateTime64(3)} ${clusterCondition}`;
+      case 'redelivered_count':
+        return `SELECT ${aggregation}(redelivered) as value FROM consumer_metrics WHERE timestamp >= {from:DateTime64(3)} AND timestamp <= {to:DateTime64(3)} ${clusterCondition}`;
+      default:
+        return null;
+    }
+  };
+
   // POST /alerts/test - Test alert rule evaluation
   fastify.post<{ Body: z.infer<typeof CreateAlertRuleSchema> }>('/test', async (request) => {
     const body = CreateAlertRuleSchema.parse(request.body);
     const ch = getClickHouseClient();
 
     const { metric, aggregation, window } = body.condition;
-    const parts = metric.split('.');
-    const metricType = parts[0];
-
     const windowStart = new Date(Date.now() - window * 1000);
     const windowEnd = new Date();
 
     try {
       let metricValue: number | null = null;
 
-      if (metricType === 'stream' && parts.length >= 3) {
-        const streamName = parts[1];
-        const metricName = parts[2];
+      // Check if it's a simple metric first
+      if (SIMPLE_METRICS.includes(metric)) {
+        const query = getSimpleMetricQuery(metric, aggregation, body.clusterId || null);
+        if (query) {
+          const result = await ch.query({
+            query,
+            query_params: {
+              clusterId: body.clusterId,
+              from: windowStart.toISOString(),
+              to: windowEnd.toISOString(),
+            },
+            format: 'JSONEachRow',
+          });
+          const rows = await result.json() as { value: number }[];
+          metricValue = rows[0]?.value ?? null;
+        }
+      } else {
+        // Handle complex metric names (stream.NAME.metric or consumer.STREAM.NAME.metric)
+        const parts = metric.split('.');
+        const metricType = parts[0];
 
-        const result = await ch.query({
-          query: `
-            SELECT ${aggregation}(${metricName}) as value
-            FROM stream_metrics
-            WHERE stream_name = {streamName:String}
-              ${body.clusterId ? 'AND cluster_id = {clusterId:UUID}' : ''}
-              AND timestamp >= {from:DateTime64(3)}
-              AND timestamp <= {to:DateTime64(3)}
-          `,
-          query_params: {
-            streamName,
-            clusterId: body.clusterId,
-            from: windowStart.toISOString(),
-            to: windowEnd.toISOString(),
-          },
-          format: 'JSONEachRow',
-        });
+        if (metricType === 'stream' && parts.length >= 3) {
+          const streamName = parts[1];
+          const metricName = parts[2];
 
-        const rows = await result.json() as { value: number }[];
-        metricValue = rows[0]?.value ?? null;
-      } else if (metricType === 'consumer' && parts.length >= 4) {
-        const streamName = parts[1];
-        const consumerName = parts[2];
-        const metricName = parts[3];
+          const result = await ch.query({
+            query: `
+              SELECT ${aggregation}(${metricName}) as value
+              FROM stream_metrics
+              WHERE stream_name = {streamName:String}
+                ${body.clusterId ? 'AND cluster_id = {clusterId:UUID}' : ''}
+                AND timestamp >= {from:DateTime64(3)}
+                AND timestamp <= {to:DateTime64(3)}
+            `,
+            query_params: {
+              streamName,
+              clusterId: body.clusterId,
+              from: windowStart.toISOString(),
+              to: windowEnd.toISOString(),
+            },
+            format: 'JSONEachRow',
+          });
 
-        const result = await ch.query({
-          query: `
-            SELECT ${aggregation}(${metricName}) as value
-            FROM consumer_metrics
-            WHERE stream_name = {streamName:String}
-              AND consumer_name = {consumerName:String}
-              ${body.clusterId ? 'AND cluster_id = {clusterId:UUID}' : ''}
-              AND timestamp >= {from:DateTime64(3)}
-              AND timestamp <= {to:DateTime64(3)}
-          `,
-          query_params: {
-            streamName,
-            consumerName,
-            clusterId: body.clusterId,
-            from: windowStart.toISOString(),
-            to: windowEnd.toISOString(),
-          },
-          format: 'JSONEachRow',
-        });
+          const rows = await result.json() as { value: number }[];
+          metricValue = rows[0]?.value ?? null;
+        } else if (metricType === 'consumer' && parts.length >= 4) {
+          const streamName = parts[1];
+          const consumerName = parts[2];
+          const metricName = parts[3];
 
-        const rows = await result.json() as { value: number }[];
-        metricValue = rows[0]?.value ?? null;
+          const result = await ch.query({
+            query: `
+              SELECT ${aggregation}(${metricName}) as value
+              FROM consumer_metrics
+              WHERE stream_name = {streamName:String}
+                AND consumer_name = {consumerName:String}
+                ${body.clusterId ? 'AND cluster_id = {clusterId:UUID}' : ''}
+                AND timestamp >= {from:DateTime64(3)}
+                AND timestamp <= {to:DateTime64(3)}
+            `,
+            query_params: {
+              streamName,
+              consumerName,
+              clusterId: body.clusterId,
+              from: windowStart.toISOString(),
+              to: windowEnd.toISOString(),
+            },
+            format: 'JSONEachRow',
+          });
+
+          const rows = await result.json() as { value: number }[];
+          metricValue = rows[0]?.value ?? null;
+        }
       }
 
       if (metricValue === null) {

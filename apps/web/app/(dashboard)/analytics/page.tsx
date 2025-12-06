@@ -10,6 +10,18 @@ import { LineChart, BarChart, MultiLineChart } from '@/components/charts';
 import { formatBytes, formatNumber } from '@nats-console/shared';
 import { useClusterStore } from '@/stores/cluster';
 
+// Local formatting helpers
+function formatThroughput(value: number): string {
+  return `${formatNumber(value)}/s`;
+}
+
+function formatLatency(ms: number): string {
+  if (ms >= 1000) {
+    return `${(ms / 1000).toFixed(2)}s`;
+  }
+  return `${formatNumber(ms)}ms`;
+}
+
 export default function AnalyticsPage() {
   const { selectedClusterId, setSelectedClusterId } = useClusterStore();
   const [timeRange, setTimeRange] = useState('24h');
@@ -117,9 +129,9 @@ export default function AnalyticsPage() {
         case 'bytes':
           return formatBytes(value);
         case 'throughput':
-          return `${formatNumber(value)}/s`;
+          return formatThroughput(value);
         case 'latency':
-          return `${value.toFixed(2)}ms`;
+          return formatLatency(value);
         default:
           return formatNumber(value);
       }

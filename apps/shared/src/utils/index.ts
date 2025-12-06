@@ -89,7 +89,7 @@ export function parseBytes(str: string): number {
 
 // ==================== Number Formatting ====================
 
-export function formatNumber(num: number): string {
+export function formatNumber(num: number, decimals?: number): string {
   if (num >= 1_000_000_000) {
     return `${(num / 1_000_000_000).toFixed(1)}B`;
   }
@@ -99,11 +99,37 @@ export function formatNumber(num: number): string {
   if (num >= 1_000) {
     return `${(num / 1_000).toFixed(1)}K`;
   }
-  return num.toString();
+  // For numbers less than 1000, apply smart decimal formatting
+  if (decimals !== undefined) {
+    return num.toFixed(decimals);
+  }
+  // Auto-determine decimal places based on number size
+  if (num === 0) return '0';
+  if (num >= 100) return num.toFixed(0);
+  if (num >= 10) return num.toFixed(1);
+  if (num >= 1) return num.toFixed(2);
+  if (num >= 0.1) return num.toFixed(2);
+  if (num >= 0.01) return num.toFixed(3);
+  return num.toFixed(4);
 }
 
 export function formatRate(rate: number, unit = '/s'): string {
   return `${formatNumber(rate)}${unit}`;
+}
+
+export function formatThroughput(value: number): string {
+  return `${formatNumber(value)}/s`;
+}
+
+export function formatLatency(ms: number): string {
+  if (ms >= 1000) {
+    return `${(ms / 1000).toFixed(2)}s`;
+  }
+  return `${formatNumber(ms)}ms`;
+}
+
+export function formatPercent(value: number, decimals = 1): string {
+  return `${value.toFixed(decimals)}%`;
 }
 
 // ==================== String Utilities ====================

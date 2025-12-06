@@ -3,7 +3,8 @@ import { createClient, ClickHouseClient } from '@clickhouse/client';
 import Redis from 'ioredis';
 import pino from 'pino';
 import { config } from '../config';
-import type { AlertSeverity } from '../../../shared/src/index';
+
+type AlertSeverity = 'critical' | 'warning' | 'info';
 
 const ALERTS_CHANNEL = 'alerts';
 
@@ -169,14 +170,20 @@ export class AlertProcessor {
   private async getMetricValue(rule: AlertRule): Promise<number | null> {
     const { metric, aggregation, window } = rule.condition;
 
-    // Parse metric name (e.g., "stream.ORDERS.messages_rate" or "consumer.ORDERS.processor.lag")
-    const parts = metric.split('.');
-    const metricType = parts[0];
-
     const windowStart = new Date(Date.now() - window * 1000);
     const windowEnd = new Date();
 
     try {
+      // Handle simple metric names (used by UI)
+      // These aggregate across all streams/consumers in the cluster
+      if (this.isSimpleMetric(metric)) {
+        return this.getSimpleMetricValue(metric, aggregation, rule.clusterId, windowStart, windowEnd);
+      }
+
+      // Handle complex metric names (stream.NAME.metric or consumer.STREAM.NAME.metric)
+      const parts = metric.split('.');
+      const metricType = parts[0];
+
       if (metricType === 'stream' && parts.length >= 3) {
         const streamName = parts[1];
         const metricName = parts[2];
@@ -199,7 +206,7 @@ export class AlertProcessor {
           format: 'JSONEachRow',
         });
 
-        const rows = await result.json<{ value: number }[]>();
+        const rows = await result.json() as Array<{ value: number }>;
         return rows[0]?.value ?? null;
       }
 
@@ -228,7 +235,7 @@ export class AlertProcessor {
           format: 'JSONEachRow',
         });
 
-        const rows = await result.json<{ value: number }[]>();
+        const rows = await result.json() as Array<{ value: number }>;
         return rows[0]?.value ?? null;
       }
     } catch (err) {
@@ -236,6 +243,124 @@ export class AlertProcessor {
     }
 
     return null;
+  }
+
+  // Simple metrics used by UI that aggregate across all streams/consumers
+  private isSimpleMetric(metric: string): boolean {
+    const simpleMetrics = [
+      'consumer_lag',
+      'message_rate',
+      'stream_size',
+      'pending_count',
+      'ack_rate',
+      'bytes_rate',
+      'redelivered_count',
+    ];
+    return simpleMetrics.includes(metric);
+  }
+
+  private async getSimpleMetricValue(
+    metric: string,
+    aggregation: string,
+    clusterId: string | null,
+    windowStart: Date,
+    windowEnd: Date
+  ): Promise<number | null> {
+    const clusterCondition = clusterId ? 'AND cluster_id = {clusterId:UUID}' : '';
+    const params: Record<string, unknown> = {
+      clusterId,
+      from: windowStart.toISOString(),
+      to: windowEnd.toISOString(),
+    };
+
+    try {
+      let query: string;
+
+      switch (metric) {
+        case 'consumer_lag':
+        case 'pending_count':
+          // Sum of all consumer lag/pending across the cluster
+          query = `
+            SELECT ${aggregation}(lag) as value
+            FROM consumer_metrics
+            WHERE timestamp >= {from:DateTime64(3)}
+              AND timestamp <= {to:DateTime64(3)}
+              ${clusterCondition}
+          `;
+          break;
+
+        case 'message_rate':
+          // Aggregate message rate across all streams
+          query = `
+            SELECT ${aggregation}(messages_rate) as value
+            FROM stream_metrics
+            WHERE timestamp >= {from:DateTime64(3)}
+              AND timestamp <= {to:DateTime64(3)}
+              ${clusterCondition}
+          `;
+          break;
+
+        case 'bytes_rate':
+          // Aggregate bytes rate across all streams
+          query = `
+            SELECT ${aggregation}(bytes_rate) as value
+            FROM stream_metrics
+            WHERE timestamp >= {from:DateTime64(3)}
+              AND timestamp <= {to:DateTime64(3)}
+              ${clusterCondition}
+          `;
+          break;
+
+        case 'stream_size':
+          // Total bytes across all streams
+          query = `
+            SELECT ${aggregation}(bytes_total) as value
+            FROM stream_metrics
+            WHERE timestamp >= {from:DateTime64(3)}
+              AND timestamp <= {to:DateTime64(3)}
+              ${clusterCondition}
+          `;
+          break;
+
+        case 'ack_rate':
+          // Aggregate ack rate across all consumers
+          query = `
+            SELECT ${aggregation}(ack_rate) as value
+            FROM consumer_metrics
+            WHERE timestamp >= {from:DateTime64(3)}
+              AND timestamp <= {to:DateTime64(3)}
+              ${clusterCondition}
+          `;
+          break;
+
+        case 'redelivered_count':
+          // Total redelivered messages across all consumers
+          query = `
+            SELECT ${aggregation}(redelivered) as value
+            FROM consumer_metrics
+            WHERE timestamp >= {from:DateTime64(3)}
+              AND timestamp <= {to:DateTime64(3)}
+              ${clusterCondition}
+          `;
+          break;
+
+        default:
+          logger.warn({ metric }, 'Unknown simple metric');
+          return null;
+      }
+
+      const result = await this.clickhouse.query({
+        query,
+        query_params: params,
+        format: 'JSONEachRow',
+      });
+
+      const rows = await result.json() as Array<{ value: number }>;
+      return rows[0]?.value ?? null;
+    } catch (err) {
+      logger.error({ metric, err }, 'Error querying simple metric');
+      return null;
+    }
   }
 
   private checkThreshold(value: number, operator: string, threshold: number): boolean {

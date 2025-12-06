@@ -22,12 +22,15 @@ import {
   CheckCircle2,
   Edit,
   MoreVertical,
+  Clock,
+  Pencil,
 } from 'lucide-react';
 import Link from 'next/link';
 import { api } from '@/lib/api';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
+import { Textarea } from '@/components/ui/textarea';
 import {
   Dialog,
   DialogContent,
@@ -51,6 +54,16 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { DashboardWidget } from '@/components/dashboard/dashboard-widget';
+
+// Time range options
+const TIME_RANGES = [
+  { value: '15m', label: 'Last 15 minutes' },
+  { value: '1h', label: 'Last 1 hour' },
+  { value: '6h', label: 'Last 6 hours' },
+  { value: '24h', label: 'Last 24 hours' },
+  { value: '7d', label: 'Last 7 days' },
+  { value: '30d', label: 'Last 30 days' },
+];
 
 // Widget types
 const WIDGET_TYPES = [
@@ -81,6 +94,9 @@ export default function DashboardBuilderPage() {
   const [dashboardDescription, setDashboardDescription] = useState('');
   const [showAddWidget, setShowAddWidget] = useState(false);
   const [showWidgetConfig, setShowWidgetConfig] = useState<Widget | null>(null);
+  const [showEditDashboard, setShowEditDashboard] = useState(false);
+  const [editName, setEditName] = useState('');
+  const [editDescription, setEditDescription] = useState('');
   const [selectedWidgetType, setSelectedWidgetType] = useState('');
   const [newWidgetTitle, setNewWidgetTitle] = useState('');
   const [newWidgetCluster, setNewWidgetCluster] = useState('');
@@ -89,6 +105,21 @@ export default function DashboardBuilderPage() {
   const [isEditingLayout, setIsEditingLayout] = useState(false);
   const [draggedWidget, setDraggedWidget] = useState<string | null>(null);
   const [dragOverWidget, setDragOverWidget] = useState<string | null>(null);
+  const [timeRange, setTimeRange] = useState('1h');
+
+  // Widget config dialog state
+  const [configTitle, setConfigTitle] = useState('');
+  const [configClusterId, setConfigClusterId] = useState('');
+  const [configMetric, setConfigMetric] = useState('');
+
+  // Initialize widget config state when dialog opens
+  useEffect(() => {
+    if (showWidgetConfig) {
+      setConfigTitle(showWidgetConfig.title);
+      setConfigClusterId((showWidgetConfig.config.clusterId as string) || '');
+      setConfigMetric((showWidgetConfig.config.metric as string) || '');
+    }
+  }, [showWidgetConfig]);
 
   const { data: dashboardData, isLoading } = useQuery({
     queryKey: ['dashboard', dashboardId],
@@ -254,38 +285,43 @@ export default function DashboardBuilderPage() {
             </Button>
           </Link>
           <div className="flex-1">
-            {isEditingLayout ? (
-              <>
-                <Input
-                  value={dashboardName}
-                  onChange={(e) => {
-                    setDashboardName(e.target.value);
-                    setHasUnsavedChanges(true);
-                  }}
-                  className="text-2xl font-bold border-none shadow-none px-0 h-auto focus-visible:ring-0"
-                  placeholder="Dashboard Name"
-                />
-                <Input
-                  value={dashboardDescription}
-                  onChange={(e) => {
-                    setDashboardDescription(e.target.value);
-                    setHasUnsavedChanges(true);
-                  }}
-                  className="text-sm text-muted-foreground border-none shadow-none px-0 h-auto focus-visible:ring-0"
-                  placeholder="Add a description..."
-                />
-              </>
-            ) : (
-              <>
-                <h1 className="text-2xl font-bold">{dashboardName || 'Untitled Dashboard'}</h1>
-                {dashboardDescription && (
-                  <p className="text-sm text-muted-foreground">{dashboardDescription}</p>
-                )}
-              </>
+            <div className="flex items-center gap-2">
+              <h1 className="text-2xl font-bold">{dashboardName || 'Untitled Dashboard'}</h1>
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-8 w-8"
+                onClick={() => {
+                  setEditName(dashboardName);
+                  setEditDescription(dashboardDescription);
+                  setShowEditDashboard(true);
+                }}
+              >
+                <Pencil className="h-4 w-4" />
+              </Button>
+            </div>
+            {dashboardDescription && (
+              <p className="text-sm text-muted-foreground">{dashboardDescription}</p>
             )}
           </div>
         </div>
-        <div className="flex gap-2">
+        <div className="flex gap-2 items-center">
+          {/* Time Range Selector */}
+          <div className="flex items-center gap-2">
+            <Clock className="h-4 w-4 text-muted-foreground" />
+            <Select value={timeRange} onValueChange={setTimeRange}>
+              <SelectTrigger className="w-[160px]">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {TIME_RANGES.map((range) => (
+                  <SelectItem key={range.value} value={range.value}>
+                    {range.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
           <Button variant="outline" onClick={() => setShowAddWidget(true)}>
             <Plus className="h-4 w-4" />
             Add Widget
@@ -416,7 +452,7 @@ export default function DashboardBuilderPage() {
                   </div>
                 </CardHeader>
                 <CardContent>
-                  <DashboardWidget widget={widget} />
+                  <DashboardWidget widget={widget} timeRange={timeRange} />
                 </CardContent>
               </Card>
             </div>
@@ -518,8 +554,15 @@ export default function DashboardBuilderPage() {
       </Dialog>
 
       {/* Widget Config Dialog */}
-      <Dialog open={!!showWidgetConfig} onOpenChange={() => setShowWidgetConfig(null)}>
-        <DialogContent>
+      <Dialog
+        open={!!showWidgetConfig}
+        onOpenChange={(open) => {
+          if (!open) {
+            setShowWidgetConfig(null);
+          }
+        }}
+      >
+        <DialogContent size="md">
           <DialogHeader>
             <DialogTitle>Configure Widget</DialogTitle>
             <DialogDescription>
@@ -531,24 +574,15 @@ export default function DashboardBuilderPage() {
               <div className="space-y-2">
                 <label className="text-sm font-medium">Title</label>
                 <Input
-                  value={widgets.find((w) => w.id === showWidgetConfig.id)?.title || ''}
-                  onChange={(e) => {
-                    setWidgets(
-                      widgets.map((w) =>
-                        w.id === showWidgetConfig.id ? { ...w, title: e.target.value } : w
-                      )
-                    );
-                    setHasUnsavedChanges(true);
-                  }}
+                  value={configTitle}
+                  onChange={(e) => setConfigTitle(e.target.value)}
                 />
               </div>
               <div className="space-y-2">
                 <label className="text-sm font-medium">Cluster</label>
                 <Select
-                  value={(widgets.find((w) => w.id === showWidgetConfig.id)?.config.clusterId as string) || ''}
-                  onValueChange={(v) =>
-                    updateWidgetConfig(showWidgetConfig.id, { clusterId: v })
-                  }
+                  value={configClusterId}
+                  onValueChange={setConfigClusterId}
                 >
                   <SelectTrigger>
                     <SelectValue placeholder="Select a cluster" />
@@ -565,10 +599,8 @@ export default function DashboardBuilderPage() {
               <div className="space-y-2">
                 <label className="text-sm font-medium">Metric</label>
                 <Select
-                  value={(widgets.find((w) => w.id === showWidgetConfig.id)?.config.metric as string) || ''}
-                  onValueChange={(v) =>
-                    updateWidgetConfig(showWidgetConfig.id, { metric: v })
-                  }
+                  value={configMetric}
+                  onValueChange={setConfigMetric}
                 >
                   <SelectTrigger>
                     <SelectValue placeholder="Select a metric" />
@@ -580,6 +612,8 @@ export default function DashboardBuilderPage() {
                     <SelectItem value="connections">Connections</SelectItem>
                     <SelectItem value="cpu_percent">CPU %</SelectItem>
                     <SelectItem value="memory_bytes">Memory</SelectItem>
+                    <SelectItem value="streams_count">Total Streams</SelectItem>
+                    <SelectItem value="consumers_count">Total Consumers</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
@@ -591,8 +625,78 @@ export default function DashboardBuilderPage() {
             </Button>
             <Button
               onClick={() => {
-                saveMutation.mutate(widgets);
+                if (showWidgetConfig) {
+                  // Update the widget with new config values
+                  const updatedWidgets = widgets.map((w) =>
+                    w.id === showWidgetConfig.id
+                      ? {
+                          ...w,
+                          title: configTitle,
+                          config: {
+                            ...w.config,
+                            clusterId: configClusterId,
+                            metric: configMetric,
+                          },
+                        }
+                      : w
+                  );
+                  setWidgets(updatedWidgets);
+                  saveMutation.mutate(updatedWidgets);
+                }
                 setShowWidgetConfig(null);
+              }}
+              disabled={saveMutation.isPending}
+            >
+              {saveMutation.isPending ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <Save className="h-4 w-4" />
+              )}
+              {saveMutation.isPending ? 'Saving...' : 'Save'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Edit Dashboard Dialog */}
+      <Dialog open={showEditDashboard} onOpenChange={setShowEditDashboard}>
+        <DialogContent size="md">
+          <DialogHeader>
+            <DialogTitle>Edit Dashboard</DialogTitle>
+            <DialogDescription>
+              Update the dashboard name and description
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <label className="text-sm font-medium">Name</label>
+              <Input
+                value={editName}
+                onChange={(e) => setEditName(e.target.value)}
+                placeholder="Dashboard Name"
+              />
+            </div>
+            <div className="space-y-2">
+              <label className="text-sm font-medium">Description</label>
+              <Textarea
+                value={editDescription}
+                onChange={(e) => setEditDescription(e.target.value)}
+                placeholder="Add a description..."
+                rows={3}
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowEditDashboard(false)}>
+              Cancel
+            </Button>
+            <Button
+              onClick={() => {
+                setDashboardName(editName);
+                setDashboardDescription(editDescription);
+                setShowEditDashboard(false);
+                // Auto-save the changes
+                saveMutation.mutate(widgets);
               }}
               disabled={saveMutation.isPending}
             >
