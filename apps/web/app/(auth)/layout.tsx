@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuthStore } from '@/stores/auth';
 import { Logo } from '@/components/logo';
+import { Github } from 'lucide-react';
 
 export default function AuthLayout({
   children,
@@ -41,6 +42,15 @@ export default function AuthLayout({
             <Logo size="lg" href={undefined} />
           </div>
           <div className="w-full max-w-md">{children}</div>
+          <a
+            href="https://github.com/KLogicHQ/nats-console"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="flex items-center justify-center gap-2 mt-6 text-sm text-muted-foreground hover:text-foreground transition-colors"
+          >
+            <Github className="h-4 w-4" />
+            View on GitHub
+          </a>
         </>
       )}
     </div>
