@@ -47,11 +47,21 @@ const app = Fastify({
 });
 
 // Register plugins
+// CORS configuration:
+// - Development: allow all origins
+// - Production with '*': allow all origins (single-container mode)
+// - Production with specific origins: only allow listed origins
+const getCorsOrigin = () => {
+  if (config.NODE_ENV === 'development') return true;
+  if (config.CORS_ORIGIN === '*') return true;
+  return config.CORS_ORIGIN.split(',').map(o => o.trim());
+};
+
 await app.register(cors, {
-  origin: config.NODE_ENV === 'development' ? true : config.CORS_ORIGIN.split(','),
+  origin: getCorsOrigin(),
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With'],
 });
 
 await app.register(helmet, {

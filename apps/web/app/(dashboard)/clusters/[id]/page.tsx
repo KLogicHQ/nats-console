@@ -39,12 +39,27 @@ import { CreateClusterDialog } from '@/components/forms/create-cluster-dialog';
 import { GaugeChart } from '@/components/charts';
 import { useClusterStore } from '@/stores/cluster';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
+import { DataTable } from '@/components/ui/data-table';
+import { ColumnDef } from '@tanstack/react-table';
 
 const tabs: Tab[] = [
   { id: 'overview', label: 'Overview', icon: Server },
   { id: 'streams', label: 'Streams', icon: Database },
   { id: 'config', label: 'Configuration', icon: Settings },
 ];
+
+interface Stream {
+  config: {
+    name: string;
+    subjects?: string[];
+    storage: string;
+  };
+  state?: {
+    messages?: number;
+    bytes?: number;
+    consumerCount?: number;
+  };
+}
 
 function ClusterDetailContent() {
   const params = useParams();
@@ -90,6 +105,50 @@ function ClusterDetailContent() {
       router.push('/clusters');
     },
   });
+
+  const streamColumns: ColumnDef<Stream>[] = useMemo(() => [
+    {
+      id: 'name',
+      accessorFn: (row) => row.config.name,
+      header: 'Name',
+      cell: ({ row }) => (
+        <Link
+          href={`/streams/${clusterId}/${row.original.config.name}`}
+          className="font-medium text-primary hover:underline"
+        >
+          {row.original.config.name}
+        </Link>
+      ),
+    },
+    {
+      accessorKey: 'config.subjects',
+      header: 'Subjects',
+      cell: ({ row }) => (
+        <span className="text-muted-foreground">
+          {row.original.config.subjects?.join(', ') || '-'}
+        </span>
+      ),
+      enableSorting: false,
+    },
+    {
+      accessorKey: 'state.messages',
+      header: 'Messages',
+      cell: ({ row }) => formatNumber(row.original.state?.messages || 0),
+      meta: { align: 'right' as const },
+    },
+    {
+      accessorKey: 'state.bytes',
+      header: 'Size',
+      cell: ({ row }) => formatBytes(row.original.state?.bytes || 0),
+      meta: { align: 'right' as const },
+    },
+    {
+      accessorKey: 'state.consumerCount',
+      header: 'Consumers',
+      cell: ({ row }) => row.original.state?.consumerCount || 0,
+      meta: { align: 'right' as const },
+    },
+  ], [clusterId]);
 
   if (isLoading) {
     return (
@@ -137,7 +196,7 @@ function ClusterDetailContent() {
   };
 
   const jetstream = infoData?.jetstream || { streams: 0, consumers: 0, messages: 0, bytes: 0 };
-  const streams = streamsData?.streams || [];
+  const streams: Stream[] = streamsData?.streams || [];
   // Get URL from primary connection
   const clusterUrl = cluster?.connections?.[0]?.serverUrl || '';
 
@@ -436,39 +495,13 @@ function ClusterDetailContent() {
                 <p>No streams on this cluster</p>
               </div>
             ) : (
-              <div className="border rounded-lg">
-                <table className="w-full">
-                  <thead className="bg-muted/50">
-                    <tr>
-                      <th className="text-left p-3 font-medium">Name</th>
-                      <th className="text-left p-3 font-medium">Subjects</th>
-                      <th className="text-right p-3 font-medium">Messages</th>
-                      <th className="text-right p-3 font-medium">Size</th>
-                      <th className="text-right p-3 font-medium">Consumers</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {streams.map((stream: any) => (
-                      <tr key={stream.config.name} className="border-t hover:bg-muted/30">
-                        <td className="p-3">
-                          <Link
-                            href={`/streams/${clusterId}/${stream.config.name}`}
-                            className="font-medium text-primary hover:underline"
-                          >
-                            {stream.config.name}
-                          </Link>
-                        </td>
-                        <td className="p-3 text-muted-foreground">
-                          {stream.config.subjects?.join(', ') || '-'}
-                        </td>
-                        <td className="p-3 text-right">{formatNumber(stream.state?.messages || 0)}</td>
-                        <td className="p-3 text-right">{formatBytes(stream.state?.bytes || 0)}</td>
-                        <td className="p-3 text-right">{stream.state?.consumer_count || 0}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
+              <DataTable
+                columns={streamColumns}
+                data={streams}
+                searchColumn="name"
+                searchPlaceholder="Search streams..."
+                emptyMessage="No streams found"
+              />
             )}
           </CardContent>
         </Card>

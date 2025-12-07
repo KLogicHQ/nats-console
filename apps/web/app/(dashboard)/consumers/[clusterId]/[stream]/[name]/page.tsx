@@ -151,7 +151,7 @@ function ConsumerDetailContent() {
   }
 
   const getHealthStatus = () => {
-    const pending = consumer.num_pending || 0;
+    const pending = consumer.numPending || 0;
     if (pending > 10000) return { status: 'critical', label: 'Critical Lag', color: 'text-red-500', bg: 'bg-red-100' };
     if (pending > 1000) return { status: 'warning', label: 'High Lag', color: 'text-yellow-500', bg: 'bg-yellow-100' };
     return { status: 'healthy', label: 'Healthy', color: 'text-green-500', bg: 'bg-green-100' };
@@ -159,9 +159,9 @@ function ConsumerDetailContent() {
 
   const health = getHealthStatus();
 
-  // Check if consumer is paused (pause_until is in the future)
+  // Check if consumer is paused (pauseUntil is in the future)
   const isPaused = () => {
-    const pauseUntil = consumer.config?.pause_until;
+    const pauseUntil = consumer.config?.pauseUntil;
     if (!pauseUntil) return false;
     return new Date(pauseUntil) > new Date();
   };
@@ -285,7 +285,7 @@ function ConsumerDetailContent() {
               </CardHeader>
               <CardContent>
                 <div className="text-2xl font-bold">
-                  {formatNumber(consumer.num_pending || 0)}
+                  {formatNumber(consumer.numPending || 0)}
                 </div>
                 <p className="text-xs text-muted-foreground">Messages waiting to be delivered</p>
               </CardContent>
@@ -296,7 +296,7 @@ function ConsumerDetailContent() {
               </CardHeader>
               <CardContent>
                 <div className="text-2xl font-bold">
-                  {formatNumber(consumer.num_ack_pending || 0)}
+                  {formatNumber(consumer.numAckPending || 0)}
                 </div>
                 <p className="text-xs text-muted-foreground">Delivered, awaiting acknowledgment</p>
               </CardContent>
@@ -307,7 +307,7 @@ function ConsumerDetailContent() {
               </CardHeader>
               <CardContent>
                 <div className="text-2xl font-bold">
-                  {formatNumber(consumer.num_redelivered || 0)}
+                  {formatNumber(consumer.numRedelivered || 0)}
                 </div>
                 <p className="text-xs text-muted-foreground">Messages redelivered</p>
               </CardContent>
@@ -318,7 +318,7 @@ function ConsumerDetailContent() {
               </CardHeader>
               <CardContent>
                 <div className="text-2xl font-bold">
-                  {formatNumber(consumer.num_waiting || 0)}
+                  {formatNumber(consumer.numWaiting || 0)}
                 </div>
                 <p className="text-xs text-muted-foreground">Pull requests waiting</p>
               </CardContent>
@@ -335,28 +335,28 @@ function ConsumerDetailContent() {
                 <div className="flex justify-between">
                   <span className="text-muted-foreground">Type</span>
                   <span className={`px-2 py-1 text-xs rounded-full ${
-                    consumer.config?.durable_name
+                    consumer.config?.durableName
                       ? 'bg-blue-100 text-blue-700'
                       : 'bg-gray-100 text-gray-700'
                   }`}>
-                    {consumer.config?.durable_name ? 'Durable' : 'Ephemeral'}
+                    {consumer.config?.durableName ? 'Durable' : 'Ephemeral'}
                   </span>
                 </div>
                 <div className="flex justify-between">
                   <span className="text-muted-foreground">Deliver Policy</span>
-                  <span className="capitalize">{consumer.config?.deliver_policy || 'all'}</span>
+                  <span className="capitalize">{consumer.config?.deliverPolicy || 'all'}</span>
                 </div>
                 <div className="flex justify-between">
                   <span className="text-muted-foreground">Ack Policy</span>
-                  <span className="capitalize">{consumer.config?.ack_policy || 'explicit'}</span>
+                  <span className="capitalize">{consumer.config?.ackPolicy || 'explicit'}</span>
                 </div>
                 <div className="flex justify-between">
                   <span className="text-muted-foreground">Replay Policy</span>
-                  <span className="capitalize">{consumer.config?.replay_policy || 'instant'}</span>
+                  <span className="capitalize">{consumer.config?.replayPolicy || 'instant'}</span>
                 </div>
                 <div className="flex justify-between">
                   <span className="text-muted-foreground">Filter Subject</span>
-                  <span className="font-mono text-sm">{consumer.config?.filter_subject || '*'}</span>
+                  <span className="font-mono text-sm">{consumer.config?.filterSubject || '*'}</span>
                 </div>
               </CardContent>
             </Card>
@@ -368,24 +368,24 @@ function ConsumerDetailContent() {
               <CardContent className="space-y-3">
                 <div className="flex justify-between">
                   <span className="text-muted-foreground">Ack Wait</span>
-                  <span>{formatDuration(consumer.config?.ack_wait || 30000000000)}</span>
+                  <span>{formatDuration(consumer.config?.ackWait || 30000000000)}</span>
                 </div>
                 <div className="flex justify-between">
                   <span className="text-muted-foreground">Max Deliver</span>
-                  <span>{consumer.config?.max_deliver === -1 ? 'Unlimited' : consumer.config?.max_deliver}</span>
+                  <span>{consumer.config?.maxDeliver === -1 ? 'Unlimited' : consumer.config?.maxDeliver}</span>
                 </div>
                 <div className="flex justify-between">
                   <span className="text-muted-foreground">Max Ack Pending</span>
-                  <span>{consumer.config?.max_ack_pending === -1 ? 'Unlimited' : formatNumber(consumer.config?.max_ack_pending || 0)}</span>
+                  <span>{consumer.config?.maxAckPending === -1 ? 'Unlimited' : formatNumber(consumer.config?.maxAckPending || 0)}</span>
                 </div>
                 <div className="flex justify-between">
                   <span className="text-muted-foreground">Max Waiting</span>
-                  <span>{consumer.config?.max_waiting || 512}</span>
+                  <span>{consumer.config?.maxWaiting || 512}</span>
                 </div>
                 <div className="flex justify-between">
                   <span className="text-muted-foreground">Deliver Subject</span>
                   <span className="font-mono text-sm truncate max-w-[200px]">
-                    {consumer.config?.deliver_subject || '-'}
+                    {consumer.config?.deliverSubject || '-'}
                   </span>
                 </div>
               </CardContent>
@@ -404,20 +404,20 @@ function ConsumerDetailContent() {
                   <div className="flex justify-between mb-2">
                     <span className="text-sm font-medium">Pending Messages</span>
                     <span className="text-sm text-muted-foreground">
-                      {formatNumber(consumer.num_pending || 0)}
+                      {formatNumber(consumer.numPending || 0)}
                     </span>
                   </div>
                   <div className="h-4 bg-muted rounded-full overflow-hidden">
                     <div
                       className={`h-full transition-all ${
-                        (consumer.num_pending || 0) > 10000
+                        (consumer.numPending || 0) > 10000
                           ? 'bg-red-500'
-                          : (consumer.num_pending || 0) > 1000
+                          : (consumer.numPending || 0) > 1000
                           ? 'bg-yellow-500'
                           : 'bg-green-500'
                       }`}
                       style={{
-                        width: `${Math.min(((consumer.num_pending || 0) / 10000) * 100, 100)}%`,
+                        width: `${Math.min(((consumer.numPending || 0) / 10000) * 100, 100)}%`,
                       }}
                     />
                   </div>
@@ -426,14 +426,14 @@ function ConsumerDetailContent() {
                   <div className="flex justify-between mb-2">
                     <span className="text-sm font-medium">Ack Pending</span>
                     <span className="text-sm text-muted-foreground">
-                      {formatNumber(consumer.num_ack_pending || 0)}
+                      {formatNumber(consumer.numAckPending || 0)}
                     </span>
                   </div>
                   <div className="h-4 bg-muted rounded-full overflow-hidden">
                     <div
                       className="h-full bg-blue-500 transition-all"
                       style={{
-                        width: `${Math.min(((consumer.num_ack_pending || 0) / 1000) * 100, 100)}%`,
+                        width: `${Math.min(((consumer.numAckPending || 0) / 1000) * 100, 100)}%`,
                       }}
                     />
                   </div>

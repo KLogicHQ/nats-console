@@ -78,7 +78,7 @@ init_postgres() {
     su - postgres -c "psql -c \"GRANT ALL PRIVILEGES ON DATABASE nats_console TO nats_console;\""
 
     echo "[PostgreSQL] Running Prisma migrations..."
-    cd /app/apps/api && DATABASE_URL="postgresql://nats_console:nats_console@localhost:5432/nats_console" npx prisma migrate deploy || true
+    cd /app/apps/api && DATABASE_URL="postgresql://nats_console:nats_console@localhost:5432/nats_console" node /app/node_modules/prisma/build/index.js migrate deploy || true
 
     # Stop PostgreSQL (will be started by supervisord)
     su - postgres -c "/usr/lib/postgresql/16/bin/pg_ctl -D $POSTGRES_DATA -w stop"
@@ -97,7 +97,7 @@ init_clickhouse() {
     chown -R clickhouse:clickhouse "$CLICKHOUSE_DATA"
 
     # Start ClickHouse temporarily
-    su - clickhouse -s /bin/bash -c "/usr/bin/clickhouse-server --config-file=/etc/clickhouse-server/config.xml --daemon"
+    su -s /bin/bash clickhouse -c "/usr/bin/clickhouse-server --config-file=/etc/clickhouse-server/config.xml --daemon"
     sleep 5
 
     # Wait for ClickHouse to be ready

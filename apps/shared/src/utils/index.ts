@@ -22,7 +22,8 @@ export function nsToSec(ns: number): number {
   return Math.floor(ns / NS_PER_SEC);
 }
 
-export function formatDuration(ns: number): string {
+export function formatDuration(ns: number | null | undefined): string {
+  if (ns == null || ns === 0) return '0s';
   if (ns < NS_PER_SEC) {
     return `${nsToMs(ns)}ms`;
   }
@@ -65,8 +66,8 @@ export function parseDuration(duration: string): number {
 
 const BYTE_UNITS = ['B', 'KB', 'MB', 'GB', 'TB', 'PB'];
 
-export function formatBytes(bytes: number, decimals = 2): string {
-  if (bytes === 0) return '0 B';
+export function formatBytes(bytes: number | null | undefined, decimals = 2): string {
+  if (bytes == null || bytes === 0) return '0 B';
   const k = 1024;
   const i = Math.floor(Math.log(bytes) / Math.log(k));
   const value = bytes / Math.pow(k, i);
@@ -89,7 +90,8 @@ export function parseBytes(str: string): number {
 
 // ==================== Number Formatting ====================
 
-export function formatNumber(num: number, decimals?: number): string {
+export function formatNumber(num: number | null | undefined, decimals?: number): string {
+  if (num == null) return '0';
   if (num >= 1_000_000_000) {
     return `${(num / 1_000_000_000).toFixed(1)}B`;
   }

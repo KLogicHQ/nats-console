@@ -1,20 +1,35 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { Plus, Database, Search, ChevronRight, RefreshCw, WifiOff } from 'lucide-react';
+import { ColumnDef } from '@tanstack/react-table';
+import { Plus, Database, RefreshCw, WifiOff } from 'lucide-react';
 import Link from 'next/link';
 import { api } from '@/lib/api';
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent } from '@/components/ui/card';
+import { DataTable } from '@/components/ui/data-table';
 import { formatBytes, formatNumber } from '@nats-console/shared';
 import { CreateStreamDialog } from '@/components/forms/create-stream-dialog';
 import { useClusterStore } from '@/stores/cluster';
 
+interface Stream {
+  config: {
+    name: string;
+    subjects?: string[];
+    storage: string;
+    maxMsgs?: number;
+    maxBytes?: number;
+  };
+  state?: {
+    messages?: number;
+    bytes?: number;
+    consumerCount?: number;
+  };
+}
+
 export default function StreamsPage() {
   const { selectedClusterId, setSelectedClusterId } = useClusterStore();
-  const [search, setSearch] = useState('');
   const [showCreateDialog, setShowCreateDialog] = useState(false);
 
   const { data: clustersData } = useQuery({
@@ -55,9 +70,69 @@ export default function StreamsPage() {
     }
   }, [clustersData?.clusters, selectedClusterId, setSelectedClusterId]);
 
-  const filteredStreams = streamsData?.streams?.filter((stream: any) =>
-    stream.config.name.toLowerCase().includes(search.toLowerCase())
-  );
+  const streams = useMemo(() => {
+    return streamsData?.streams || [];
+  }, [streamsData?.streams]);
+
+  const columns: ColumnDef<Stream>[] = useMemo(() => [
+    {
+      id: 'name',
+      accessorFn: (row) => row.config.name,
+      header: 'Name',
+      cell: ({ row }) => (
+        <Link
+          href={`/streams/${selectedClusterId}/${row.original.config.name}`}
+          className="font-medium text-primary hover:underline"
+        >
+          {row.original.config.name}
+        </Link>
+      ),
+    },
+    {
+      accessorKey: 'config.subjects',
+      header: 'Subjects',
+      cell: ({ row }) => (
+        <span className="text-muted-foreground">
+          {row.original.config.subjects?.join(', ') || '-'}
+        </span>
+      ),
+      enableSorting: false,
+    },
+    {
+      accessorKey: 'state.messages',
+      header: 'Messages',
+      cell: ({ row }) => formatNumber(row.original.state?.messages || 0),
+      meta: { align: 'right' as const },
+    },
+    {
+      accessorKey: 'state.bytes',
+      header: 'Size',
+      cell: ({ row }) => formatBytes(row.original.state?.bytes || 0),
+      meta: { align: 'right' as const },
+    },
+    {
+      accessorKey: 'state.consumerCount',
+      header: 'Consumers',
+      cell: ({ row }) => row.original.state?.consumerCount || 0,
+      meta: { align: 'right' as const },
+    },
+    {
+      accessorKey: 'config.storage',
+      header: 'Storage',
+      cell: ({ row }) => (
+        <span
+          className={`px-2 py-1 text-xs rounded-full ${
+            row.original.config.storage === 'file'
+              ? 'bg-blue-100 text-blue-700'
+              : 'bg-purple-100 text-purple-700'
+          }`}
+        >
+          {row.original.config.storage}
+        </span>
+      ),
+      meta: { align: 'right' as const },
+    },
+  ], [selectedClusterId]);
 
   return (
     <div className="space-y-6">
@@ -97,15 +172,6 @@ export default function StreamsPage() {
             </option>
           ))}
         </select>
-        <div className="relative flex-1 max-w-sm">
-          <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-          <Input
-            placeholder="Search streams..."
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            className="pl-9"
-          />
-        </div>
       </div>
 
       {!selectedClusterId && (
@@ -140,70 +206,30 @@ export default function StreamsPage() {
         </div>
       )}
 
-      {selectedClusterId && isClusterConnected && filteredStreams && filteredStreams.length === 0 && (
+      {selectedClusterId && isClusterConnected && !isLoading && streams.length === 0 && (
         <Card>
           <CardContent className="py-12 text-center">
             <Database className="h-12 w-12 mx-auto text-muted-foreground mb-4" />
             <h3 className="text-lg font-semibold mb-2">No streams found</h3>
             <p className="text-muted-foreground mb-4">
-              {search ? 'No streams match your search' : 'Create your first stream to get started'}
+              Create your first stream to get started
             </p>
-            {!search && (
-              <Button onClick={() => setShowCreateDialog(true)}>
-                <Plus className="h-4 w-4" />
-                Create Stream
-              </Button>
-            )}
+            <Button onClick={() => setShowCreateDialog(true)}>
+              <Plus className="h-4 w-4" />
+              Create Stream
+            </Button>
           </CardContent>
         </Card>
       )}
 
-      {filteredStreams && filteredStreams.length > 0 && (
-        <div className="border rounded-lg">
-          <table className="w-full">
-            <thead className="bg-muted/50">
-              <tr>
-                <th className="text-left p-4 font-medium">Name</th>
-                <th className="text-left p-4 font-medium">Subjects</th>
-                <th className="text-right p-4 font-medium">Messages</th>
-                <th className="text-right p-4 font-medium">Size</th>
-                <th className="text-right p-4 font-medium">Consumers</th>
-                <th className="text-right p-4 font-medium">Storage</th>
-              </tr>
-            </thead>
-            <tbody>
-              {filteredStreams.map((stream: any) => (
-                <tr key={stream.config.name} className="border-t hover:bg-muted/30">
-                  <td className="p-4">
-                    <Link
-                      href={`/streams/${selectedClusterId}/${stream.config.name}`}
-                      className="font-medium text-primary hover:underline flex items-center gap-1"
-                    >
-                      {stream.config.name}
-                    </Link>
-                  </td>
-                  <td className="p-4 text-muted-foreground">
-                    {stream.config.subjects?.join(', ') || '-'}
-                  </td>
-                  <td className="p-4 text-right">{formatNumber(stream.state?.messages || 0)}</td>
-                  <td className="p-4 text-right">{formatBytes(stream.state?.bytes || 0)}</td>
-                  <td className="p-4 text-right">{stream.state?.consumer_count || 0}</td>
-                  <td className="p-4 text-right">
-                    <span
-                      className={`px-2 py-1 text-xs rounded-full ${
-                        stream.config.storage === 'file'
-                          ? 'bg-blue-100 text-blue-700'
-                          : 'bg-purple-100 text-purple-700'
-                      }`}
-                    >
-                      {stream.config.storage}
-                    </span>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+      {streams.length > 0 && (
+        <DataTable
+          columns={columns}
+          data={streams}
+          searchColumn="name"
+          searchPlaceholder="Search streams..."
+          emptyMessage="No streams found"
+        />
       )}
     </div>
   );

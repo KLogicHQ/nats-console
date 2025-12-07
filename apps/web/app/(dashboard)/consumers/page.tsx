@@ -1,13 +1,14 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { Plus, Users, Search, AlertTriangle, CheckCircle, ChevronRight, RefreshCw, Trash2, WifiOff } from 'lucide-react';
+import { ColumnDef } from '@tanstack/react-table';
+import { Plus, Users, AlertTriangle, CheckCircle, RefreshCw, Trash2, WifiOff } from 'lucide-react';
 import Link from 'next/link';
 import { api } from '@/lib/api';
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
 import { Card, CardContent } from '@/components/ui/card';
+import { DataTable } from '@/components/ui/data-table';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -22,11 +23,22 @@ import { formatNumber, formatDuration } from '@nats-console/shared';
 import { CreateConsumerDialog } from '@/components/forms/create-consumer-dialog';
 import { useClusterStore } from '@/stores/cluster';
 
+interface Consumer {
+  name: string;
+  streamName?: string;
+  config?: {
+    durableName?: string;
+    ackWait?: number;
+  };
+  numPending?: number;
+  numRedelivered?: number;
+  numAckPending?: number;
+}
+
 export default function ConsumersPage() {
   const queryClient = useQueryClient();
   const { selectedClusterId, setSelectedClusterId } = useClusterStore();
   const [selectedStream, setSelectedStream] = useState<string>('__all__');
-  const [search, setSearch] = useState('');
   const [showCreateDialog, setShowCreateDialog] = useState(false);
   const [consumerToDelete, setConsumerToDelete] = useState<{ name: string; streamName: string } | null>(null);
 
@@ -89,16 +101,135 @@ export default function ConsumersPage() {
     }
   }, [clustersData?.clusters, selectedClusterId, setSelectedClusterId]);
 
-  const filteredConsumers = consumersData?.consumers?.filter((consumer: any) =>
-    consumer.name.toLowerCase().includes(search.toLowerCase())
-  );
+  const consumers = useMemo(() => {
+    return consumersData?.consumers || [];
+  }, [consumersData?.consumers]);
 
-  const getHealthStatus = (consumer: any) => {
-    const pending = consumer.num_pending || 0;
+  const getHealthStatus = (consumer: Consumer) => {
+    const pending = consumer.numPending || 0;
     if (pending > 10000) return { status: 'critical', icon: AlertTriangle, color: 'text-red-500' };
     if (pending > 1000) return { status: 'warning', icon: AlertTriangle, color: 'text-yellow-500' };
     return { status: 'healthy', icon: CheckCircle, color: 'text-green-500' };
   };
+
+  const columns: ColumnDef<Consumer>[] = useMemo(() => {
+    const cols: ColumnDef<Consumer>[] = [
+      {
+        accessorKey: 'name',
+        header: 'Name',
+        cell: ({ row }) => {
+          const streamName = row.original.streamName || selectedStream;
+          return (
+            <Link
+              href={`/consumers/${selectedClusterId}/${streamName}/${row.original.name}`}
+              className="font-medium text-primary hover:underline"
+            >
+              {row.original.name}
+            </Link>
+          );
+        },
+      },
+    ];
+
+    if (selectedStream === '__all__') {
+      cols.push({
+        accessorKey: 'streamName',
+        header: 'Stream',
+        cell: ({ row }) => {
+          const streamName = row.original.streamName || selectedStream;
+          return (
+            <Link
+              href={`/streams/${selectedClusterId}/${streamName}`}
+              className="text-muted-foreground hover:text-primary hover:underline"
+            >
+              {streamName}
+            </Link>
+          );
+        },
+      });
+    }
+
+    cols.push(
+      {
+        accessorKey: 'config.durableName',
+        header: 'Type',
+        cell: ({ row }) => (
+          <span
+            className={`px-2 py-1 text-xs rounded-full ${
+              row.original.config?.durableName
+                ? 'bg-blue-100 text-blue-700'
+                : 'bg-gray-100 text-gray-700'
+            }`}
+          >
+            {row.original.config?.durableName ? 'Durable' : 'Ephemeral'}
+          </span>
+        ),
+      },
+      {
+        accessorKey: 'numPending',
+        header: 'Pending',
+        cell: ({ row }) => formatNumber(row.original.numPending || 0),
+        meta: { align: 'right' as const },
+      },
+      {
+        accessorKey: 'numRedelivered',
+        header: 'Redelivered',
+        cell: ({ row }) => formatNumber(row.original.numRedelivered || 0),
+        meta: { align: 'right' as const },
+      },
+      {
+        accessorKey: 'numAckPending',
+        header: 'Ack Pending',
+        cell: ({ row }) => formatNumber(row.original.numAckPending || 0),
+        meta: { align: 'right' as const },
+      },
+      {
+        accessorKey: 'config.ackWait',
+        header: 'Ack Wait',
+        cell: ({ row }) => (
+          <span className="text-muted-foreground">
+            {formatDuration(row.original.config?.ackWait || 30000000000)}
+          </span>
+        ),
+        meta: { align: 'right' as const },
+      },
+      {
+        id: 'health',
+        header: 'Health',
+        cell: ({ row }) => {
+          const health = getHealthStatus(row.original);
+          const HealthIcon = health.icon;
+          return <HealthIcon className={`h-5 w-5 mx-auto ${health.color}`} />;
+        },
+        meta: { align: 'center' as const },
+        enableSorting: false,
+      },
+      {
+        id: 'actions',
+        header: 'Actions',
+        cell: ({ row }) => {
+          const streamName = row.original.streamName || selectedStream;
+          return (
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                setConsumerToDelete({ name: row.original.name, streamName });
+              }}
+            >
+              <Trash2 className="h-4 w-4 text-red-500" />
+            </Button>
+          );
+        },
+        meta: { align: 'center' as const },
+        enableSorting: false,
+      }
+    );
+
+    return cols;
+  }, [selectedClusterId, selectedStream]);
 
   return (
     <div className="space-y-6">
@@ -155,15 +286,6 @@ export default function ConsumersPage() {
             </option>
           ))}
         </select>
-        <div className="relative flex-1 max-w-sm">
-          <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-          <Input
-            placeholder="Search consumers..."
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            className="pl-9"
-          />
-        </div>
       </div>
 
       {isClusterDisconnected && (
@@ -188,15 +310,15 @@ export default function ConsumersPage() {
         </div>
       )}
 
-      {!isLoading && isClusterConnected && filteredConsumers && filteredConsumers.length === 0 && (
+      {!isLoading && isClusterConnected && consumers.length === 0 && (
         <Card>
           <CardContent className="py-12 text-center">
             <Users className="h-12 w-12 mx-auto text-muted-foreground mb-4" />
             <h3 className="text-lg font-semibold mb-2">No consumers found</h3>
             <p className="text-muted-foreground mb-4">
-              {search ? 'No consumers match your search' : 'Create your first consumer to get started'}
+              Create your first consumer to get started
             </p>
-            {!search && selectedStream !== '__all__' && (
+            {selectedStream !== '__all__' && (
               <Button onClick={() => setShowCreateDialog(true)}>
                 <Plus className="h-4 w-4" />
                 Create Consumer
@@ -206,87 +328,14 @@ export default function ConsumersPage() {
         </Card>
       )}
 
-      {filteredConsumers && filteredConsumers.length > 0 && (
-        <div className="border rounded-lg">
-          <table className="w-full">
-            <thead className="bg-muted/50">
-              <tr>
-                <th className="text-left p-4 font-medium">Name</th>
-                {selectedStream === '__all__' && (
-                  <th className="text-left p-4 font-medium">Stream</th>
-                )}
-                <th className="text-left p-4 font-medium">Type</th>
-                <th className="text-right p-4 font-medium">Pending</th>
-                <th className="text-right p-4 font-medium">Redelivered</th>
-                <th className="text-right p-4 font-medium">Ack Pending</th>
-                <th className="text-right p-4 font-medium">Ack Wait</th>
-                <th className="text-center p-4 font-medium">Health</th>
-                <th className="text-center p-4 font-medium">Actions</th>
-              </tr>
-            </thead>
-            <tbody>
-              {filteredConsumers.map((consumer: any) => {
-                const health = getHealthStatus(consumer);
-                const HealthIcon = health.icon;
-                const streamName = consumer.streamName || selectedStream;
-                return (
-                  <tr key={`${streamName}-${consumer.name}`} className="border-t hover:bg-muted/30">
-                    <td className="p-4">
-                      <Link
-                        href={`/consumers/${selectedClusterId}/${streamName}/${consumer.name}`}
-                        className="font-medium text-primary hover:underline flex items-center gap-1"
-                      >
-                        {consumer.name}
-                      </Link>
-                    </td>
-                    {selectedStream === '__all__' && (
-                      <td className="p-4">
-                        <Link
-                          href={`/streams/${selectedClusterId}/${streamName}`}
-                          className="text-muted-foreground hover:text-primary hover:underline"
-                        >
-                          {streamName}
-                        </Link>
-                      </td>
-                    )}
-                    <td className="p-4">
-                      <span
-                        className={`px-2 py-1 text-xs rounded-full ${
-                          consumer.config?.durable_name
-                            ? 'bg-blue-100 text-blue-700'
-                            : 'bg-gray-100 text-gray-700'
-                        }`}
-                      >
-                        {consumer.config?.durable_name ? 'Durable' : 'Ephemeral'}
-                      </span>
-                    </td>
-                    <td className="p-4 text-right">{formatNumber(consumer.num_pending || 0)}</td>
-                    <td className="p-4 text-right">{formatNumber(consumer.num_redelivered || 0)}</td>
-                    <td className="p-4 text-right">{formatNumber(consumer.num_ack_pending || 0)}</td>
-                    <td className="p-4 text-right text-muted-foreground">
-                      {formatDuration(consumer.config?.ack_wait || 30000000000)}
-                    </td>
-                    <td className="p-4 text-center">
-                      <HealthIcon className={`h-5 w-5 mx-auto ${health.color}`} />
-                    </td>
-                    <td className="p-4 text-center">
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        onClick={(e) => {
-                          e.preventDefault();
-                          setConsumerToDelete({ name: consumer.name, streamName });
-                        }}
-                      >
-                        <Trash2 className="h-4 w-4 text-red-500" />
-                      </Button>
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
+      {consumers.length > 0 && (
+        <DataTable
+          columns={columns}
+          data={consumers}
+          searchColumn="name"
+          searchPlaceholder="Search consumers..."
+          emptyMessage="No consumers found"
+        />
       )}
 
       {/* Delete Confirmation Dialog */}

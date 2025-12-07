@@ -30,7 +30,8 @@ const envSchema = z.object({
   ENCRYPTION_KEY: z.string().min(32).optional(),
 
   // CORS
-  CORS_ORIGIN: z.string().default('http://localhost:3000'),
+  // Use '*' for single-container mode, comma-separated origins for multi-container
+  CORS_ORIGIN: z.string().default('*'),
 
   // Rate limiting (only applies in production, disabled in development)
   RATE_LIMIT_MAX: z.coerce.number().default(1000), // 1000 requests per window in production

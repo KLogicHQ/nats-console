@@ -67,6 +67,9 @@ import {
 import { formatBytes, formatNumber, formatDuration } from '@nats-console/shared';
 import { LineChart } from '@/components/charts';
 import { CreateStreamDialog } from '@/components/forms/create-stream-dialog';
+import { CreateConsumerDialog } from '@/components/forms/create-consumer-dialog';
+import { DataTable } from '@/components/ui/data-table';
+import { ColumnDef } from '@tanstack/react-table';
 
 const tabs: Tab[] = [
   { id: 'overview', label: 'Overview', icon: Database },
@@ -75,6 +78,17 @@ const tabs: Tab[] = [
   { id: 'consumers', label: 'Consumers', icon: Users },
   { id: 'config', label: 'Configuration', icon: Settings },
 ];
+
+interface Consumer {
+  name: string;
+  config?: {
+    durableName?: string;
+    ackWait?: number;
+  };
+  numPending?: number;
+  numRedelivered?: number;
+  numAckPending?: number;
+}
 
 function StreamDetailContent() {
   const params = useParams();
@@ -178,7 +192,7 @@ function StreamDetailContent() {
   const { data: messagesData, refetch: refetchMessages, isFetching: isLoadingMessages } = useQuery({
     queryKey: ['messages', clusterId, streamName, currentPage, pageSize, activeSubjectFilter],
     queryFn: () => {
-      const firstSeq = streamData?.stream?.state?.first_seq || 1;
+      const firstSeq = streamData?.stream?.state?.firstSeq || 1;
       const startSeq = String(firstSeq + (currentPage - 1) * pageSize);
       const params: Record<string, string> = { start_seq: startSeq, limit: String(pageSize) };
       if (activeSubjectFilter) {
@@ -306,6 +320,66 @@ function StreamDetailContent() {
       router.push('/streams');
     },
   });
+
+  const consumers: Consumer[] = consumersData?.consumers || [];
+
+  const consumerColumns: ColumnDef<Consumer>[] = useMemo(() => [
+    {
+      id: 'name',
+      accessorFn: (row) => row.name,
+      header: 'Name',
+      cell: ({ row }) => (
+        <Link
+          href={`/consumers/${clusterId}/${streamName}/${row.original.name}`}
+          className="font-medium text-primary hover:underline"
+        >
+          {row.original.name}
+        </Link>
+      ),
+    },
+    {
+      id: 'type',
+      accessorFn: (row) => row.config?.durableName ? 'Durable' : 'Ephemeral',
+      header: 'Type',
+      cell: ({ row }) => (
+        <span className={`px-2 py-1 text-xs rounded-full ${
+          row.original.config?.durableName
+            ? 'bg-blue-100 text-blue-700'
+            : 'bg-gray-100 text-gray-700'
+        }`}>
+          {row.original.config?.durableName ? 'Durable' : 'Ephemeral'}
+        </span>
+      ),
+    },
+    {
+      accessorKey: 'numPending',
+      header: 'Pending',
+      cell: ({ row }) => formatNumber(row.original.numPending || 0),
+      meta: { align: 'right' as const },
+    },
+    {
+      accessorKey: 'numAckPending',
+      header: 'Ack Pending',
+      cell: ({ row }) => formatNumber(row.original.numAckPending || 0),
+      meta: { align: 'right' as const },
+    },
+    {
+      accessorKey: 'numRedelivered',
+      header: 'Redelivered',
+      cell: ({ row }) => formatNumber(row.original.numRedelivered || 0),
+      meta: { align: 'right' as const },
+    },
+    {
+      accessorKey: 'config.ackWait',
+      header: 'Ack Wait',
+      cell: ({ row }) => (
+        <span className="text-muted-foreground">
+          {formatDuration(row.original.config?.ackWait || 30000000000)}
+        </span>
+      ),
+      meta: { align: 'right' as const },
+    },
+  ], [clusterId, streamName]);
 
   if (isLoading) {
     return (
@@ -587,7 +661,7 @@ function StreamDetailContent() {
             </CardHeader>
             <CardContent>
               <div className="text-2xl font-bold">
-                {stream.state?.consumer_count || 0}
+                {stream.state?.consumerCount || 0}
               </div>
             </CardContent>
           </Card>
@@ -609,19 +683,19 @@ function StreamDetailContent() {
             <CardContent className="space-y-2">
               <div className="flex justify-between">
                 <span className="text-muted-foreground">First Sequence</span>
-                <span>{stream.state?.first_seq || 0}</span>
+                <span>{stream.state?.firstSeq || 0}</span>
               </div>
               <div className="flex justify-between">
                 <span className="text-muted-foreground">Last Sequence</span>
-                <span>{stream.state?.last_seq || 0}</span>
+                <span>{stream.state?.lastSeq || 0}</span>
               </div>
               <div className="flex justify-between">
                 <span className="text-muted-foreground">First Time</span>
-                <span>{stream.state?.first_ts ? new Date(stream.state.first_ts).toLocaleString() : '-'}</span>
+                <span>{stream.state?.firstTs ? new Date(stream.state.firstTs).toLocaleString() : '-'}</span>
               </div>
               <div className="flex justify-between">
                 <span className="text-muted-foreground">Last Time</span>
-                <span>{stream.state?.last_ts ? new Date(stream.state.last_ts).toLocaleString() : '-'}</span>
+                <span>{stream.state?.lastTs ? new Date(stream.state.lastTs).toLocaleString() : '-'}</span>
               </div>
             </CardContent>
           </Card>
@@ -637,15 +711,15 @@ function StreamDetailContent() {
               </div>
               <div className="flex justify-between">
                 <span className="text-muted-foreground">Max Messages</span>
-                <span>{stream.config.max_msgs === -1 ? 'Unlimited' : formatNumber(stream.config.max_msgs)}</span>
+                <span>{stream.config.maxMsgs === -1 ? 'Unlimited' : formatNumber(stream.config.maxMsgs)}</span>
               </div>
               <div className="flex justify-between">
                 <span className="text-muted-foreground">Max Bytes</span>
-                <span>{stream.config.max_bytes === -1 ? 'Unlimited' : formatBytes(stream.config.max_bytes)}</span>
+                <span>{stream.config.maxBytes === -1 ? 'Unlimited' : formatBytes(stream.config.maxBytes)}</span>
               </div>
               <div className="flex justify-between">
                 <span className="text-muted-foreground">Max Age</span>
-                <span>{stream.config.max_age === 0 ? 'Unlimited' : formatDuration(stream.config.max_age)}</span>
+                <span>{stream.config.maxAge === 0 ? 'Unlimited' : formatDuration(stream.config.maxAge)}</span>
               </div>
             </CardContent>
           </Card>
@@ -1049,59 +1123,24 @@ function StreamDetailContent() {
       {/* Consumers Tab */}
       {activeTab === 'consumers' && (
         <Card>
-          <CardHeader className="flex flex-row items-center justify-between">
-            <div>
-              <CardTitle>Consumers</CardTitle>
-              <CardDescription>Consumers attached to this stream</CardDescription>
-            </div>
-            <Button size="sm">
-              <Users className="h-4 w-4" />
-              Add Consumer
-            </Button>
+          <CardHeader>
+            <CardTitle>Consumers</CardTitle>
+            <CardDescription>Consumers attached to this stream</CardDescription>
           </CardHeader>
           <CardContent>
-            {consumersData?.consumers?.length === 0 ? (
+            {consumers.length === 0 ? (
               <div className="text-center py-8 text-muted-foreground">
                 <Users className="h-12 w-12 mx-auto mb-4 opacity-50" />
                 <p>No consumers</p>
               </div>
             ) : (
-              <div className="border rounded-lg">
-                <table className="w-full">
-                  <thead className="bg-muted/50">
-                    <tr>
-                      <th className="text-left p-3 font-medium">Name</th>
-                      <th className="text-left p-3 font-medium">Type</th>
-                      <th className="text-right p-3 font-medium">Pending</th>
-                      <th className="text-right p-3 font-medium">Ack Pending</th>
-                      <th className="text-right p-3 font-medium">Redelivered</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {consumersData?.consumers?.map((consumer: any) => (
-                      <tr
-                        key={consumer.name}
-                        className="border-t hover:bg-muted/30 cursor-pointer"
-                        onClick={() => router.push(`/consumers/${clusterId}/${streamName}/${consumer.name}`)}
-                      >
-                        <td className="p-3 font-medium text-primary hover:underline">{consumer.name}</td>
-                        <td className="p-3">
-                          <span className={`px-2 py-1 text-xs rounded-full ${
-                            consumer.config?.durable_name
-                              ? 'bg-blue-100 text-blue-700'
-                              : 'bg-gray-100 text-gray-700'
-                          }`}>
-                            {consumer.config?.durable_name ? 'Durable' : 'Ephemeral'}
-                          </span>
-                        </td>
-                        <td className="p-3 text-right">{formatNumber(consumer.num_pending || 0)}</td>
-                        <td className="p-3 text-right">{formatNumber(consumer.num_ack_pending || 0)}</td>
-                        <td className="p-3 text-right">{formatNumber(consumer.num_redelivered || 0)}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
+              <DataTable
+                columns={consumerColumns}
+                data={consumers}
+                searchColumn="name"
+                searchPlaceholder="Search consumers..."
+                emptyMessage="No consumers found"
+              />
             )}
           </CardContent>
         </Card>

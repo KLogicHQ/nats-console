@@ -1,5 +1,5 @@
 # =============================================================================
-# NATS Console - All-in-One Docker Image
+# NATS Console - All-in-One Docker Image (Multi-Stage Build)
 # =============================================================================
 # This Dockerfile creates a single image containing:
 # - PostgreSQL 16
@@ -12,7 +12,58 @@
 # For production, use docker-compose.prod.yml with separate services.
 # =============================================================================
 
-FROM ubuntu:22.04
+# =============================================================================
+# Stage 1: Builder - Install dependencies and build applications
+# =============================================================================
+FROM node:20-slim AS builder
+
+# Install pnpm
+RUN npm install -g pnpm@9
+
+WORKDIR /app
+
+# Copy package files first for better caching
+COPY package.json pnpm-lock.yaml pnpm-workspace.yaml turbo.json ./
+COPY apps/api/package.json ./apps/api/
+COPY apps/web/package.json ./apps/web/
+COPY apps/workers/package.json ./apps/workers/
+COPY apps/shared/package.json ./apps/shared/
+
+# Install all dependencies (including devDependencies for build)
+RUN pnpm install --frozen-lockfile
+
+# Copy source code
+COPY apps/ ./apps/
+
+# Generate Prisma client
+RUN cd apps/api && pnpm prisma generate
+
+# Build all applications
+RUN pnpm run build
+
+# =============================================================================
+# Stage 2: Production Dependencies
+# =============================================================================
+FROM node:20-slim AS prod-deps
+
+RUN npm install -g pnpm@9
+
+WORKDIR /app
+
+# Copy package files
+COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
+COPY apps/api/package.json ./apps/api/
+COPY apps/web/package.json ./apps/web/
+COPY apps/workers/package.json ./apps/workers/
+COPY apps/shared/package.json ./apps/shared/
+
+# Install production dependencies
+RUN pnpm install --frozen-lockfile --prod
+
+# =============================================================================
+# Stage 3: Runner - Final image with only built artifacts
+# =============================================================================
+FROM ubuntu:22.04 AS runner
 
 LABEL maintainer="NATS Console Team"
 LABEL description="All-in-One NATS JetStream Console with embedded databases"
@@ -31,16 +82,14 @@ RUN apt-get update && apt-get install -y \
     lsb-release \
     ca-certificates \
     supervisor \
-    git \
-    build-essential \
     && rm -rf /var/lib/apt/lists/*
 
 # =============================================================================
-# Install Node.js 20
+# Install Node.js 20 (runtime only, no build tools needed)
 # =============================================================================
 RUN curl -fsSL https://deb.nodesource.com/setup_20.x | bash - \
     && apt-get install -y nodejs \
-    && npm install -g pnpm@9
+    && rm -rf /var/lib/apt/lists/*
 
 # =============================================================================
 # Install PostgreSQL 16
@@ -94,40 +143,50 @@ RUN chown -R clickhouse:clickhouse /var/lib/clickhouse
 RUN chown -R redis:redis /var/lib/redis
 
 # =============================================================================
-# Copy application code
+# Copy built applications from builder stage
 # =============================================================================
 WORKDIR /app
 
-# Copy package files first for better caching
-COPY package.json pnpm-lock.yaml pnpm-workspace.yaml turbo.json ./
-COPY apps/api/package.json ./apps/api/
-COPY apps/web/package.json ./apps/web/
-COPY apps/workers/package.json ./apps/workers/
-COPY apps/shared/package.json ./apps/shared/
+# Copy production node_modules first
+COPY --from=prod-deps /app/node_modules ./node_modules
 
-# Install dependencies
-RUN pnpm install --frozen-lockfile
+# Overlay Prisma-generated client from builder (generated client files)
+COPY --from=builder /app/node_modules/.pnpm/@prisma+client*/node_modules/.prisma ./node_modules/.pnpm/@prisma+client*/node_modules/.prisma
 
-# Copy source code
-COPY . .
+# Copy shared package (built)
+COPY --from=builder /app/apps/shared/dist ./apps/shared/dist
+COPY --from=builder /app/apps/shared/package.json ./apps/shared/
 
-# Build the application
-RUN pnpm run build
+# Copy API (built only)
+COPY --from=builder /app/apps/api/dist ./apps/api/dist
+COPY --from=builder /app/apps/api/package.json ./apps/api/
+COPY --from=builder /app/apps/api/prisma ./apps/api/prisma
 
-# Generate Prisma client
-RUN cd apps/api && pnpm prisma generate
+# Copy Web (Next.js standalone build)
+COPY --from=builder /app/apps/web/.next/standalone ./apps/web-standalone
+COPY --from=builder /app/apps/web/.next/static ./apps/web-standalone/apps/web/.next/static
+COPY --from=builder /app/apps/web/public ./apps/web-standalone/apps/web/public
+
+# Copy Workers (built only)
+COPY --from=builder /app/apps/workers/dist ./apps/workers/dist
+COPY --from=builder /app/apps/workers/package.json ./apps/workers/
+
+# Copy Prisma CLI for migrations (from builder since it's a devDependency)
+COPY --from=builder /app/node_modules/.pnpm/prisma*/node_modules/prisma ./node_modules/prisma
+COPY --from=builder /app/node_modules/.pnpm/@prisma+engines*/node_modules/@prisma/engines ./node_modules/@prisma/engines
+
+# Copy package.json files for workspace resolution
+COPY package.json pnpm-workspace.yaml ./
 
 # =============================================================================
-# Copy initialization scripts
+# Copy initialization scripts and configuration
 # =============================================================================
 COPY infrastructure/clickhouse/init/init.sql /docker-entrypoint-initdb.d/clickhouse-init.sql
 COPY docker/scripts/entrypoint.sh /entrypoint.sh
 COPY docker/scripts/init-databases.sh /init-databases.sh
 RUN chmod +x /entrypoint.sh /init-databases.sh
 
-# =============================================================================
 # Configure supervisord
-# =============================================================================
 COPY docker/supervisord.conf /etc/supervisor/conf.d/supervisord.conf
 
 # =============================================================================
@@ -144,7 +203,15 @@ ENV NATS_URL=nats://localhost:4222
 ENV JWT_SECRET=change-me-in-production-use-secure-random-string
 ENV JWT_EXPIRES_IN=15m
 ENV JWT_REFRESH_EXPIRES_IN=7d
-ENV NEXT_PUBLIC_API_URL=http://localhost:3001/api/v1
+
+# CORS: Allow all origins in single-container mode (frontend proxies to API)
+ENV CORS_ORIGIN=*
+
+# API URL for Next.js rewrites (internal, same container)
+ENV API_URL=http://localhost:3001
+
+# Public API URL for client-side requests (can be overridden for external access)
+ENV NEXT_PUBLIC_API_URL=/api/v1
 
 # =============================================================================
 # Expose ports
@@ -175,13 +242,6 @@ HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=3 \
 # =============================================================================
 # Volumes for data persistence
 # =============================================================================
-# Single data directory with all databases
-# /data
-# ├── postgres/
-# ├── redis/
-# ├── clickhouse/
-# ├── nats/
-# └── logs/
 VOLUME ["/data"]
 
 # =============================================================================
