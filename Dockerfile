@@ -178,6 +178,11 @@ COPY --from=builder /app/node_modules/.pnpm/@prisma+engines*/node_modules/@prism
 # Copy package.json files for workspace resolution
 COPY package.json pnpm-workspace.yaml ./
 
+# Create symlinks so apps can find node_modules from root
+RUN ln -s /app/node_modules /app/apps/api/node_modules && \
+    ln -s /app/node_modules /app/apps/workers/node_modules && \
+    ln -s /app/node_modules /app/apps/shared/node_modules
+
 # =============================================================================
 # Copy initialization scripts and configuration
 # =============================================================================
