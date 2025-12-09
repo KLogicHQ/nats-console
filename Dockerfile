@@ -82,6 +82,8 @@ RUN apt-get update && apt-get install -y \
     lsb-release \
     ca-certificates \
     supervisor \
+    postgresql-client \
+    redis-tools \
     && rm -rf /var/lib/apt/lists/*
 
 # =============================================================================
@@ -172,8 +174,14 @@ COPY --from=builder /app/apps/workers/dist ./apps/workers/dist
 COPY --from=builder /app/apps/workers/package.json ./apps/workers/
 
 # Copy Prisma CLI for migrations (from builder since it's a devDependency)
+# Prisma requires several internal packages: prisma, @prisma/engines, @prisma/debug, etc.
 COPY --from=builder /app/node_modules/.pnpm/prisma*/node_modules/prisma ./node_modules/prisma
 COPY --from=builder /app/node_modules/.pnpm/@prisma+engines*/node_modules/@prisma/engines ./node_modules/@prisma/engines
+COPY --from=builder /app/node_modules/.pnpm/@prisma+debug*/node_modules/@prisma/debug ./node_modules/@prisma/debug
+COPY --from=builder /app/node_modules/.pnpm/@prisma+get-platform*/node_modules/@prisma/get-platform ./node_modules/@prisma/get-platform
+COPY --from=builder /app/node_modules/.pnpm/@prisma+engines-version*/node_modules/@prisma/engines-version ./node_modules/@prisma/engines-version
+COPY --from=builder /app/node_modules/.pnpm/@prisma+fetch-engine*/node_modules/@prisma/fetch-engine ./node_modules/@prisma/fetch-engine
+COPY --from=builder /app/node_modules/.pnpm/@prisma+config*/node_modules/@prisma/config ./node_modules/@prisma/config
 
 # Copy package.json files for workspace resolution
 COPY package.json pnpm-workspace.yaml ./
@@ -189,7 +197,8 @@ RUN ln -s /app/node_modules /app/apps/api/node_modules && \
 COPY infrastructure/clickhouse/init/init.sql /docker-entrypoint-initdb.d/clickhouse-init.sql
 COPY docker/scripts/entrypoint.sh /entrypoint.sh
 COPY docker/scripts/init-databases.sh /init-databases.sh
-RUN chmod +x /entrypoint.sh /init-databases.sh
+COPY docker/scripts/wait-for-services.sh /wait-for-services.sh
+RUN chmod +x /entrypoint.sh /init-databases.sh /wait-for-services.sh
 
 # Configure supervisord
 COPY docker/supervisord.conf /etc/supervisor/conf.d/supervisord.conf
