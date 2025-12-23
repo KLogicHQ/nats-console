@@ -104,6 +104,9 @@ export default function RegisterPage() {
               onChange={(e) => setFormData({ ...formData, password: e.target.value })}
               required
             />
+            <p className="text-xs text-muted-foreground">
+              Min 8 characters with uppercase, lowercase, and a number
+            </p>
           </div>
           <div className="space-y-2">
             <label htmlFor="confirmPassword" className="text-sm font-medium">

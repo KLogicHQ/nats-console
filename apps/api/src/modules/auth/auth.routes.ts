@@ -9,14 +9,35 @@ import {
   MfaLoginSchema,
   UpdateProfileSchema,
   ChangePasswordSchema,
+  ValidationError,
 } from '@nats-console/shared';
 import * as authService from './auth.service';
 import { authenticate } from '../../common/middleware/auth';
+
+function validateStrongPassword(password: string): void {
+  const errors: string[] = [];
+  if (password.length < 8) {
+    errors.push('Password must be at least 8 characters');
+  }
+  if (!/[A-Z]/.test(password)) {
+    errors.push('Password must contain at least one uppercase letter');
+  }
+  if (!/[a-z]/.test(password)) {
+    errors.push('Password must contain at least one lowercase letter');
+  }
+  if (!/[0-9]/.test(password)) {
+    errors.push('Password must contain at least one number');
+  }
+  if (errors.length > 0) {
+    throw new ValidationError(errors.join('. '));
+  }
+}
 
 export const authRoutes: FastifyPluginAsync = async (fastify) => {
   // POST /auth/register - User registration
   fastify.post('/register', async (request, reply) => {
     const body = RegisterSchema.parse(request.body);
+    validateStrongPassword(body.password);
 
     const result = await authService.register({
       email: body.email,

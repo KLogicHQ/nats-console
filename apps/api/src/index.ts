@@ -210,9 +210,25 @@ app.register(
 );
 
 // Global error handler
-app.setErrorHandler((error: Error & { statusCode?: number; code?: string }, request, reply) => {
+app.setErrorHandler((error: Error & { statusCode?: number; code?: string; issues?: unknown[] }, request, reply) => {
   app.log.error(error);
 
+  // Handle Zod validation errors
+  if (error.name === 'ZodError' && Array.isArray(error.issues)) {
+    const messages = error.issues.map((issue: { path?: (string | number)[]; message?: string }) => {
+      const path = issue.path?.join('.') || '';
+      return path ? `${path}: ${issue.message}` : issue.message;
+    });
+    return reply.status(400).send({
+      error: {
+        code: 'VALIDATION_ERROR',
+        message: messages.join('. '),
+        details: error.issues,
+      },
+    });
+  }
+
+  // Handle AppError and its subclasses
   const statusCode = error.statusCode || 500;
   const message = statusCode === 500 ? 'Internal Server Error' : error.message;
 
