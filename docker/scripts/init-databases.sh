@@ -78,7 +78,9 @@ init_postgres() {
     su - postgres -c "psql -c \"GRANT ALL PRIVILEGES ON DATABASE nats_console TO nats_console;\""
 
     echo "[PostgreSQL] Running Prisma migrations..."
-    cd /app/apps/api && DATABASE_URL="postgresql://nats_console:nats_console@localhost:5432/nats_console" node /app/node_modules/prisma/build/index.js migrate deploy || true
+    # pnpm stores prisma in .pnpm directory with versioned folder name
+    PRISMA_CLI=$(find /app/node_modules/.pnpm -path "*/prisma@*/node_modules/prisma/build/index.js" -type f | head -1)
+    cd /app/apps/api && DATABASE_URL="postgresql://nats_console:nats_console@localhost:5432/nats_console" node "$PRISMA_CLI" migrate deploy || true
 
     # Stop PostgreSQL (will be started by supervisord)
     su - postgres -c "/usr/lib/postgresql/16/bin/pg_ctl -D $POSTGRES_DATA -w stop"

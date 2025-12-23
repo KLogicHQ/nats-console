@@ -41,6 +41,11 @@ RUN cd apps/api && pnpm prisma generate
 # Build all applications
 RUN pnpm run build
 
+# Extract the generated Prisma client to a known location for copying
+# pnpm stores it in node_modules/.pnpm/@prisma+client@*/node_modules/.prisma/client
+RUN mkdir -p /prisma-client && \
+    cp -r node_modules/.pnpm/@prisma+client@*/node_modules/.prisma/client /prisma-client/
+
 # =============================================================================
 # Stage 2: Production Dependencies
 # =============================================================================
@@ -57,8 +62,9 @@ COPY apps/web/package.json ./apps/web/
 COPY apps/workers/package.json ./apps/workers/
 COPY apps/shared/package.json ./apps/shared/
 
-# Install production dependencies
-RUN pnpm install --frozen-lockfile --prod
+# Install production dependencies with hoisted node_modules for ESM compatibility
+# shamefully-hoist creates a flat node_modules structure similar to npm
+RUN pnpm install --frozen-lockfile --prod --shamefully-hoist
 
 # =============================================================================
 # Stage 3: Runner - Final image with only built artifacts
@@ -152,9 +158,6 @@ WORKDIR /app
 # Copy production node_modules first
 COPY --from=prod-deps /app/node_modules ./node_modules
 
-# Overlay Prisma-generated client from builder (generated client files)
-COPY --from=builder /app/node_modules/.pnpm/@prisma+client*/node_modules/.prisma ./node_modules/.pnpm/@prisma+client*/node_modules/.prisma
-
 # Copy shared package (built)
 COPY --from=builder /app/apps/shared/dist ./apps/shared/dist
 COPY --from=builder /app/apps/shared/package.json ./apps/shared/
@@ -173,15 +176,18 @@ COPY --from=builder /app/apps/web/public ./apps/web-standalone/apps/web/public
 COPY --from=builder /app/apps/workers/dist ./apps/workers/dist
 COPY --from=builder /app/apps/workers/package.json ./apps/workers/
 
-# Copy Prisma CLI for migrations (from builder since it's a devDependency)
-# Prisma requires several internal packages: prisma, @prisma/engines, @prisma/debug, etc.
-COPY --from=builder /app/node_modules/.pnpm/prisma*/node_modules/prisma ./node_modules/prisma
-COPY --from=builder /app/node_modules/.pnpm/@prisma+engines*/node_modules/@prisma/engines ./node_modules/@prisma/engines
-COPY --from=builder /app/node_modules/.pnpm/@prisma+debug*/node_modules/@prisma/debug ./node_modules/@prisma/debug
-COPY --from=builder /app/node_modules/.pnpm/@prisma+get-platform*/node_modules/@prisma/get-platform ./node_modules/@prisma/get-platform
-COPY --from=builder /app/node_modules/.pnpm/@prisma+engines-version*/node_modules/@prisma/engines-version ./node_modules/@prisma/engines-version
-COPY --from=builder /app/node_modules/.pnpm/@prisma+fetch-engine*/node_modules/@prisma/fetch-engine ./node_modules/@prisma/fetch-engine
-COPY --from=builder /app/node_modules/.pnpm/@prisma+config*/node_modules/@prisma/config ./node_modules/@prisma/config
+# Copy the generated Prisma client from builder (extracted to a known path)
+# The client needs to be in the pnpm internal location where @prisma/client expects it
+COPY --from=builder /prisma-client/client ./node_modules/.prisma/client
+
+# Also copy to the pnpm internal .prisma location that @prisma/client references
+# Find the @prisma/client location and copy .prisma/client there
+RUN mkdir -p ./node_modules/.pnpm/@prisma+client@*/node_modules/.prisma && \
+    for dir in ./node_modules/.pnpm/@prisma+client@*/node_modules; do \
+      if [ -d "$dir" ]; then \
+        cp -r ./node_modules/.prisma "$dir/"; \
+      fi; \
+    done
 
 # Copy package.json files for workspace resolution
 COPY package.json pnpm-workspace.yaml ./
