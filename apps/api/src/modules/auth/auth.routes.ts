@@ -50,6 +50,7 @@ export const authRoutes: FastifyPluginAsync = async (fastify) => {
     return reply.status(201).send({
       user: result.user,
       tokens: result.tokens,
+      orgId: result.orgId,
     });
   });
 

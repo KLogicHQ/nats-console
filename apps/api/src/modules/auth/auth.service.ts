@@ -220,6 +220,21 @@ export async function register(data: {
   // Generate tokens
   const tokens = await generateTokens(result.user.id, result.user.email, result.organization.id, 'owner');
 
+  // Get permissions based on role
+  const permissions = getPermissionsForRole('owner');
+
+  // Store session in Redis (same as login)
+  await setSession(tokens.accessToken.split('.')[2]!, {
+    userId: result.user.id,
+    orgId: result.organization.id,
+    email: result.user.email,
+    role: 'owner',
+    permissions,
+    ipAddress: '',
+    createdAt: new Date().toISOString(),
+    lastActivity: new Date().toISOString(),
+  });
+
   return {
     user: { ...mapUser(result.user), role: 'owner' as const },
     tokens,

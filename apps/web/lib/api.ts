@@ -126,7 +126,7 @@ export const auth = {
     }),
 
   register: (data: { email: string; password: string; firstName: string; lastName: string }) =>
-    request<{ user: any; tokens: any }>('/auth/register', {
+    request<{ user: any; tokens: any; orgId: string }>('/auth/register', {
       method: 'POST',
       body: data,
     }),

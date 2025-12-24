@@ -102,22 +102,27 @@ init_clickhouse() {
     su -s /bin/bash clickhouse -c "/usr/bin/clickhouse-server --config-file=/etc/clickhouse-server/config.xml --daemon"
     sleep 5
 
-    # Wait for ClickHouse to be ready
+    # Wait for ClickHouse to be ready (use default user with no password for init)
     for i in {1..30}; do
-        if clickhouse-client --query "SELECT 1" &>/dev/null; then
+        if clickhouse-client --user default --password "" --query "SELECT 1" &>/dev/null; then
             break
         fi
         echo "[ClickHouse] Waiting for server to start... ($i/30)"
         sleep 1
     done
 
-    # Create database
-    clickhouse-client --query "CREATE DATABASE IF NOT EXISTS nats_console"
+    # Create database (use default user)
+    clickhouse-client --user default --password "" --query "CREATE DATABASE IF NOT EXISTS nats_console"
+
+    # Create user for the application
+    echo "[ClickHouse] Creating nats_console user..."
+    clickhouse-client --user default --password "" --query "CREATE USER IF NOT EXISTS nats_console IDENTIFIED BY 'nats_console_dev'"
+    clickhouse-client --user default --password "" --query "GRANT ALL ON nats_console.* TO nats_console"
 
     # Run schema initialization
-    if [ -f /app/infrastructure/clickhouse/init/init.sql ]; then
+    if [ -f /docker-entrypoint-initdb.d/clickhouse-init.sql ]; then
         echo "[ClickHouse] Running schema initialization..."
-        clickhouse-client --database nats_console --multiquery < /app/infrastructure/clickhouse/init/init.sql
+        clickhouse-client --user default --password "" --database nats_console --multiquery < /docker-entrypoint-initdb.d/clickhouse-init.sql
     fi
 
     # Stop ClickHouse (will be started by supervisord)
@@ -158,4 +163,29 @@ if [ ! -f "$DATA_DIR/.initialized" ]; then
 else
     echo "[Init] Databases already initialized, ensuring symlinks..."
     create_directories
+
+    # Ensure ClickHouse user exists (for upgrades from older versions)
+    echo "[Init] Ensuring ClickHouse user exists..."
+    mkdir -p "$CLICKHOUSE_DATA"
+    chown -R clickhouse:clickhouse "$CLICKHOUSE_DATA"
+    su -s /bin/bash clickhouse -c "/usr/bin/clickhouse-server --config-file=/etc/clickhouse-server/config.xml --daemon"
+    sleep 5
+    for i in {1..30}; do
+        if clickhouse-client --user default --password "" --query "SELECT 1" &>/dev/null; then
+            break
+        fi
+        sleep 1
+    done
+    clickhouse-client --user default --password "" --query "CREATE DATABASE IF NOT EXISTS nats_console" 2>/dev/null || true
+    clickhouse-client --user default --password "" --query "CREATE USER IF NOT EXISTS nats_console IDENTIFIED BY 'nats_console_dev'" 2>/dev/null || true
+    clickhouse-client --user default --password "" --query "GRANT ALL ON nats_console.* TO nats_console" 2>/dev/null || true
+
+    # Ensure schema exists
+    if [ -f /docker-entrypoint-initdb.d/clickhouse-init.sql ]; then
+        echo "[Init] Ensuring ClickHouse schema exists..."
+        clickhouse-client --user default --password "" --database nats_console --multiquery < /docker-entrypoint-initdb.d/clickhouse-init.sql 2>/dev/null || true
+    fi
+
+    pkill -f clickhouse-server || true
+    sleep 2
 fi
