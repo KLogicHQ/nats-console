@@ -27,16 +27,6 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog';
 import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from '@/components/ui/alert-dialog';
-import {
   Table,
   TableBody,
   TableCell,
@@ -511,27 +501,29 @@ export default function DlqPage() {
       </Dialog>
 
       {/* Purge Dialog */}
-      <AlertDialog open={purgeDialogOpen} onOpenChange={setPurgeDialogOpen}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Purge DLQ Stream</AlertDialogTitle>
-            <AlertDialogDescription>
+      <Dialog open={purgeDialogOpen} onOpenChange={setPurgeDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Purge DLQ Stream</DialogTitle>
+            <DialogDescription>
               Are you sure you want to purge all messages from{' '}
               <strong>{selectedStreamForPurge?.streamName}</strong>? This action cannot be undone.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>Cancel</AlertDialogCancel>
-            <AlertDialogAction
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setPurgeDialogOpen(false)}>
+              Cancel
+            </Button>
+            <Button
+              variant="destructive"
               onClick={handleConfirmPurge}
               disabled={purgeMutation.isPending}
-              className="bg-red-600 hover:bg-red-700"
             >
               {purgeMutation.isPending ? 'Purging...' : 'Purge All Messages'}
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

@@ -481,28 +481,31 @@ function StreamDetailContent() {
       </AlertDialog>
 
       {/* Purge Confirmation Dialog */}
-      <AlertDialog open={showPurgeDialog} onOpenChange={setShowPurgeDialog}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Purge Stream</AlertDialogTitle>
-            <AlertDialogDescription>
+      <Dialog open={showPurgeDialog} onOpenChange={setShowPurgeDialog}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Purge Stream</DialogTitle>
+            <DialogDescription>
               Are you sure you want to purge all messages from stream &quot;{streamName}&quot;? This action cannot be undone.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>Cancel</AlertDialogCancel>
-            <AlertDialogAction
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowPurgeDialog(false)}>
+              Cancel
+            </Button>
+            <Button
+              variant="destructive"
               onClick={() => {
                 purgeMutation.mutate();
                 setShowPurgeDialog(false);
               }}
-              className="bg-red-600 hover:bg-red-700"
+              disabled={purgeMutation.isPending}
             >
               {purgeMutation.isPending ? 'Purging...' : 'Purge'}
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* Edit Stream Dialog */}
       <CreateStreamDialog
