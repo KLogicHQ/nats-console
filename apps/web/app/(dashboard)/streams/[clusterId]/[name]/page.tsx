@@ -12,6 +12,7 @@ import {
   MessageSquare,
   RefreshCw,
   Trash2,
+  Eraser,
   Edit,
   Play,
   AlertTriangle,
@@ -101,6 +102,7 @@ function StreamDetailContent() {
   const [messageSubject, setMessageSubject] = useState('');
   const [messageData, setMessageData] = useState('');
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
+  const [showPurgeDialog, setShowPurgeDialog] = useState(false);
   const [showEditDialog, setShowEditDialog] = useState(false);
   const [copiedMessageId, setCopiedMessageId] = useState<number | null>(null);
   const [expandedMessages, setExpandedMessages] = useState<Set<number>>(new Set());
@@ -439,10 +441,10 @@ function StreamDetailContent() {
           <Button
             variant="outline"
             size="sm"
-            onClick={() => purgeMutation.mutate()}
+            onClick={() => setShowPurgeDialog(true)}
             disabled={purgeMutation.isPending}
           >
-            <RefreshCw className="h-4 w-4" />
+            <Eraser className="h-4 w-4" />
             Purge
           </Button>
           <Button
@@ -473,6 +475,30 @@ function StreamDetailContent() {
               className="bg-red-600 hover:bg-red-700"
             >
               {deleteMutation.isPending ? 'Deleting...' : 'Delete'}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Purge Confirmation Dialog */}
+      <AlertDialog open={showPurgeDialog} onOpenChange={setShowPurgeDialog}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Purge Stream</AlertDialogTitle>
+            <AlertDialogDescription>
+              Are you sure you want to purge all messages from stream &quot;{streamName}&quot;? This action cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => {
+                purgeMutation.mutate();
+                setShowPurgeDialog(false);
+              }}
+              className="bg-red-600 hover:bg-red-700"
+            >
+              {purgeMutation.isPending ? 'Purging...' : 'Purge'}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
