@@ -12,6 +12,7 @@ import {
   MessageSquare,
   RefreshCw,
   Trash2,
+  Eraser,
   Edit,
   Play,
   AlertTriangle,
@@ -101,6 +102,7 @@ function StreamDetailContent() {
   const [messageSubject, setMessageSubject] = useState('');
   const [messageData, setMessageData] = useState('');
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
+  const [showPurgeDialog, setShowPurgeDialog] = useState(false);
   const [showEditDialog, setShowEditDialog] = useState(false);
   const [copiedMessageId, setCopiedMessageId] = useState<number | null>(null);
   const [expandedMessages, setExpandedMessages] = useState<Set<number>>(new Set());
@@ -439,10 +441,10 @@ function StreamDetailContent() {
           <Button
             variant="outline"
             size="sm"
-            onClick={() => purgeMutation.mutate()}
+            onClick={() => setShowPurgeDialog(true)}
             disabled={purgeMutation.isPending}
           >
-            <RefreshCw className="h-4 w-4" />
+            <Eraser className="h-4 w-4" />
             Purge
           </Button>
           <Button
@@ -477,6 +479,33 @@ function StreamDetailContent() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      {/* Purge Confirmation Dialog */}
+      <Dialog open={showPurgeDialog} onOpenChange={setShowPurgeDialog}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Purge Stream</DialogTitle>
+            <DialogDescription>
+              Are you sure you want to purge all messages from stream &quot;{streamName}&quot;? This action cannot be undone.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowPurgeDialog(false)}>
+              Cancel
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={() => {
+                purgeMutation.mutate();
+                setShowPurgeDialog(false);
+              }}
+              disabled={purgeMutation.isPending}
+            >
+              {purgeMutation.isPending ? 'Purging...' : 'Purge'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* Edit Stream Dialog */}
       <CreateStreamDialog
